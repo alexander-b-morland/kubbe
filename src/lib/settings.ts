@@ -3,6 +3,7 @@ import { db, type Transaction } from "@/db";
 import { booking, household, membership, resource } from "@/db/schema";
 import { DEFAULT_RESOURCES } from "@/lib/booking/defaults";
 import { pinCurrentTurns } from "@/lib/cleaning/service";
+import { releaseDinnerDuties } from "@/lib/dinner/service";
 import { generateJoinCode } from "@/lib/join-code";
 import { MEMBER_COLOURS } from "@/lib/member-colours";
 import { dayInZone, isTimeZone } from "@/lib/time";
@@ -192,6 +193,7 @@ export async function removeMember(householdId: string, userId: string, options:
     // Keep everyone else's cleaning turn for this period where it is.
     await pinCurrentTurns(tx, householdId, dayInZone(new Date(), locked.timeZone));
     await tx.delete(booking).where(and(eq(booking.householdId, householdId), eq(booking.userId, userId)));
+    await releaseDinnerDuties(tx, householdId, userId);
     await tx.delete(membership).where(and(eq(membership.householdId, householdId), eq(membership.userId, userId)));
     return { ok: true };
   });

@@ -1,0 +1,217 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
+import { z } from "zod";
+import type { DishIdea } from "@/lib/dinner/cookbook";
+import { suggestDishes } from "@/lib/dinner/ideas";
+import { INGREDIENT_LENGTH, MAX_DISHES, MAX_INGREDIENTS, minutesOf, parseIngredients, TITLE_LENGTH } from "@/lib/dinner/plan";
+import {
+  addDinner,
+  addDish,
+  addIngredient,
+  avoidsOfThoseComing,
+  chooseDish,
+  getDinner,
+  recentDishTitles,
+  removeDish,
+  saveRules,
+  setAbsent,
+  setAtHome,
+  setCancelled,
+  setDuty,
+  setVote,
+} from "@/lib/dinner/service";
+import { requireExtra } from "@/lib/extras-guard";
+import type { FormState } from "@/lib/form-state";
+import { allowAttempt } from "@/lib/rate-limit";
+import { setBought, setClaim } from "@/lib/shopping";
+import { addDays, dayInZone, daysBetween, isDay } from "@/lib/time";
+
+export type DinnerState = (FormState & { saved?: boolean }) | undefined;
+
+const idSchema = z.uuid();
+const isId = (value: unknown): value is string => idSchema.safeParse(value).success;
+
+function refresh() {
+  revalidatePath("/dinner", "layout");
+  revalidatePath("/shopping");
+  revalidatePath("/home");
+}
+
+/** The fixed dinner days. Admins set them. */
+export async function saveRulesAction(_previous: DinnerState, form: FormData): Promise<DinnerState> {
+  const { household, membership } = await requireExtra("dinner");
+  if (membership.role !== "admin") return { error: "Only an admin can set the fixed dinner days." };
+  const time = minutesOf(String(form.get("time") ?? ""));
+  if (time === null) return { error: "Pick a time for dinner." };
+  const weekdays = [...new Set(form.getAll("weekday").map(Number))].filter((weekday) => Number.isInteger(weekday) && weekday >= 1 && weekday <= 7);
+  await saveRules(
+    household.id,
+    weekdays.map((weekday) => ({ weekday, time })),
+    dayInZone(new Date(), household.timeZone),
+  );
+  refresh();
+  return { saved: true };
+}
+
+/** Plan a dinner on one day, then go to it. */
+export async function addDinnerAction(_previous: DinnerState, form: FormData): Promise<DinnerState> {
+  const { household } = await requireExtra("dinner");
+  const values = { day: String(form.get("day") ?? ""), time: String(form.get("time") ?? "") };
+  const time = minutesOf(values.time);
+  if (!isDay(values.day)) return { error: "Pick a day.", values };
+  if (time === null) return { error: "Pick a time.", values };
+  const today = dayInZone(new Date(), household.timeZone);
+  const ahead = daysBetween(today, values.day);
+  if (ahead < 0) return { error: "That day has passed. Pick today or later.", values };
+  if (ahead > 90) return { error: `Pick a day before ${addDays(today, 91)}.`, values };
+
+  const result = await addDinner(household.id, values.day, time);
+  if (result === "taken") return { error: "There is already a dinner that day. Open it from the list above.", values };
+  refresh();
+  redirect(`/dinner/${result.id}`);
+}
+
+export async function cancelDinnerAction(dinnerId: string, cancelled: boolean): Promise<DinnerState> {
+  const { user, household } = await requireExtra("dinner");
+  if (isId(dinnerId)) await setCancelled(household.id, user.id, dinnerId, cancelled === true);
+  refresh();
+  return { saved: true };
+}
+
+export async function absentAction(dinnerId: string, absent: boolean): Promise<DinnerState> {
+  const { user, household } = await requireExtra("dinner");
+  if (isId(dinnerId)) await setAbsent(household.id, user.id, dinnerId, absent === true);
+  refresh();
+  return { saved: true };
+}
+
+export async function dutyAction(dinnerId: string, duty: "cook" | "cleaner", take: boolean): Promise<DinnerState> {
+  const { user, household } = await requireExtra("dinner");
+  if (!isId(dinnerId) || (duty !== "cook" && duty !== "cleaner")) return { error: "That dinner is gone." };
+  const result = await setDuty(household.id, user.id, dinnerId, duty, take === true);
+  refresh();
+  if (result === "taken") return { error: "Someone else just took that." };
+  return result === "gone" ? { error: "That dinner is gone." } : { saved: true };
+}
+
+function dishProblem(title: string, ingredients: readonly string[]): string | null {
+  if (!title) return "Name the dish.";
+  if (title.length > TITLE_LENGTH) return `Keep the name under ${TITLE_LENGTH} characters.`;
+  if (ingredients.length > MAX_INGREDIENTS) return `Keep it to ${MAX_INGREDIENTS} ingredients.`;
+  return null;
+}
+
+async function putUp(dinnerId: string, title: string, ingredients: readonly string[], fromHelper: boolean): Promise<string | null> {
+  const { user, household } = await requireExtra("dinner");
+  const result = await addDish(household.id, user.id, dinnerId, { title, ingredients, fromHelper });
+  if (result === "full") return `A dinner holds ${MAX_DISHES} ideas. Take one down first.`;
+  if (result === "gone") return "That dinner is gone.";
+  refresh();
+  return null;
+}
+
+/** Suggest a dish, with what it needs. */
+export async function addDishAction(dinnerId: string, _previous: DinnerState, form: FormData): Promise<DinnerState> {
+  const values = { title: String(form.get("title") ?? "").trim(), ingredients: String(form.get("ingredients") ?? "") };
+  if (!isId(dinnerId)) return { error: "That dinner is gone." };
+  if (values.ingredients.length > 2000) return { error: "That is a long list. Keep it to the main ingredients.", values };
+  const ingredients = parseIngredients(values.ingredients);
+  const problem = dishProblem(values.title, ingredients) ?? (await putUp(dinnerId, values.title, ingredients, false));
+  return problem ? { error: problem, values } : { saved: true };
+}
+
+/** Put one of the suggested ideas to the vote. It arrives from the browser, so it is checked like anything typed. */
+export async function addIdeaAction(dinnerId: string, title: string, ingredients: string[]): Promise<DinnerState> {
+  if (!isId(dinnerId) || typeof title !== "string" || !Array.isArray(ingredients) || ingredients.length > MAX_INGREDIENTS) {
+    return { error: "That idea could not be added. Type it in instead." };
+  }
+  const clean = parseIngredients(ingredients.filter((name) => typeof name === "string").map((name) => name.slice(0, INGREDIENT_LENGTH)).join("\n"));
+  const name = title.trim();
+  const problem = dishProblem(name, clean) ?? (await putUp(dinnerId, name, clean, true));
+  return problem ? { error: problem } : { saved: true };
+}
+
+export type IdeasState = { ideas?: DishIdea[]; source?: "claude" | "cookbook"; error?: string } | undefined;
+
+/** A few dishes that fit who is coming. From Claude when a key is set, otherwise from the cookbook. */
+export async function ideasAction(dinnerId: string): Promise<IdeasState> {
+  const { household } = await requireExtra("dinner");
+  if (!isId(dinnerId)) return { error: "That dinner is gone." };
+  if (!(await allowAttempt(`dinner-ideas:${household.id}`, 40, 86_400))) {
+    return { error: "That is a lot of ideas for one day. Try again tomorrow, or type one in." };
+  }
+  const found = await getDinner(household.id, dinnerId);
+  if (!found) return { error: "That dinner is gone." };
+  const [coming, recent] = await Promise.all([
+    avoidsOfThoseComing(household.id, found.absent),
+    recentDishTitles(household.id, dayInZone(new Date(), household.timeZone)),
+  ]);
+  const { ideas, source } = await suggestDishes({
+    people: Math.max(coming.people, 1),
+    avoids: coming.avoids,
+    recent,
+    already: found.dishes.map((dish) => dish.title),
+  });
+  if (ideas.length === 0) return { error: "No ideas this time. Type one in instead." };
+  return { ideas, source };
+}
+
+export async function removeDishAction(dishId: string): Promise<DinnerState> {
+  const { user, household, membership } = await requireExtra("dinner");
+  if (isId(dishId)) await removeDish(household.id, user.id, dishId, membership.role === "admin");
+  refresh();
+  return { saved: true };
+}
+
+export async function voteAction(dishId: string, vote: boolean): Promise<DinnerState> {
+  const { user, household } = await requireExtra("dinner");
+  if (isId(dishId)) await setVote(household.id, user.id, dishId, vote === true);
+  refresh();
+  return { saved: true };
+}
+
+/** Settle on a dish, or open the vote again with no dish. */
+export async function chooseAction(dinnerId: string, dishId: string | null): Promise<DinnerState> {
+  const { user, household } = await requireExtra("dinner");
+  if (!isId(dinnerId) || (dishId !== null && !isId(dishId))) return { error: "That dish is gone." };
+  const result = await chooseDish(household.id, user.id, dinnerId, dishId);
+  refresh();
+  return result === "gone" ? { error: "That dish is gone." } : { saved: true };
+}
+
+export async function addIngredientAction(dishId: string, _previous: DinnerState, form: FormData): Promise<DinnerState> {
+  const { user, household } = await requireExtra("dinner");
+  const name = String(form.get("name") ?? "").replace(/\s+/g, " ").trim();
+  if (!name) return { error: "Write what is needed." };
+  if (name.length > INGREDIENT_LENGTH) return { error: `Keep it under ${INGREDIENT_LENGTH} characters.`, values: { name } };
+  if (!isId(dishId)) return { error: "That dish is gone." };
+  const result = await addIngredient(household.id, user.id, dishId, name);
+  if (result === "full") return { error: `A dish holds ${MAX_INGREDIENTS} ingredients.`, values: { name } };
+  if (result === "gone") return { error: "That dish is gone." };
+  refresh();
+  return { saved: true };
+}
+
+export async function atHomeAction(ingredientId: string, atHome: boolean): Promise<DinnerState> {
+  const { user, household } = await requireExtra("dinner");
+  if (isId(ingredientId)) await setAtHome(household.id, user.id, ingredientId, atHome === true);
+  refresh();
+  return { saved: true };
+}
+
+/** "I'll buy it" for something a dinner needs. The same claim the shopping list shows. */
+export async function claimIngredientAction(itemId: string, claim: boolean): Promise<DinnerState> {
+  const { user, household } = await requireExtra("dinner");
+  if (isId(itemId)) await setClaim(household.id, user.id, itemId, claim === true);
+  refresh();
+  return { saved: true };
+}
+
+export async function gotIngredientAction(itemId: string, bought: boolean): Promise<DinnerState> {
+  const { user, household } = await requireExtra("dinner");
+  if (isId(itemId)) await setBought(household.id, user.id, itemId, bought === true);
+  refresh();
+  return { saved: true };
+}

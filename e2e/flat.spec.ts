@@ -209,3 +209,118 @@ test("a happening collects who is in", async ({ browser }) => {
   await ida.getByRole("button", { name: "Call off Film night?" }).click();
   await expect(headline(ida)).toHaveText("Nothing planned");
 });
+
+test("a dinner goes from ideas to a shopping list", async ({ browser }) => {
+  const { ida, knut } = await twoRoommates(browser);
+  const seen = (page: Page, id: string) => page.getByTestId(id).filter({ visible: true });
+  const dishes = (page: Page) => seen(page, "dish");
+  const ingredient = (page: Page, name: string) => seen(page, "ingredient").filter({ hasText: name });
+
+  // --- Ida plans a dinner ---
+  await ida.goto("/flat");
+  await ida.getByRole("link", { name: /Dinner/ }).click();
+  await expect(headline(ida)).toHaveText("No dinner planned");
+  const inThreeDays = new Date(Date.now() + 3 * 86_400_000).toISOString().slice(0, 10);
+  await ida.getByLabel("Day", { exact: true }).fill(inThreeDays);
+  await ida.getByLabel("Time", { exact: true }).fill("18:30");
+  await ida.getByRole("button", { name: "Plan dinner" }).click();
+  await expect(ida).toHaveURL(/\/dinner\/[0-9a-f-]{36}$/);
+  await expect(headline(ida)).toHaveText("What's for dinner?");
+  await expect(seen(ida, "whos-in")).toContainText("You and Knut are in.");
+
+  // --- She suggests a dish. A dish needs a name. ---
+  await ida.getByRole("button", { name: "Put it to the vote", exact: true }).click();
+  await expect(ida.getByTestId("form-error").filter({ visible: true })).toContainText("Name the dish");
+  await ida.getByLabel("Suggest a dish").fill("Tacos");
+  await ida.getByLabel("What it needs").fill("Tortillas, Minced beef\nSalsa");
+  await ida.getByRole("button", { name: "Put it to the vote", exact: true }).click();
+  await expect(dishes(ida)).toHaveCount(1);
+  await expect(dishes(ida).first()).toContainText("Your idea");
+  await expect(dishes(ida).first()).toContainText("Minced beef, Salsa, Tortillas");
+  await expect(dishes(ida).first()).toHaveAttribute("data-voted", "yes");
+
+  // --- Out of ideas: a few are offered, and one goes to the vote ---
+  await ida.getByRole("button", { name: "Out of ideas? Get a few" }).click();
+  await expect(seen(ida, "idea")).toHaveCount(3);
+  await ida.screenshot(shot("d1-dinner-ideas"));
+  await seen(ida, "idea").first().getByRole("button").click();
+  await expect(dishes(ida)).toHaveCount(2);
+  await expect(seen(ida, "idea")).toHaveCount(2);
+  await expect(dishes(ida).filter({ hasText: "From the ideas" })).toHaveCount(1);
+
+  // --- Knut finds the dinner, votes for tacos and says he will cook ---
+  await knut.goto("/dinner");
+  await expect(headline(knut)).toHaveText("What's for dinner?");
+  await expect(seen(knut, "dinner").first()).toContainText("2 ideas, not settled");
+  await expect(seen(knut, "dinner").first()).toContainText("Nobody cooks yet. 2 in.");
+  await seen(knut, "dinner").first().getByRole("link").click();
+  await expect(knut).toHaveURL(/\/dinner\/[0-9a-f-]{36}$/);
+  await knut.getByRole("button", { name: "Vote for Tacos" }).click();
+  await expect(dishes(knut).filter({ hasText: "Tacos" })).toContainText("2 votes");
+  await knut.getByRole("button", { name: "I'll cook this dinner" }).click();
+  await expect(seen(knut, "duty-cook")).toContainText("You");
+
+  // --- Ida cleans up, and they go with tacos ---
+  await ida.reload();
+  await expect(seen(ida, "duty-cook")).toContainText("Knut");
+  await expect(seen(ida, "duty-cook").getByRole("button")).toHaveCount(0);
+  await ida.getByRole("button", { name: "I'll clean up after this dinner" }).click();
+  await expect(seen(ida, "duty-cleaner")).toContainText("You");
+  await ida.getByRole("button", { name: "Go with Tacos" }).click();
+  await expect(headline(ida)).toHaveText("Tacos");
+  await expect(seen(ida, "ingredient")).toHaveCount(3);
+  await expect(seen(ida, "needs")).toContainText("3 things to buy, 3 that nobody has taken.");
+
+  // --- Salsa is in the cupboard. Ida takes the tortillas. ---
+  await ida.getByRole("button", { name: "We have Salsa" }).click();
+  await expect(ingredient(ida, "Salsa")).toHaveAttribute("data-state", "home");
+  await ida.getByRole("button", { name: "I'll buy Tortillas" }).click();
+  await expect(ingredient(ida, "Tortillas")).toContainText("You'll buy it.");
+  await expect(seen(ida, "needs")).toContainText("2 things to buy, 1 that nobody has taken.");
+  await ida.screenshot(shot("d2-dinner-settled"));
+
+  // --- What needs buying is on the shopping list, and only that ---
+  await knut.goto("/shopping");
+  const items = seen(knut, "item");
+  await expect(items).toHaveCount(2);
+  await expect(items.filter({ hasText: "Tortillas" })).toContainText("For a dinner. Ida will buy it.");
+  await expect(items.filter({ hasText: "Salsa" })).toHaveCount(0);
+  await knut.getByRole("button", { name: "Got Minced beef" }).click();
+  await expect(items).toHaveCount(1);
+  await ida.reload();
+  await expect(ingredient(ida, "Minced beef")).toHaveAttribute("data-state", "bought");
+  await expect(ingredient(ida, "Minced beef")).toContainText("Knut got it.");
+
+  // --- Ida cannot come after all, so she no longer cleans up. Then she can. ---
+  await ida.getByRole("button", { name: "I'm out of this dinner" }).click();
+  await expect(seen(ida, "whos-in")).toHaveAttribute("data-me", "out");
+  await expect(seen(ida, "whos-in")).toContainText("Knut is in.");
+  await expect(seen(ida, "duty-cleaner")).toContainText("Nobody yet");
+  await ida.getByRole("button", { name: "I'm in for this dinner after all" }).click();
+  await expect(seen(ida, "whos-in")).toHaveAttribute("data-me", "in");
+
+  // --- Fixed dinner days fill the list ---
+  await ida.getByRole("link", { name: "All dinners" }).click();
+  await expect(headline(ida)).toHaveText("Tacos");
+  await expect(seen(ida, "dinner")).toHaveCount(1);
+  const days = seen(ida, "dinner-days");
+  await days.getByLabel("Monday").check();
+  await days.getByLabel("Thursday").check();
+  await days.getByLabel("At", { exact: true }).fill("19:00");
+  await days.getByRole("button", { name: "Save" }).click();
+  // Two fixed days over two weeks: four dinners, less one if it lands on the planned day.
+  await expect.poll(async () => seen(ida, "dinner").count()).toBeGreaterThanOrEqual(4);
+  await ida.screenshot(shot("d3-dinners"));
+  await knut.goto("/dinner");
+  await expect(seen(knut, "dinner-days")).toContainText("Dinner is on Mondays and Thursdays at 19:00.");
+
+  // --- Calling the dinner off takes what is not bought off the shopping list ---
+  await ida.getByRole("link", { name: /Tacos/ }).click();
+  await expect(headline(ida)).toHaveText("Tacos");
+  await ida.getByRole("button", { name: "Call off this dinner" }).click();
+  await ida.getByRole("button", { name: "Call off this dinner?" }).click();
+  await expect(headline(ida)).toHaveText("Called off");
+  await knut.goto("/shopping");
+  await expect(seen(knut, "item")).toHaveCount(0);
+  await expect(knut.getByTestId("bag")).toContainText("Minced beef");
+});

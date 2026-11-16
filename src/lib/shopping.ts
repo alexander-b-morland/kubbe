@@ -1,6 +1,6 @@
 import { and, asc, count, desc, eq, gte, inArray, isNotNull, isNull } from "drizzle-orm";
 import { db } from "@/db";
-import { expense, expenseShare, membership, shoppingItem } from "@/db/schema";
+import { dishIngredient, expense, expenseShare, membership, shoppingItem } from "@/db/schema";
 import { splitEvenly } from "@/lib/money";
 
 // The shopping list and what was paid for it. Callers have already established who is
@@ -64,8 +64,20 @@ export async function setBought(householdId: string, userId: string, itemId: str
     .where(and(inHousehold(householdId, itemId), isNull(shoppingItem.expenseId)));
 }
 
+/**
+ * Take an item off the list. For a dinner ingredient that means nobody needs to buy it,
+ * so the dinner then shows it as something the flat already has.
+ */
 export async function removeItem(householdId: string, itemId: string) {
-  await db.delete(shoppingItem).where(and(inHousehold(householdId, itemId), isNull(shoppingItem.expenseId)));
+  await db.transaction(async (tx) => {
+    const [removed] = await tx
+      .delete(shoppingItem)
+      .where(and(inHousehold(householdId, itemId), isNull(shoppingItem.expenseId)))
+      .returning({ ingredientId: shoppingItem.ingredientId, boughtAt: shoppingItem.boughtAt });
+    if (removed?.ingredientId && !removed.boughtAt) {
+      await tx.update(dishIngredient).set({ atHome: true }).where(eq(dishIngredient.id, removed.ingredientId));
+    }
+  });
 }
 
 /** The ids among these that are members of the household. */
