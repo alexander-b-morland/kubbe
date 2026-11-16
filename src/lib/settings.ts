@@ -1,8 +1,10 @@
 import { and, count, eq, ne } from "drizzle-orm";
-import { db } from "@/db";
+import { db, type Transaction } from "@/db";
 import { booking, household, membership, resource } from "@/db/schema";
+import { pinCurrentTurns } from "@/lib/cleaning/service";
 import { generateJoinCode } from "@/lib/join-code";
 import { MEMBER_COLOURS } from "@/lib/member-colours";
+import { dayInZone, isTimeZone } from "@/lib/time";
 
 // Database changes behind the Household screen. Callers have already established
 // who is asking and which household they are in (see requireHousehold).
@@ -33,42 +35,69 @@ export async function renameHousehold(householdId: string, name: string) {
   await db.update(household).set({ name }).where(eq(household.id, householdId));
 }
 
+type PgError = { code?: string; cause?: unknown };
+
+function isUniqueViolation(error: unknown): boolean {
+  const seen = new Set<unknown>();
+  let current = error as PgError | undefined;
+  while (current && !seen.has(current)) {
+    seen.add(current);
+    if (current.code === "23505") return true;
+    current = current.cause as PgError | undefined;
+  }
+  return false;
+}
+
 /** Replace the join code, so the old one and old invite links stop working. */
 export async function replaceJoinCode(householdId: string) {
-  for (let attempt = 0; attempt < 5; attempt++) {
+  // A new code can collide with another household's, however rarely: try a few.
+  for (let attempt = 0; ; attempt++) {
     try {
       await db.update(household).set({ joinCode: generateJoinCode() }).where(eq(household.id, householdId));
       return;
     } catch (error) {
-      if (attempt === 4) throw error;
+      if (!isUniqueViolation(error) || attempt === 4) throw error;
     }
   }
 }
 
-async function adminCount(householdId: string) {
-  const [row] = await db
+/**
+ * Lock the household for the rest of the transaction. Everything that changes who is
+ * in a household, or who is admin, takes this lock first. That makes the checks and
+ * the change one step, so two people pressing at the same moment cannot both pass a
+ * check that only one of them should (for example the last two admins both leaving).
+ */
+export async function lockHousehold(tx: Transaction, householdId: string) {
+  const [locked] = await tx
+    .select({ id: household.id, timeZone: household.timeZone })
+    .from(household)
+    .where(eq(household.id, householdId))
+    .for("update");
+  return locked ?? null;
+}
+
+async function otherAdmins(tx: Transaction, householdId: string, userId: string) {
+  const [row] = await tx
     .select({ admins: count() })
     .from(membership)
-    .where(and(eq(membership.householdId, householdId), eq(membership.role, "admin")));
+    .where(and(eq(membership.householdId, householdId), eq(membership.role, "admin"), ne(membership.userId, userId)));
   return row.admins;
 }
 
-export type MemberChange = { ok: true } | { ok: false; reason: "last-admin" | "not-found" };
+export type MemberChange =
+  | { ok: true; householdDeleted?: boolean }
+  | { ok: false; reason: "last-admin" | "not-found" };
 
 export async function setMemberRole(householdId: string, userId: string, role: "admin" | "member"): Promise<MemberChange> {
   return db.transaction(async (tx): Promise<MemberChange> => {
+    if (!(await lockHousehold(tx, householdId))) return { ok: false, reason: "not-found" };
     const [target] = await tx
       .select({ role: membership.role })
       .from(membership)
-      .where(and(eq(membership.householdId, householdId), eq(membership.userId, userId)))
-      .for("update");
+      .where(and(eq(membership.householdId, householdId), eq(membership.userId, userId)));
     if (!target) return { ok: false, reason: "not-found" };
-    if (target.role === "admin" && role === "member") {
-      const [others] = await tx
-        .select({ admins: count() })
-        .from(membership)
-        .where(and(eq(membership.householdId, householdId), eq(membership.role, "admin"), ne(membership.userId, userId)));
-      if (others.admins === 0) return { ok: false, reason: "last-admin" };
+    if (target.role === "admin" && role === "member" && (await otherAdmins(tx, householdId, userId)) === 0) {
+      return { ok: false, reason: "last-admin" };
     }
     await tx
       .update(membership)
@@ -82,27 +111,40 @@ export async function setMemberRole(householdId: string, userId: string, role: "
  * Take someone out of the household: an admin removing a member, or a person leaving.
  * Their bookings there go with them. The last admin cannot go while others remain,
  * and when the last person leaves, the household is deleted.
+ *
+ * With `replaceCode`, the join code is replaced in the same step. An admin removing
+ * someone else needs that: the person who was removed knows the old code.
  */
-export async function removeMember(householdId: string, userId: string): Promise<MemberChange> {
-  const [target] = await db
-    .select({ role: membership.role })
-    .from(membership)
-    .where(and(eq(membership.householdId, householdId), eq(membership.userId, userId)));
-  if (!target) return { ok: false, reason: "not-found" };
+export async function removeMember(householdId: string, userId: string, options: { replaceCode: boolean }): Promise<MemberChange> {
+  const result = await db.transaction(async (tx): Promise<MemberChange> => {
+    const locked = await lockHousehold(tx, householdId);
+    if (!locked) return { ok: false, reason: "not-found" };
 
-  const [everyone] = await db.select({ members: count() }).from(membership).where(eq(membership.householdId, householdId));
-  if (everyone.members === 1) {
-    // Deleting the household removes its memberships, resources, bookings and rooms.
-    await db.delete(household).where(eq(household.id, householdId));
-    return { ok: true };
-  }
-  if (target.role === "admin" && (await adminCount(householdId)) === 1) return { ok: false, reason: "last-admin" };
+    const [target] = await tx
+      .select({ role: membership.role })
+      .from(membership)
+      .where(and(eq(membership.householdId, householdId), eq(membership.userId, userId)));
+    if (!target) return { ok: false, reason: "not-found" };
 
-  await db.transaction(async (tx) => {
+    const [everyone] = await tx.select({ members: count() }).from(membership).where(eq(membership.householdId, householdId));
+    if (everyone.members === 1) {
+      // Deleting the household removes its memberships, resources, bookings and rooms.
+      await tx.delete(household).where(eq(household.id, householdId));
+      return { ok: true, householdDeleted: true };
+    }
+    if (target.role === "admin" && (await otherAdmins(tx, householdId, userId)) === 0) {
+      return { ok: false, reason: "last-admin" };
+    }
+
+    // Keep everyone else's cleaning turn for this period where it is.
+    await pinCurrentTurns(tx, householdId, dayInZone(new Date(), locked.timeZone));
     await tx.delete(booking).where(and(eq(booking.householdId, householdId), eq(booking.userId, userId)));
     await tx.delete(membership).where(and(eq(membership.householdId, householdId), eq(membership.userId, userId)));
+    return { ok: true };
   });
-  return { ok: true };
+
+  if (result.ok && !result.householdDeleted && options.replaceCode) await replaceJoinCode(householdId);
+  return result;
 }
 
 export async function setMemberColour(householdId: string, userId: string, colour: string) {
@@ -111,5 +153,11 @@ export async function setMemberColour(householdId: string, userId: string, colou
     .update(membership)
     .set({ colour })
     .where(and(eq(membership.householdId, householdId), eq(membership.userId, userId)));
+  return true;
+}
+
+export async function setTimeZone(householdId: string, timeZone: string) {
+  if (!isTimeZone(timeZone)) return false;
+  await db.update(household).set({ timeZone }).where(eq(household.id, householdId));
   return true;
 }

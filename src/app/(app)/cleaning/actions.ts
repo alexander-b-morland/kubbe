@@ -2,15 +2,27 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { createArea, deleteArea, ESTIMATES, giveBack, INTERVALS, markDone, takeOver, undoDone, updateArea } from "@/lib/cleaning/service";
+import {
+  createArea,
+  deleteArea,
+  ESTIMATES,
+  giveBack,
+  INTERVALS,
+  markDone,
+  MAX_AREAS,
+  takeOver,
+  undoDone,
+  updateArea,
+} from "@/lib/cleaning/service";
 import type { FormState } from "@/lib/form-state";
 import { requireHousehold } from "@/lib/session";
 import { dayInZone } from "@/lib/time";
 
 export type CleaningState = (FormState & { saved?: boolean }) | undefined;
 
-const adminsOnly = "Only an admin can change the rooms.";
-const gone = "That room no longer exists. Reload and try again.";
+const adminsOnly = "Only an admin can change the rooms. Ask one of them.";
+const gone = "That room has been removed.";
+const stale = "That turn has ended. The list now shows the current one.";
 
 const areaSchema = z.object({
   name: z.string().trim().min(1, "Give the room a name.").max(30, "Keep the name under 30 characters."),
@@ -19,6 +31,7 @@ const areaSchema = z.object({
 });
 
 const idSchema = z.uuid();
+const periodSchema = z.number().int().min(0);
 
 function refresh() {
   revalidatePath("/cleaning");
@@ -35,7 +48,9 @@ export async function addAreaAction(_previous: CleaningState, form: FormData): P
   if (membership.role !== "admin") return { error: adminsOnly };
   const parsed = areaSchema.safeParse(Object.fromEntries(form));
   if (!parsed.success) return { error: parsed.error.issues[0].message, values: { name: String(form.get("name") ?? "") } };
-  if (!(await createArea(household.id, parsed.data, today))) return { error: "That's the most rooms a household can have." };
+  if (!(await createArea(household.id, parsed.data, today))) {
+    return { error: `A household can have ${MAX_AREAS} rooms. Remove one to add another.` };
+  }
   refresh();
   return { saved: true };
 }
@@ -51,24 +66,30 @@ export async function updateAreaAction(areaId: string, _previous: CleaningState,
 }
 
 export async function deleteAreaAction(areaId: string): Promise<CleaningState> {
-  const { household, membership } = await context();
+  const { household, membership, today } = await context();
   if (membership.role !== "admin") return { error: adminsOnly };
-  if (idSchema.safeParse(areaId).success) await deleteArea(household.id, areaId);
+  if (idSchema.safeParse(areaId).success) await deleteArea(household.id, areaId, today);
   refresh();
   return { saved: true };
 }
 
 type TurnChange = typeof markDone;
 
-/** The four things a person can do to the current turn of a room all look the same from here. */
-async function changeTurn(change: TurnChange, areaId: string): Promise<CleaningState> {
+/**
+ * The four things a person can do to a turn all look the same from here. The period
+ * comes from the screen the person pressed on: if a new period has started since that
+ * screen was drawn, nothing is changed and they are told.
+ */
+async function changeTurn(change: TurnChange, areaId: string, period: number): Promise<CleaningState> {
   const { user, household, today } = await context();
-  const ok = idSchema.safeParse(areaId).success && (await change(household.id, user.id, areaId, today));
+  const valid = idSchema.safeParse(areaId).success && periodSchema.safeParse(period).success;
+  const result = valid ? await change(household.id, user.id, areaId, today, period) : "gone";
   refresh();
-  return ok ? { saved: true } : { error: gone };
+  if (result === "ok") return { saved: true };
+  return { error: result === "stale" ? stale : gone };
 }
 
-export const markDoneAction = async (areaId: string) => changeTurn(markDone, areaId);
-export const undoDoneAction = async (areaId: string) => changeTurn(undoDone, areaId);
-export const takeOverAction = async (areaId: string) => changeTurn(takeOver, areaId);
-export const giveBackAction = async (areaId: string) => changeTurn(giveBack, areaId);
+export const markDoneAction = async (areaId: string, period: number) => changeTurn(markDone, areaId, period);
+export const undoDoneAction = async (areaId: string, period: number) => changeTurn(undoDone, areaId, period);
+export const takeOverAction = async (areaId: string, period: number) => changeTurn(takeOver, areaId, period);
+export const giveBackAction = async (areaId: string, period: number) => changeTurn(giveBack, areaId, period);

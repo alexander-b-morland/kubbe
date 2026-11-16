@@ -1,9 +1,12 @@
-import { eq } from "drizzle-orm";
+import { count, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { household, membership, resource, user } from "@/db/schema";
 import { defaultResourcesFor } from "@/lib/booking/defaults";
 import { generateJoinCode } from "@/lib/join-code";
+import { pinCurrentTurns } from "@/lib/cleaning/service";
 import { MEMBER_COLOURS, nextMemberColour } from "@/lib/member-colours";
+import { lockHousehold } from "@/lib/settings";
+import { dayInZone, isTimeZone } from "@/lib/time";
 
 export const MAX_MEMBERS = 20;
 const DEFAULT_TIME_ZONE = "Europe/Oslo";
@@ -22,8 +25,9 @@ function isUniqueViolation(error: unknown, constraint: string): boolean {
   return false;
 }
 
+/** The zone a browser reported, if the server knows it. Otherwise the default. */
 export function resolveTimeZone(input: string): string {
-  return Intl.supportedValuesOf("timeZone").includes(input) ? input : DEFAULT_TIME_ZONE;
+  return isTimeZone(input) ? input : DEFAULT_TIME_ZONE;
 }
 
 export type CreateResult = { ok: true } | { ok: false; reason: "already-member" };
@@ -65,11 +69,16 @@ export async function createHousehold(
 
 export async function findHouseholdByCode(code: string) {
   const [found] = await db
-    .select({ id: household.id, name: household.name })
+    .select({ id: household.id, name: household.name, timeZone: household.timeZone })
     .from(household)
     .where(eq(household.joinCode, code))
     .limit(1);
   return found ?? null;
+}
+
+export async function countMembers(householdId: string) {
+  const [row] = await db.select({ members: count() }).from(membership).where(eq(membership.householdId, householdId));
+  return row.members;
 }
 
 export type JoinResult =
@@ -82,11 +91,16 @@ export async function joinHousehold(userId: string, code: string): Promise<JoinR
 
   try {
     return await db.transaction(async (tx): Promise<JoinResult> => {
+      // One change to who lives here at a time, so the size limit holds and nobody
+      // joins a household in the moment its last member leaves and deletes it.
+      if (!(await lockHousehold(tx, found.id))) return { ok: false, reason: "not-found" };
       const members = await tx
         .select({ colour: membership.colour })
         .from(membership)
         .where(eq(membership.householdId, found.id));
       if (members.length >= MAX_MEMBERS) return { ok: false, reason: "full" };
+      // A new person changes the cleaning rotation. Turns under way stay where they are.
+      await pinCurrentTurns(tx, found.id, dayInZone(new Date(), found.timeZone));
       await tx.insert(membership).values({
         householdId: found.id,
         userId,

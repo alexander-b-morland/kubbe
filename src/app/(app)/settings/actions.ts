@@ -13,13 +13,19 @@ import {
   replaceJoinCode,
   setMemberColour,
   setMemberRole,
+  setTimeZone,
   SLOT_LENGTHS,
   updateResource,
 } from "@/lib/settings";
 
 export type SettingsState = (FormState & { saved?: boolean }) | undefined;
 
-const adminsOnly = "Only an admin can change this.";
+const adminsOnly = "Only an admin can change this. Ask one of them.";
+const notHere = "That person isn't in the household any more.";
+
+// Arguments bound into an action on the server still arrive from the browser, so check them.
+const memberIdSchema = z.string().min(1).max(64);
+const roleSchema = z.enum(["admin", "member"]);
 
 function refreshAll() {
   revalidatePath("/", "layout");
@@ -79,19 +85,33 @@ export async function renameHouseholdAction(_previous: SettingsState, form: Form
   return { saved: true };
 }
 
-export async function replaceJoinCodeAction(): Promise<void> {
+export async function replaceJoinCodeAction(): Promise<SettingsState> {
   const { household, membership } = await requireHousehold();
-  if (membership.role !== "admin") return;
+  if (membership.role !== "admin") return { error: adminsOnly };
   await replaceJoinCode(household.id);
   refreshAll();
+  return { saved: true };
+}
+
+export async function setTimeZoneAction(_previous: SettingsState, form: FormData): Promise<SettingsState> {
+  const { household, membership } = await requireHousehold();
+  if (membership.role !== "admin") return { error: adminsOnly };
+  if (!(await setTimeZone(household.id, String(form.get("timeZone") ?? "")))) {
+    return { error: "Pick a time zone from the list." };
+  }
+  refreshAll();
+  return { saved: true };
 }
 
 export async function setRoleAction(userId: string, role: "admin" | "member"): Promise<SettingsState> {
   const { household, membership } = await requireHousehold();
   if (membership.role !== "admin") return { error: adminsOnly };
-  const result = await setMemberRole(household.id, userId, role);
+  const target = memberIdSchema.safeParse(userId);
+  const wanted = roleSchema.safeParse(role);
+  if (!target.success || !wanted.success) return { error: notHere };
+  const result = await setMemberRole(household.id, target.data, wanted.data);
   if (!result.ok) {
-    return { error: result.reason === "last-admin" ? "A household needs at least one admin. Make someone else admin first." : "That person isn't in the household any more." };
+    return { error: result.reason === "last-admin" ? "A household needs at least one admin. Make someone else admin first." : notHere };
   }
   refreshAll();
   return { saved: true };
@@ -99,14 +119,17 @@ export async function setRoleAction(userId: string, role: "admin" | "member"): P
 
 export async function removeMemberAction(userId: string): Promise<SettingsState> {
   const { user, household, membership } = await requireHousehold();
-  const leaving = userId === user.id;
+  const target = memberIdSchema.safeParse(userId);
+  if (!target.success) return { error: notHere };
+  const leaving = target.data === user.id;
   if (!leaving && membership.role !== "admin") return { error: adminsOnly };
-  const result = await removeMember(household.id, userId);
+  // When an admin removes someone, the join code is replaced too: that person knows the old one.
+  const result = await removeMember(household.id, target.data, { replaceCode: !leaving });
   if (!result.ok) {
-    return { error: result.reason === "last-admin" ? "You're the only admin. Make someone else admin before you leave." : "That person isn't in the household any more." };
+    return { error: result.reason === "last-admin" ? "You're the only admin. Make someone else admin before you leave." : notHere };
   }
   refreshAll();
-  if (leaving) redirect("/onboarding");
+  if (leaving) redirect("/onboarding?left=1");
   return { saved: true };
 }
 
