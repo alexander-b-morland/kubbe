@@ -8,6 +8,13 @@
       "when": 1794795171119,
       "tag": "0000_init_auth_and_households",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1794798448923,
+      "tag": "0001_booking",
+      "breakpoints": true
     }
   ]
 }

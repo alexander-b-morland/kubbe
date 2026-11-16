@@ -1,5 +1,7 @@
 import {
   boolean,
+  index,
+  integer,
   pgEnum,
   pgTable,
   primaryKey,
@@ -110,5 +112,60 @@ export const membership = pgTable(
   ],
 );
 
+// ---------------------------------------------------------------------------
+// Booking. A resource is one bookable thing (a shower, a washing machine).
+// Slots are never stored: they are worked out from the resource's settings.
+// ---------------------------------------------------------------------------
+
+export const resourceKind = pgEnum("resource_kind", ["shower", "washer", "dryer"]);
+
+export const resource = pgTable(
+  "resource",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    householdId: uuid("household_id")
+      .notNull()
+      .references(() => household.id, { onDelete: "cascade" }),
+    kind: resourceKind("kind").notNull(),
+    name: text("name").notNull(),
+    /** A household can switch a resource off, for example when it has no dryer. */
+    enabled: boolean("enabled").notNull().default(true),
+    slotMinutes: integer("slot_minutes").notNull(),
+    /** Bookable hours as minutes after midnight, in the household's time zone. */
+    opensAt: integer("opens_at").notNull(),
+    closesAt: integer("closes_at").notNull(),
+    maxPerDay: integer("max_per_day").notNull(),
+    allowBackToBack: boolean("allow_back_to_back").notNull().default(false),
+    /** How many days ahead a slot can be booked. 0 means today only. */
+    bookAheadDays: integer("book_ahead_days").notNull(),
+    createdAt: createdAt(),
+  },
+  (table) => [index("resource_household_idx").on(table.householdId)],
+);
+
+export const booking = pgTable(
+  "booking",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    resourceId: uuid("resource_id")
+      .notNull()
+      .references(() => resource.id, { onDelete: "cascade" }),
+    householdId: uuid("household_id")
+      .notNull()
+      .references(() => household.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    startsAt: timestamp("starts_at", { withTimezone: true }).notNull(),
+    endsAt: timestamp("ends_at", { withTimezone: true }).notNull(),
+    createdAt: createdAt(),
+  },
+  // The migration also adds an exclusion constraint, booking_no_overlap, which
+  // makes the database refuse two bookings of one resource that overlap in time.
+  (table) => [index("booking_resource_time_idx").on(table.resourceId, table.startsAt)],
+);
+
 export type Household = typeof household.$inferSelect;
 export type Membership = typeof membership.$inferSelect;
+export type Resource = typeof resource.$inferSelect;
+export type Booking = typeof booking.$inferSelect;
