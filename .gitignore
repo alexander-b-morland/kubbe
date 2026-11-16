@@ -147,3 +147,31 @@ vite.config.ts.timestamp-*
 
 # Turbo Repo
 .turbo
+
+# --- Kubbe additions ---
+
+# Secrets and credentials (this repo is public)
+*.pem
+*.key
+*.p12
+*.pfx
+secrets/
+.secrets
+
+# Vercel
+.vercel
+
+# Next.js
+next-env.d.ts
+
+# Test output
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/
+
+# Local tool and editor state
+.claude/settings.local.json
+.DS_Store
+Thumbs.db
+.idea/
