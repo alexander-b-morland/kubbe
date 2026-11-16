@@ -88,9 +88,17 @@ On `fjord` and `spruce` use `paper` for text and lines; on `ochre` use `ink`.
 
 **Booking a slot** looks like signing a paper sheet: tapping a free slot draws a pen circle around the time, then a squiggle under your name. Cancelling runs it backwards.
 
-**Free slots must look tappable.** A free slot shows a filled `ink` "Book" button and a dotted circle around the time where the pen stroke will land. Never rely on the word "Free" alone.
+**Free slots must look tappable.** A free slot shows a filled `ink` "Book" button. That is enough: no dotted or dashed outline around the time before booking (tried and rejected). The pen circle appears only when the slot is booked. Never rely on the word "Free" alone.
 
-**Logo.** A jointed wooden hand holding a fish (a trout), as a line drawing that draws itself. It must read clearly as a wooden hand: palm, thumb, segmented fingers, wrist joint. Draw it fresh; do not use the photo from the old project. Not final yet.
+**Logo.** The house mascot: a carved wooden hand holding a trout. It must read clearly as a wooden hand and feel real and three-dimensional, not stiff or flat. Two earlier attempts built from simple geometric blocks were rejected for exactly that.
+
+- Current draft (awaiting approval) is in `design/logo-draft/`. It is an ink line drawing with overlapping forms, hatching on shadow faces, fingernails, wood tones on the hand and fjord tones on the fish. It draws itself stroke by stroke, then the colour fades in.
+- Proportions were traced by eye from a photo of the real carving. The photo itself stays out of this repo.
+- A simplified cut is still needed for sizes under about 64 px.
+
+**Check drawings by looking at them.** Never present an illustration without rendering it and viewing the result first. Render SVG to PNG (for example with `sharp`) and capture animation frames with a headless browser.
+
+**Stroke-drawing gotcha.** A path with round caps that is fully dashed out still shows a dot at its start. Keep each stroke invisible (`stroke-opacity: 0`) until its own animation begins.
 
 Standing brief:
 
