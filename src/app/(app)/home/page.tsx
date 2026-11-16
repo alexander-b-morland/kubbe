@@ -2,13 +2,20 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { AutoRefresh } from "@/components/booking/auto-refresh";
 import { RoomArt, type Room } from "@/components/illustrations/room-art";
+import { listMyTasks } from "@/lib/board";
 import { listDayBookings, listMyUpcoming, listResources } from "@/lib/booking/service";
-import { describeNow, describeWhen } from "@/lib/booking/status";
+import { describeNow, describeNowAcross, describeWhen } from "@/lib/booking/status";
 import { describeDue } from "@/lib/cleaning/rota";
 import { getRota } from "@/lib/cleaning/service";
+import { buildToDos } from "@/lib/dashboard";
+import { listUpcomingDinners } from "@/lib/dinner/service";
+import { hasExtra } from "@/lib/extras";
+import { listUpcoming } from "@/lib/happenings";
 import { listMembers } from "@/lib/households";
 import { formatJoinCode } from "@/lib/join-code";
+import { balances, formatAmount, settleUp } from "@/lib/money";
 import { requireHousehold } from "@/lib/session";
+import { listExpenses, listToBuy } from "@/lib/shopping";
 import { dayInZone } from "@/lib/time";
 import { ShareCode } from "./share-code";
 
@@ -34,18 +41,29 @@ export default async function HomePage() {
   const now = new Date();
   const today = dayInZone(now, timeZone);
 
-  const [resources, members, upcoming, rota] = await Promise.all([
+  const on = (key: Parameters<typeof hasExtra>[1]) => hasExtra(household, key);
+  const [resources, members, upcoming, rota, tasks, happenings, dinners, toBuy, expenses] = await Promise.all([
     listResources(household.id),
     listMembers(household.id),
     listMyUpcoming(household.id, user.id, now),
     getRota(household.id, today),
+    on("board") ? listMyTasks(household.id, user.id) : [],
+    on("happenings") ? listUpcoming(household.id, now) : [],
+    on("dinner") ? listUpcomingDinners(household.id, today) : [],
+    on("shopping") || on("dinner") ? listToBuy(household.id) : [],
+    on("expenses") ? listExpenses(household.id) : [],
   ]);
-  const shower = resources.find((resource) => resource.kind === "shower" && resource.enabled);
-  const washer = resources.find((resource) => resource.kind !== "shower" && resource.enabled);
-  const [showerToday, washerToday] = await Promise.all([
-    shower ? listDayBookings(shower.id, household.id, today, timeZone) : [],
-    washer ? listDayBookings(washer.id, household.id, today, timeZone) : [],
-  ]);
+  // With several showers or machines, the band speaks for all of them.
+  const showers = resources.filter((resource) => resource.kind === "shower" && resource.enabled);
+  const washers = resources.filter((resource) => resource.kind === "washer" && resource.enabled);
+  const machines = washers.length > 0 ? washers : resources.filter((resource) => resource.kind === "dryer" && resource.enabled);
+  const nowLines = async (group: typeof resources) =>
+    Promise.all(
+      group.map(async (rules) =>
+        describeNow({ rules, bookings: await listDayBookings(rules.id, household.id, today, timeZone), now, timeZone, userId: user.id }),
+      ),
+    );
+  const [showerLines, machineLines] = await Promise.all([nowLines(showers), nowLines(machines)]);
 
   const nextOf = (kinds: string[]) => {
     const next = upcoming.find((booking) => kinds.includes(booking.kind));
@@ -55,16 +73,16 @@ export default async function HomePage() {
   };
 
   const myTurns = rota.filter((row) => row.assignee?.userId === user.id && !row.done);
-  let cleaningStatus = "No rooms yet";
+  let cleaningStatus = "No turns yet";
   let cleaningDetail: string | undefined =
-    membership.role === "admin" ? "Add the rooms you share" : "An admin hasn't added rooms yet";
+    membership.role === "admin" ? "Add the rooms and chores you share" : "An admin hasn't added any yet";
   if (rota.length > 0) {
     cleaningDetail = undefined;
     if (myTurns.length === 1) {
       cleaningStatus = `Your turn: ${myTurns[0].name}`;
       cleaningDetail = describeDue(today, myTurns[0].lastDay);
     } else if (myTurns.length > 1) {
-      cleaningStatus = `${myTurns.length} rooms are yours`;
+      cleaningStatus = `${myTurns.length} turns are yours`;
       cleaningDetail = myTurns.map((turn) => turn.name).join(", ");
     } else if (rota.every((row) => row.done)) {
       cleaningStatus = "All clean";
@@ -72,6 +90,23 @@ export default async function HomePage() {
       cleaningStatus = "Nothing for you now";
     }
   }
+
+  const memberName = (userId: string) => members.find((member) => member.userId === userId)?.name ?? "someone who moved out";
+  const toDos = buildToDos({
+    me: user.id,
+    today,
+    turns: myTurns.map((turn) => ({ id: turn.areaId, name: turn.name, lastDay: turn.lastDay })),
+    dinners,
+    buying: toBuy.filter((item) => item.claimedBy === user.id).map((item) => item.name),
+    buyingHref: on("shopping") ? "/shopping" : "/dinner",
+    tasks,
+    unanswered: happenings
+      .filter((happening) => !happening.going.includes(user.id) && !happening.notGoing.includes(user.id))
+      .map((happening) => ({ id: happening.id, title: happening.title, when: describeWhen(happening.startsAt, now, timeZone) })),
+    owes: settleUp(balances(expenses))
+      .filter((transfer) => transfer.from === user.id)
+      .map((transfer) => ({ to: memberName(transfer.to), amount: formatAmount(transfer.amount, household.currency) })),
+  });
 
   // Everything you have booked, soonest first. The first of each kind is already on its band.
   const later = upcoming.slice(0, 6);
@@ -82,18 +117,18 @@ export default async function HomePage() {
     {
       room: "shower",
       href: "/shower",
-      label: shower?.name ?? "Shower",
+      label: showers.length === 1 ? showers[0].name : showers.length > 1 ? `${showers.length} showers` : "Shower",
       className: "bg-fjord text-paper",
-      status: shower ? describeNow({ rules: shower, bookings: showerToday, now, timeZone, userId: user.id }) : "Switched off",
-      detail: shower ? nextOf(["shower"]) : undefined,
+      status: describeNowAcross(showerLines),
+      detail: showers.length > 0 ? nextOf(["shower"]) : undefined,
     },
     {
       room: "laundry",
       href: "/laundry",
-      label: washer?.name ?? "Laundry",
+      label: machines.length === 1 ? machines[0].name : "Laundry",
       className: "bg-ochre text-ink",
-      status: washer ? describeNow({ rules: washer, bookings: washerToday, now, timeZone, userId: user.id }) : "Switched off",
-      detail: washer ? nextOf(["washer", "dryer"]) : undefined,
+      status: describeNowAcross(machineLines),
+      detail: machines.length > 0 ? nextOf(["washer", "dryer"]) : undefined,
     },
     { room: "cleaning", href: "/cleaning", label: "Cleaning", className: "bg-spruce text-paper", status: cleaningStatus, detail: cleaningDetail },
   ];
@@ -115,6 +150,39 @@ export default async function HomePage() {
             {formatJoinCode(household.joinCode)}
           </p>
           <ShareCode code={household.joinCode} />
+        </section>
+      ) : null}
+
+      {members.length > 1 || toDos.length > 0 ? (
+        <section aria-labelledby="todo-heading" className="flex flex-col gap-1" data-testid="todo">
+          <h2 id="todo-heading" className="type-display text-3xl">
+            {toDos.length === 0 ? "Nothing waiting on you" : "Yours to do"}
+          </h2>
+          {toDos.length > 0 ? (
+            <ul className="flex flex-col">
+              {toDos.map((item) => (
+                <li key={item.key}>
+                  <Link
+                    href={item.href}
+                    className="flex items-center gap-3 border-b-2 border-ink/15 py-3 outline-none focus-visible:ring-4 focus-visible:ring-fjord"
+                  >
+                    <RoomArt room={item.art} className="size-9 shrink-0" />
+                    <span className="flex min-w-0 flex-col">
+                      <span className="text-lg font-semibold break-words">{item.what}</span>
+                      <span className="text-ink-soft">{item.detail}</span>
+                    </span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="flex items-center gap-2 text-ink-soft">
+              <svg viewBox="0 0 24 24" className="tick-draw size-6 shrink-0 text-spruce" aria-hidden="true">
+                <path d="M4 13C7 15 9 17 10 19C13 13 17 8 21 5" pathLength={1} />
+              </svg>
+              No turns, to-dos or shopping with your name on.
+            </p>
+          )}
         </section>
       ) : null}
 

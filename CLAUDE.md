@@ -36,6 +36,7 @@ Approved 2026-11-15.
 - Drizzle ORM. Schema in `src/db/schema.ts`, SQL migrations in `drizzle/`.
 - Better Auth (email and password for now), storing users and sessions in the same database. Config in `src/lib/auth.ts`.
 - Zod for input validation
+- Anthropic SDK (`@anthropic-ai/sdk`) for dinner ideas from Claude. Optional: without `ANTHROPIC_API_KEY` the ideas come from a built-in cookbook.
 - Vitest for unit tests (`src/**/*.test.ts`), Playwright for end-to-end tests (`e2e/`), driving the Edge that ships with Windows
 - Animation is plain CSS so far. Motion is agreed for later if CSS is not enough; it is not installed.
 
@@ -62,17 +63,23 @@ Package manager is npm. Keep this list current as scripts are added.
 - `.env.local` is written by `vercel env pull` and holds the database settings. It is overwritten on every pull.
 - `.env.development.local` and `.env.production.local` hold the local auth secret. They survive a pull.
 - `.env.example` lists every variable the app needs, with empty values. `src/lib/env.ts` checks them at startup.
+- `ANTHROPIC_API_KEY` is the one optional variable. The owner adds it himself with `npx vercel env add ANTHROPIC_API_KEY`; it is never pasted into chat or committed.
 - There is one database for local work, previews and production. End-to-end tests therefore run against it: they only create accounts ending in `@kubbe.test` and delete them afterwards. Move local work to its own Neon branch before real users arrive.
 
 ## Where things live
 
-- `src/app`: screens. `(auth)` is sign in and sign up, `onboarding` is create or join, `join/[code]` is the invite link. `(app)` holds the signed-in screens, which share the tab bar: `home` (dashboard), `shower`, `laundry`, `cleaning`, `settings` (shown to people as "Household").
+- `src/app`: screens. `(auth)` is sign in and sign up, `onboarding` is create or join, `join/[code]` is the invite link. `(app)` holds the signed-in screens, which share the tab bar: `home` (dashboard), `shower`, `laundry`, `cleaning`, and `flat`, the hub for the extras (`dinner`, `dinner/[id]`, `shopping`, `expenses`, `happenings`, `board`), `profile`, `people/[id]` and `settings` (shown to people as "Household").
 - `src/lib/session.ts`: `requireUser()` and `requireHousehold()`. Every screen and action that touches household data starts with `requireHousehold()` and uses the household id it returns. It re-reads the membership from the database on every request.
 - `src/lib/households.ts`, `src/lib/settings.ts`: creating, joining, listing, and what the Household screen changes. Database rules live here, not in the screens.
 - `src/lib/booking`: `rules.ts` (pure rules), `service.ts` (database), `actions.ts` (server actions), `status.ts` ("Free until 07:30"), `defaults.ts`.
 - `src/lib/cleaning`: `rota.ts` (pure rota maths), `service.ts` (database). Turns are computed, never stored; only "done" and "taken over" are stored.
 - `src/components/booking`: `BookingScreen` and `SlotList`, shared by shower and laundry. A new bookable thing should reuse them.
-- `src/components/ui`: `Field`, `SubmitButton`, `FormError`, `ActionButton`. Forms post to server actions and get errors back through `useActionState`.
+- `src/components/ui`: `Field`, `SubmitButton`, `FormError`, `ActionButton`, `SavableForm` (a Save button only once something changed). Forms post to server actions and get errors back through `useActionState`.
+- `src/lib/extras.ts`, `src/lib/extras-guard.ts`: the parts under Flat. Their screens and actions start with `requireExtra(key)`, which is `requireHousehold()` plus a check that the household has that part switched on.
+- `src/lib/dinner`: `plan.ts` (pure rules), `service.ts` (database), `ideas.ts` (Claude, falling back to `cookbook.ts`).
+- `src/lib/shopping.ts` (list and expenses), `src/lib/money.ts` (pure: split, balances, settle up), `src/lib/board.ts`, `src/lib/happenings.ts`, `src/lib/profile.ts`.
+- `src/lib/dashboard.ts`: `buildToDos`, the pure function behind "Yours to do" on Home. A new part of the app that gives people something to do adds its lines there.
+- `src/components/extras/extra-header.tsx`: the top of every extras screen. `src/components/avatar`: the drawn avatars.
 - `design/logo/generate.mjs`: source of the logo, the logo data file and the app icons.
 
 ## Rules that must hold
@@ -89,6 +96,9 @@ Package manager is npm. Keep this list current as scripts are added.
 - **Guessable things are rate limited.** Sign-in, sign-up, join attempts and invite-link lookups go through `allowAttempt` in `src/lib/rate-limit.ts`. The limits are active in production only.
 - **Redirects after signing in go through `safeNextPath`,** which accepts only an invite link. Never redirect to a path taken from the URL any other way.
 - **There is no public auth route.** All sign-in and sign-up goes through server actions, which validate and rate limit. Google sign-in will need `/api/auth` back: when adding it, also add name validation in the auth library's database hooks and database-backed rate limiting there.
+- **The shopping list follows the dinner.** Every change to a dinner, its dishes or ingredients ends with `syncShopping` in the same transaction. Do not insert or delete a dinner's shopping items anywhere else.
+- **Dinner ideas never send names.** `ideas.ts` gets a head count, the "I don't eat" texts and dish names. What comes back is cut to size and shown; it is stored only when someone puts it to the vote. Asking is rate limited per household.
+- **Someone who leaves is released.** `removeMember` calls `releaseDinnerDuties` so they no longer cook, clean up or hold a shopping claim.
 - **Server actions validate every argument,** including ones bound on the server such as a member id or a role. They arrive from the browser like any other input.
 
 ## Design
@@ -180,8 +190,8 @@ The owner asked for these after the MVP. Tick each off here as it ships; the ans
 - [x] **Dinners.** Common dinners on fixed weekdays and one-off dates, with the roommates taking part. The dish is chosen by **suggest and vote**. Cooking is **volunteered each time**, not rotated. Each ingredient is either "we have it" or claimed by someone who will buy it. Someone can also volunteer to clean up after.
 - [x] **AI dinner ideas with Claude.** Needs `ANTHROPIC_API_KEY`, which the owner adds himself. Without the key the app falls back to a built-in list of dishes, so nothing depends on it.
 - [x] **Profiles.** A drawn avatar picked from a set (no photo upload, it fits the drawing style and needs no file storage), a bio, a few fun questions, and what the person does not eat (used for dinner ideas). Roommates can view each other's profile.
-- [ ] **Personal dashboard.** Home shows what you, specifically, need to do: your bookings, cleaning turns, dinner duties, to-dos assigned to you, unanswered happenings, money owed.
-- [ ] **Cleaning covers chores, not only rooms** (emptying the dishwasher, taking out the trash). The rota already allows any name and a daily rhythm; the wording and suggestions should say so.
+- [x] **Personal dashboard.** Home shows what you, specifically, need to do: your bookings, cleaning turns, dinner duties, to-dos assigned to you, unanswered happenings, money owed.
+- [x] **Cleaning covers chores, not only rooms** (emptying the dishwasher, taking out the trash). The rota already allows any name and a daily rhythm; the wording and suggestions should say so.
 
 Already true: several admins are possible ("Make admin" under Household).
 
@@ -193,6 +203,7 @@ Agreed or suggested, not done yet. Remove each when it ships.
 
 Needs the owner:
 
+- `ANTHROPIC_API_KEY` in Vercel, to turn on dinner ideas from Claude. The Claude path is written against the SDK's types but has not been run against the live API yet: check it once the key is in.
 - Google sign-in. He wants to be walked through the Google Cloud setup step by step. Before turning it on, check how the auth library links a Google login to an existing password account whose email was never verified.
 - A domain, then email sending. Password reset and verified addresses depend on it. Until then a forgotten password cannot be recovered, and sign-up tells you whether an email already has an account.
 - A separate Neon branch for local work and tests. The browser tests run against the live database. The database is in US East while the users are in Norway; an EU region would also make local work much faster.
@@ -200,7 +211,10 @@ Needs the owner:
 Can be built any time:
 
 - Reminders (web push), repeating bookings, Norwegian.
-- Add-ons: shared shopping list; dinner suggestions with voting.
+- A second review round (security and experience) of everything under Flat. The first round only covered booking and cleaning.
+- Dinners: a different time per fixed day (the table allows it, the form sets one time for all), removing a single ingredient, and a note on a dinner ("bring a friend").
+- Expenses: uneven splits, and editing an expense instead of removing and adding it again.
+- Happenings and dinners in one calendar view.
 - An admin cancelling someone else's booking, for the roommate who booked and left town.
 - Telling a removed person why they landed on the start screen (leaving on your own already says so).
 - A squiggle under "You" on a booked slot, from the first design sketch.

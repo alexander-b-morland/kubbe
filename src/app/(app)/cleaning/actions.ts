@@ -21,12 +21,12 @@ import { dayInZone } from "@/lib/time";
 
 export type CleaningState = (FormState & { saved?: boolean }) | undefined;
 
-const adminsOnly = "Only an admin can change the rooms. Ask one of them.";
-const gone = "That room has been removed.";
+const adminsOnly = "Only an admin can change the rooms and chores. Ask one of them.";
+const gone = "That has been removed.";
 const stale = "That turn has ended. The list now shows the current one.";
 
 const areaSchema = z.object({
-  name: z.string().trim().min(1, "Give the room a name.").max(30, "Keep the name under 30 characters."),
+  name: z.string().trim().min(1, "Give it a name.").max(30, "Keep the name under 30 characters."),
   intervalDays: z.coerce.number().refine((value) => (INTERVALS as readonly number[]).includes(value), "Pick how often from the list."),
   estimateMinutes: z.coerce.number().refine((value) => (ESTIMATES as readonly number[]).includes(value), "Pick a time from the list."),
 });
@@ -50,7 +50,7 @@ export async function addAreaAction(_previous: CleaningState, form: FormData): P
   const parsed = areaSchema.safeParse(Object.fromEntries(form));
   if (!parsed.success) return { error: parsed.error.issues[0].message, values: { name: String(form.get("name") ?? "") } };
   if (!(await createArea(household.id, parsed.data, today))) {
-    return { error: `A household can have ${MAX_AREAS} rooms. Remove one to add another.` };
+    return { error: `A household can have ${MAX_AREAS} rooms and chores. Remove one to add another.` };
   }
   refresh();
   return { saved: true };

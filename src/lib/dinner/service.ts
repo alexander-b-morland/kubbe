@@ -67,9 +67,14 @@ export async function listUpcomingDinners(householdId: string, today: string) {
   if (rows.length === 0) return [];
 
   const ids = rows.map((row) => row.id);
-  const [dishes, absences] = await Promise.all([
+  const [dishes, absences, votes] = await Promise.all([
     db.select({ id: dish.id, dinnerId: dish.dinnerId, title: dish.title }).from(dish).where(inArray(dish.dinnerId, ids)),
     db.select().from(dinnerAbsence).where(inArray(dinnerAbsence.dinnerId, ids)),
+    db
+      .selectDistinct({ dinnerId: dish.dinnerId, userId: dishVote.userId })
+      .from(dishVote)
+      .innerJoin(dish, eq(dish.id, dishVote.dishId))
+      .where(inArray(dish.dinnerId, ids)),
   ]);
   return rows.map((row) => {
     const ideas = dishes.filter((idea) => idea.dinnerId === row.id);
@@ -78,6 +83,8 @@ export async function listUpcomingDinners(householdId: string, today: string) {
       ideas: ideas.length,
       chosenTitle: ideas.find((idea) => idea.id === row.chosenDishId)?.title ?? null,
       absent: absences.filter((absence) => absence.dinnerId === row.id).map((absence) => absence.userId),
+      /** Everyone who has voted for at least one idea. */
+      voters: votes.filter((vote) => vote.dinnerId === row.id).map((vote) => vote.userId),
     };
   });
 }

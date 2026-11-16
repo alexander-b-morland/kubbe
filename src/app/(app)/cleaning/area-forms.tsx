@@ -46,7 +46,17 @@ function RhythmFields({
   );
 }
 
-const suggestions = ["Bathroom", "Kitchen", "Living room", "Hallway", "Trash and recycling"];
+// Rooms and everyday chores, each with a rhythm that usually fits. Tapping one fills the form.
+const suggestions = [
+  { name: "Bathroom", days: 7, minutes: 30 },
+  { name: "Kitchen", days: 7, minutes: 30 },
+  { name: "Living room", days: 7, minutes: 20 },
+  { name: "Hallway", days: 14, minutes: 15 },
+  { name: "Empty the dishwasher", days: 1, minutes: 5 },
+  { name: "Take out the trash", days: 3, minutes: 5 },
+  { name: "Recycling", days: 14, minutes: 15 },
+  { name: "Water the plants", days: 7, minutes: 10 },
+] as const;
 
 export function AddAreaForm({
   intervals,
@@ -61,31 +71,40 @@ export function AddAreaForm({
 }) {
   const [state, formAction] = useActionState(action, undefined);
   const nameInput = useRef<HTMLInputElement>(null);
-  const unused = suggestions.filter((name) => !existing.some((other) => other.toLowerCase() === name.toLowerCase()));
+  const unused = suggestions.filter((idea) => !existing.some((other) => other.toLowerCase() === idea.name.toLowerCase()));
+
+  function fill(idea: (typeof suggestions)[number]) {
+    const input = nameInput.current;
+    if (!input?.form) return;
+    input.value = idea.name;
+    const select = (name: string) => input.form?.elements.namedItem(name) as HTMLSelectElement | null;
+    const often = select("intervalDays");
+    const takes = select("estimateMinutes");
+    if (often) often.value = String(idea.days);
+    if (takes) takes.value = String(idea.minutes);
+  }
 
   return (
-    // Built again after each room is added, so the name field starts empty.
+    // Built again after each addition, so the name field starts empty.
     <form key={existing.length} action={formAction} noValidate className="flex flex-col gap-4">
       <Field ref={nameInput} label="Room or chore" name="name" placeholder="Bathroom" maxLength={30} defaultValue={state?.values?.name} />
       {unused.length > 0 ? (
         <div className="flex flex-wrap gap-2" aria-label="Suggestions">
-          {unused.map((name) => (
+          {unused.map((idea) => (
             <button
-              key={name}
+              key={idea.name}
               type="button"
-              onClick={() => {
-                if (nameInput.current) nameInput.current.value = name;
-              }}
+              onClick={() => fill(idea)}
               className="min-h-11 rounded-full border-2 border-ink px-4 text-sm font-semibold outline-none focus-visible:ring-4 focus-visible:ring-fjord"
             >
-              {name}
+              {idea.name}
             </button>
           ))}
         </div>
       ) : null}
       <RhythmFields intervals={intervals} estimates={estimates} intervalDays={7} estimateMinutes={30} />
       <FormError message={state?.error} />
-      <SubmitButton pendingLabel="Adding…">Add room</SubmitButton>
+      <SubmitButton pendingLabel="Adding…">Add</SubmitButton>
     </form>
   );
 }
@@ -121,11 +140,11 @@ export function EditAreaForm({
         <SavableForm action={formAction} state={state} resetKey={JSON.stringify(area)}>
           <Field label="Name" name="name" defaultValue={area.name} maxLength={30} />
           <RhythmFields intervals={intervals} estimates={estimates} intervalDays={area.intervalDays} estimateMinutes={area.estimateMinutes} />
-          <p className="text-sm text-ink-soft">If you change how often, this room&apos;s turns start again from today.</p>
+          <p className="text-sm text-ink-soft">If you change how often, its turns start again from today.</p>
         </SavableForm>
         <div className="flex justify-start">
           <ActionButton align="start" label={`Remove ${area.name}`} confirm={`Remove ${area.name} for everyone?`} action={remove}>
-            Remove room
+            Remove
           </ActionButton>
         </div>
       </div>

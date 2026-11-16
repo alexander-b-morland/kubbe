@@ -41,10 +41,10 @@ export default async function CleaningPage() {
 
   const mine = rota.filter((row) => row.assignee?.userId === user.id && !row.done);
   const open = rota.filter((row) => !row.done);
-  let headline = "No rooms yet";
+  let headline = "No turns yet";
   if (rota.length > 0) {
     if (mine.length === 1) headline = `Your turn: ${mine[0].name}`;
-    else if (mine.length > 1) headline = `${mine.length} rooms are yours`;
+    else if (mine.length > 1) headline = `${mine.length} turns are yours`;
     else if (open.length === 0) headline = "All clean";
     else headline = "Nothing for you now";
   }
@@ -67,8 +67,8 @@ export default async function CleaningPage() {
         {rota.length === 0 ? (
           <p className="text-lg">
             {admin
-              ? "Add the rooms and chores you share below. Turns then go round by themselves."
-              : "No rooms yet. Ask an admin to add the ones you share here."}
+              ? "Add what you share below: rooms to clean, and chores like emptying the dishwasher or taking out the trash. Turns then go round by themselves."
+              : "No rooms or chores yet. Ask an admin to add the ones you share."}
           </p>
         ) : (
           <section aria-labelledby="now-heading" className="flex flex-col gap-2">
@@ -192,7 +192,7 @@ export default async function CleaningPage() {
         {admin ? (
           <section aria-labelledby="rooms-heading" className="flex flex-col gap-4">
             <h2 id="rooms-heading" className="type-display text-3xl">
-              Rooms
+              Rooms and chores
             </h2>
             {areas.length > 0 ? (
               <div className="flex flex-col">
@@ -208,7 +208,7 @@ export default async function CleaningPage() {
                 ))}
               </div>
             ) : null}
-            <h3 className="pt-2 text-lg font-bold">Add a room</h3>
+            <h3 className="pt-2 text-lg font-bold">Add a room or chore</h3>
             <AddAreaForm intervals={INTERVALS} estimates={ESTIMATES} existing={areas.map((area) => area.name)} action={addAreaAction} />
           </section>
         ) : null}

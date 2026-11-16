@@ -47,16 +47,16 @@ test("rooms go round between roommates, and turns can be done or taken over", as
 
   // --- An admin adds the rooms ---
   await tab(ida, "Cleaning").click();
-  await expect(headline(ida)).toHaveText("No rooms yet");
+  await expect(headline(ida)).toHaveText("No turns yet");
   await ida.screenshot(shot("c1-empty"));
   await ida.getByRole("button", { name: "Bathroom", exact: true }).click();
-  await ida.getByRole("button", { name: "Add room" }).click();
+  await ida.getByRole("button", { name: "Add", exact: true }).click();
   await expect(turn(ida, "Bathroom")).toBeVisible();
   await ida.getByLabel("Room or chore").fill("Kitchen");
   await ida.getByLabel("Takes about").last().selectOption("45");
-  await ida.getByRole("button", { name: "Add room" }).click();
+  await ida.getByRole("button", { name: "Add", exact: true }).click();
   await expect(turn(ida, "Kitchen")).toContainText("about 45 min");
-  await expect(headline(ida)).toHaveText("2 rooms are yours");
+  await expect(headline(ida)).toHaveText("2 turns are yours");
 
   // --- A second person joins. Turns already under way stay with whoever has them ---
   const knut = await (await browser.newContext()).newPage();
@@ -68,9 +68,9 @@ test("rooms go round between roommates, and turns can be done or taken over", as
   await expect(knut).toHaveURL(/\/home$/);
   await tab(knut, "Cleaning").click();
   await expect(headline(knut)).toHaveText("Nothing for you now");
-  await expect(knut.getByRole("heading", { name: "Rooms" })).toHaveCount(0);
+  await expect(knut.getByRole("heading", { name: "Rooms and chores" })).toHaveCount(0);
   await ida.reload();
-  await expect(headline(ida)).toHaveText("2 rooms are yours");
+  await expect(headline(ida)).toHaveText("2 turns are yours");
   // The rotation only takes Knut in from the next round: he is next for the bathroom.
   await expect(turn(ida, "Bathroom")).toContainText("Next: Knut");
 
@@ -119,7 +119,7 @@ test("rooms go round between roommates, and turns can be done or taken over", as
   await ida.screenshot(shot("c3-all-clean"));
 
   // --- An admin changes and removes rooms ---
-  const rooms = ida.getByRole("region", { name: "Rooms" });
+  const rooms = ida.getByRole("region", { name: "Rooms and chores" });
   await rooms.locator("summary", { hasText: "Bathroom" }).click();
   // Nothing to save until something is changed.
   await expect(rooms.getByRole("button", { name: "Save", exact: true })).toHaveCount(0);
@@ -134,4 +134,13 @@ test("rooms go round between roommates, and turns can be done or taken over", as
   await expect(turn(ida, "Kitchen")).toBeVisible();
   await rooms.getByRole("button", { name: "Remove Kitchen for everyone?" }).click();
   await expect(turn(ida, "Kitchen")).toHaveCount(0);
+
+  // --- A chore is not a room: tapping a suggestion brings its own rhythm ---
+  await rooms.getByRole("button", { name: "Empty the dishwasher", exact: true }).click();
+  await expect(rooms.getByLabel("How often").last()).toHaveValue("1");
+  await expect(rooms.getByLabel("Takes about").last()).toHaveValue("5");
+  await rooms.getByRole("button", { name: "Add", exact: true }).click();
+  await expect(turn(ida, "Empty the dishwasher")).toContainText("about 5 min");
+  await expect(rooms.locator("summary", { hasText: "Empty the dishwasher" })).toContainText("Every day");
+  await ida.screenshot(shot("c4-chores"));
 });
