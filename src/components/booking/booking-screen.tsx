@@ -7,7 +7,8 @@ import type { Resource } from "@/db/schema";
 import { bookResource, cancelResourceBooking } from "@/lib/booking/actions";
 import { refusalFor, slotsForDay } from "@/lib/booking/rules";
 import { listDayBookings } from "@/lib/booking/service";
-import { addDays, clockTime, dayInZone, describeDay, instantInZone, isDay } from "@/lib/time";
+import { describeNow } from "@/lib/booking/status";
+import { addDays, clockTime, dayInZone, describeDay, isDay } from "@/lib/time";
 
 export type BookingTheme = {
   /** Classes for the coloured header band. */
@@ -70,24 +71,9 @@ export async function BookingScreen(props: Props) {
 
   // The headline says what matters right now: who has it, or how long it is free.
   const describe = describeDay(day);
-  let headline = describe.weekday;
-  if (isToday) {
-    const current = bookings.find((b) => b.startsAt <= now && b.endsAt > now);
-    const next = bookings.find((b) => b.startsAt > now);
-    const opens = instantInZone(day, resource.opensAt, timeZone);
-    const closes = instantInZone(day, resource.closesAt, timeZone);
-    if (current) {
-      headline = `${current.userId === userId ? "Yours" : current.name} until ${clockTime(current.endsAt, timeZone)}`;
-    } else if (now < opens) {
-      headline = `Opens ${clockTime(opens, timeZone)}`;
-    } else if (now >= closes || upcoming.length === 0) {
-      headline = "Closed for today";
-    } else if (next) {
-      headline = `Free until ${clockTime(next.startsAt, timeZone)}`;
-    } else {
-      headline = "Free all day";
-    }
-  }
+  const headline = isToday
+    ? describeNow({ rules: resource, bookings, now, timeZone, userId })
+    : describe.weekday;
 
   const hrefFor = (option: string) => {
     const params = new URLSearchParams(query);

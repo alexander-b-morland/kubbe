@@ -1,4 +1,4 @@
-import { and, asc, eq, gte, lt, sql } from "drizzle-orm";
+import { and, asc, eq, gt, gte, lt, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { booking, membership, resource, user, type Resource } from "@/db/schema";
 import { addDays, dayInZone, instantInZone } from "@/lib/time";
@@ -74,6 +74,17 @@ export async function listDayBookings(resourceId: string, householdId: string, d
       ),
     )
     .orderBy(asc(booking.startsAt));
+}
+
+/** A person's bookings that have not ended yet, soonest first. */
+export async function listMyUpcoming(householdId: string, userId: string, now: Date) {
+  return db
+    .select({ id: booking.id, kind: resource.kind, startsAt: booking.startsAt, endsAt: booking.endsAt })
+    .from(booking)
+    .innerJoin(resource, eq(booking.resourceId, resource.id))
+    .where(and(eq(booking.householdId, householdId), eq(booking.userId, userId), gt(booking.endsAt, now), eq(resource.enabled, true)))
+    .orderBy(asc(booking.startsAt))
+    .limit(20);
 }
 
 export type BookResult = { ok: true } | { ok: false; reason: Refusal | "not-found" };
