@@ -32,7 +32,9 @@ export const user = pgTable("user", {
   updatedAt: updatedAt(),
 });
 
-export const session = pgTable("session", {
+export const session = pgTable(
+  "session",
+  {
   id: text("id").primaryKey(),
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
   token: text("token").notNull().unique(),
@@ -43,7 +45,7 @@ export const session = pgTable("session", {
   userId: text("user_id")
     .notNull()
     .references(() => user.id, { onDelete: "cascade" }),
-});
+}, (table) => [index("session_user_idx").on(table.userId)]);
 
 export const account = pgTable("account", {
   id: text("id").primaryKey(),
@@ -61,7 +63,7 @@ export const account = pgTable("account", {
   password: text("password"),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
-});
+}, (table) => [index("account_user_idx").on(table.userId)]);
 
 export const verification = pgTable("verification", {
   id: text("id").primaryKey(),
@@ -162,7 +164,11 @@ export const booking = pgTable(
   },
   // The migration also adds an exclusion constraint, booking_no_overlap, which
   // makes the database refuse two bookings of one resource that overlap in time.
-  (table) => [index("booking_resource_time_idx").on(table.resourceId, table.startsAt)],
+  (table) => [
+    index("booking_resource_time_idx").on(table.resourceId, table.startsAt),
+    index("booking_user_idx").on(table.userId, table.endsAt),
+    index("booking_household_idx").on(table.householdId),
+  ],
 );
 
 // ---------------------------------------------------------------------------
@@ -204,7 +210,12 @@ export const cleaningDone = pgTable(
   (table) => [primaryKey({ columns: [table.areaId, table.period] })],
 );
 
-/** A period of a room that somebody took over from whoever's turn it was. */
+/**
+ * A period of a room that belongs to a named person instead of whoever the rotation
+ * gives. Either somebody took the turn over, or the turn was pinned: when people move
+ * in or out, or a room is removed, the rotation shifts, and the turns already under
+ * way are pinned first so nobody's current turn changes under them.
+ */
 export const cleaningTakeover = pgTable(
   "cleaning_takeover",
   {
@@ -215,9 +226,21 @@ export const cleaningTakeover = pgTable(
     userId: text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
+    pinned: boolean("pinned").notNull().default(false),
   },
   (table) => [primaryKey({ columns: [table.areaId, table.period] })],
 );
+
+// ---------------------------------------------------------------------------
+// Rate limiting. One row per thing being counted, for example sign-ins for one
+// email address. See src/lib/rate-limit.ts.
+// ---------------------------------------------------------------------------
+
+export const rateLimit = pgTable("rate_limit", {
+  key: text("key").primaryKey(),
+  count: integer("count").notNull(),
+  resetsAt: timestamp("resets_at", { withTimezone: true }).notNull(),
+});
 
 export type Household = typeof household.$inferSelect;
 export type Membership = typeof membership.$inferSelect;

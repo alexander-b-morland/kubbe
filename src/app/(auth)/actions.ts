@@ -6,12 +6,13 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
 import type { FormState } from "@/lib/form-state";
+import { allowAttempt, clientAddress, tooManyAttempts } from "@/lib/rate-limit";
 import { safeNextPath } from "@/lib/session";
 
 const signUpSchema = z.object({
   name: z.string().trim().min(1, "Enter your name.").max(60, "Keep your name under 60 characters."),
   email: z.email("Enter a valid email address.").trim().toLowerCase(),
-  password: z.string().min(8, "Use at least 8 characters for your password.").max(128, "That password is too long."),
+  password: z.string().min(8, "Use at least 8 characters for your password.").max(128, "Use at most 128 characters for your password."),
 });
 
 const signInSchema = z.object({
@@ -25,12 +26,14 @@ export async function signUp(_previous: FormState, form: FormData): Promise<Form
   const values = { name: text(form, "name"), email: text(form, "email") };
   const parsed = signUpSchema.safeParse({ ...values, password: text(form, "password") });
   if (!parsed.success) return { error: parsed.error.issues[0].message, values };
+  // Creating accounts is open to anyone, so one address can only make so many an hour.
+  if (!(await allowAttempt(`sign-up:${await clientAddress()}`, 20, 3600))) return { error: tooManyAttempts, values };
 
   try {
-    await auth.api.signUpEmail({ body: parsed.data });
+    await auth.api.signUpEmail({ body: parsed.data, headers: await headers() });
   } catch (error) {
     if (error instanceof APIError) {
-      const taken = error.body?.code === "USER_ALREADY_EXISTS" || error.status === "UNPROCESSABLE_ENTITY";
+      const taken = error.body?.code === "USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL" || error.body?.code === "USER_ALREADY_EXISTS";
       return {
         error: taken
           ? "That email already has an account. Sign in instead."
@@ -47,11 +50,21 @@ export async function signIn(_previous: FormState, form: FormData): Promise<Form
   const values = { email: text(form, "email") };
   const parsed = signInSchema.safeParse({ ...values, password: text(form, "password") });
   if (!parsed.success) return { error: parsed.error.issues[0].message, values };
+  // Guessing passwords is slowed down per account and per address.
+  const [byEmail, byAddress] = await Promise.all([
+    allowAttempt(`sign-in:email:${parsed.data.email}`, 8, 900),
+    allowAttempt(`sign-in:address:${await clientAddress()}`, 40, 900),
+  ]);
+  if (!byEmail || !byAddress) return { error: tooManyAttempts, values };
 
   try {
-    await auth.api.signInEmail({ body: parsed.data });
+    await auth.api.signInEmail({ body: parsed.data, headers: await headers() });
   } catch (error) {
-    if (error instanceof APIError) return { error: "Wrong email or password.", values };
+    // Only a refusal from the auth library means the details were wrong.
+    // Anything else is our fault, and goes to the error screen.
+    if (error instanceof APIError && (error.status === "UNAUTHORIZED" || error.statusCode === 401)) {
+      return { error: "Wrong email or password. Check both and try again.", values };
+    }
     throw error;
   }
   redirect(safeNextPath(form.get("next"), "/home"));

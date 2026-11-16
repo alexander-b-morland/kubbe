@@ -82,3 +82,14 @@ export function describeDay(day: string, locale = "en-GB") {
     monthShort: format({ month: "short" }),
   };
 }
+
+/** Does this text name a time zone this runtime knows? */
+export function isTimeZone(value: unknown): value is string {
+  if (typeof value !== "string" || value.length === 0) return false;
+  try {
+    new Intl.DateTimeFormat("en", { timeZone: value });
+    return true;
+  } catch {
+    return false;
+  }
+}

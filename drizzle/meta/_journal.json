@@ -22,6 +22,20 @@
       "when": 1794834761442,
       "tag": "0002_cleaning",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1794836795165,
+      "tag": "0003_hardening",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1794837155375,
+      "tag": "0004_people_colours",
+      "breakpoints": true
     }
   ]
 }

@@ -40,7 +40,4 @@ export async function requireHousehold() {
   return { user, ...found };
 }
 
-/** Only allow redirects back into this site. */
-export function safeNextPath(next: unknown, fallback: string): string {
-  return typeof next === "string" && next.startsWith("/") && !next.startsWith("//") ? next : fallback;
-}
+export { safeNextPath } from "@/lib/safe-next";

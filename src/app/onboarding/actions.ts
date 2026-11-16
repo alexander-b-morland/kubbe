@@ -5,6 +5,7 @@ import { z } from "zod";
 import type { FormState } from "@/lib/form-state";
 import { createHousehold, joinHousehold } from "@/lib/households";
 import { isJoinCode, normaliseJoinCode } from "@/lib/join-code";
+import { allowAttempt, clientAddress, tooManyAttempts } from "@/lib/rate-limit";
 import { requireUser } from "@/lib/session";
 
 const nameSchema = z
@@ -40,6 +41,13 @@ export async function joinHouseholdAction(
       values: { code: typed },
     };
   }
+
+  // A join code is short enough to guess at, given enough tries. So tries are counted.
+  const [byUser, byAddress] = await Promise.all([
+    allowAttempt(`join:user:${user.id}`, 10, 3600),
+    allowAttempt(`join:address:${await clientAddress()}`, 30, 3600),
+  ]);
+  if (!byUser || !byAddress) return { error: tooManyAttempts, values: { code: typed } };
 
   const result = await joinHousehold(user.id, code);
   if (!result.ok && result.reason === "not-found") {
