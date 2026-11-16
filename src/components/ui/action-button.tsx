@@ -5,7 +5,7 @@ import { useActionState, useEffect, useRef, useState, type ReactNode } from "rea
 type Result = { error?: string; saved?: boolean } | undefined;
 
 const base =
-  "min-h-11 rounded-full border-2 px-4 py-1.5 text-sm font-bold outline-none transition-transform focus-visible:ring-4 focus-visible:ring-fjord active:scale-[0.97]";
+  "min-h-11 rounded-full border-2 py-1.5 text-sm font-bold outline-none transition-transform focus-visible:ring-4 focus-visible:ring-fjord active:scale-[0.97]";
 
 /**
  * A small button that runs one server action and shows what went wrong, if anything.
@@ -46,10 +46,10 @@ export function ActionButton({
 
   const colours =
     look === "filled"
-      ? "border-ink bg-ink text-paper"
+      ? "border-ink bg-ink px-4 text-paper"
       : look === "link"
-        ? "border-transparent px-0 text-base underline underline-offset-4"
-        : "border-ink";
+        ? "rounded border-transparent text-base underline underline-offset-4"
+        : "border-ink px-4";
   const edge = align === "end" ? "items-end" : "items-start";
 
   return (
@@ -72,7 +72,7 @@ export function ActionButton({
         </button>
       ) : confirm ? (
         <span className={`flex flex-wrap gap-2 ${align === "end" ? "justify-end" : "justify-start"}`}>
-          <button key="back" type="button" onClick={() => setAsking(false)} className={`${base} border-ink`}>
+          <button key="back" type="button" onClick={() => setAsking(false)} className={`${base} border-ink px-4`}>
             Keep as it is
           </button>
           <button
@@ -80,7 +80,7 @@ export function ActionButton({
             ref={question}
             type="submit"
             aria-disabled={pending}
-            className={`${base} border-barn bg-barn text-left text-paper ${pending ? "opacity-70" : ""}`}
+            className={`${base} border-barn bg-barn px-4 text-left text-paper ${pending ? "opacity-70" : ""}`}
           >
             {pending ? pendingLabel : confirm}
           </button>

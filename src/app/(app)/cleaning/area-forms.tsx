@@ -2,7 +2,8 @@
 
 import { useActionState, useRef } from "react";
 import { ActionButton } from "@/components/ui/action-button";
-import { Field, FormError, Saved, selectLook, SubmitButton } from "@/components/ui/form";
+import { Field, FormError, selectLook, SubmitButton } from "@/components/ui/form";
+import { SavableForm } from "@/components/ui/savable-form";
 import { describeInterval } from "@/lib/cleaning/rota";
 import type { CleaningState } from "./actions";
 
@@ -117,16 +118,11 @@ export function EditAreaForm({
         </svg>
       </summary>
       <div className="flex flex-col gap-4 pb-5">
-        <form key={JSON.stringify(area)} action={formAction} noValidate className="flex flex-col gap-4">
+        <SavableForm action={formAction} state={state} resetKey={JSON.stringify(area)}>
           <Field label="Name" name="name" defaultValue={area.name} maxLength={30} />
           <RhythmFields intervals={intervals} estimates={estimates} intervalDays={area.intervalDays} estimateMinutes={area.estimateMinutes} />
           <p className="text-sm text-ink-soft">If you change how often, this room&apos;s turns start again from today.</p>
-          <FormError message={state?.error} />
-          <Saved show={state?.saved} />
-          <SubmitButton pendingLabel="Saving…" variant="secondary">
-            Save
-          </SubmitButton>
-        </form>
+        </SavableForm>
         <div className="flex justify-start">
           <ActionButton align="start" label={`Remove ${area.name}`} confirm={`Remove ${area.name} for everyone?`} action={remove}>
             Remove room
