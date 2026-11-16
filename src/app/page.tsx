@@ -1,3 +1,5 @@
+import { KubbeLogo } from "@/components/logo/kubbe-logo";
+
 // Placeholder until the real screens exist. It also shows the design tokens in use.
 const rooms = [
   { name: "Shower", className: "bg-fjord text-paper" },
@@ -8,6 +10,7 @@ const rooms = [
 export default function Home() {
   return (
     <main className="mx-auto flex min-h-dvh max-w-md flex-col justify-center gap-6 p-6">
+      <KubbeLogo animate label="" className="mx-auto max-w-72" />
       <h1 className="type-display text-7xl">kubbe</h1>
       <p className="text-lg">
         Shower, laundry and cleaning for people who share a home. Coming soon.
