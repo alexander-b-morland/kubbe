@@ -50,7 +50,7 @@ Package manager is npm. Keep this list current as scripts are added.
 - Build: `npm run build`
 - Lint: `npm run lint`
 - Typecheck: `npm run typecheck`
-- Regenerate the logo: `node design/logo/generate.mjs` (add `--preview` for PNGs; needs `npm i --no-save sharp`)
+- Regenerate the logo: `node design/logo/generate.mjs` (add `--preview` for PNGs, `--icons` for the app icons)
 - Unit tests: `npm test`
 - End-to-end tests: `npm run test:e2e` (starts the dev server if it is not running)
 - After changing `src/db/schema.ts`: `npm run db:generate`, review the SQL in `drizzle/`, then `npm run db:migrate`
@@ -66,10 +66,14 @@ Package manager is npm. Keep this list current as scripts are added.
 
 ## Where things live
 
-- `src/app`: screens. `(auth)` is sign in and sign up, `onboarding` is create or join, `join/[code]` is the invite link, `home` is the household.
-- `src/lib/session.ts`: `requireUser()` and `requireHousehold()`. Every screen and action that touches household data starts with `requireHousehold()` and uses the household id it returns.
-- `src/lib/households.ts`: creating, joining and listing. Database rules live here, not in the screens.
-- `src/components/ui/form.tsx`: `Field`, `SubmitButton`, `FormError`. Forms post to server actions and get errors back through `useActionState`.
+- `src/app`: screens. `(auth)` is sign in and sign up, `onboarding` is create or join, `join/[code]` is the invite link. `(app)` holds the signed-in screens, which share the tab bar: `home` (dashboard), `shower`, `laundry`, `cleaning`, `settings` (shown to people as "Household").
+- `src/lib/session.ts`: `requireUser()` and `requireHousehold()`. Every screen and action that touches household data starts with `requireHousehold()` and uses the household id it returns. It re-reads the membership from the database on every request.
+- `src/lib/households.ts`, `src/lib/settings.ts`: creating, joining, listing, and what the Household screen changes. Database rules live here, not in the screens.
+- `src/lib/booking`: `rules.ts` (pure rules), `service.ts` (database), `actions.ts` (server actions), `status.ts` ("Free until 07:30"), `defaults.ts`.
+- `src/lib/cleaning`: `rota.ts` (pure rota maths), `service.ts` (database). Turns are computed, never stored; only "done" and "taken over" are stored.
+- `src/components/booking`: `BookingScreen` and `SlotList`, shared by shower and laundry. A new bookable thing should reuse them.
+- `src/components/ui`: `Field`, `SubmitButton`, `FormError`, `ActionButton`. Forms post to server actions and get errors back through `useActionState`.
+- `design/logo/generate.mjs`: source of the logo, the logo data file and the app icons.
 
 ## Rules that must hold
 
@@ -123,6 +127,14 @@ The three room drawings are the `RoomArt` component (`src/components/illustratio
 
 **Do not stack conflicting Tailwind classes.** `text-lg text-3xl` does not resolve to the last one; the order in the built CSS decides, and it put `text-lg` last. Give a component a named look to choose between instead (see `Field`).
 
+**The previous screen stays in the page, hidden.** Next.js keeps the screen you navigated from mounted but hidden. Tests must therefore look only at visible elements (`.filter({ visible: true })`), and wait for a navigation to really finish (for example the day link getting `aria-current`) before pressing anything on the new screen.
+
+**Never swap a button's type in place.** A button that turns from "ask" into "confirm" must be two elements with different `key`s. Reusing one element makes the first press also submit the form. See `ActionButton`.
+
+**Forms after saving.** The browser resets a form to its old defaults after a server action, and selects and checkboxes do not pick up new ones. Give the form a `key` made of the saved values.
+
+**Screenshots.** The browser tests save phone-sized screenshots of every screen to `test-shots/` (ignored by git). Look at them after changing a screen.
+
 **No CSS Modules.** The Tailwind rule in `next.config.ts` treats every `.css` file as global, so `*.module.css` imports come back empty and the styles silently do not apply. Use Tailwind utilities, or a plain `.css` file with prefixed class names (see `src/components/logo/kubbe-logo.css`).
 
 **Stroke-drawing gotcha.** A path with round caps that is fully dashed out still shows a dot at its start. Keep each stroke invisible (`stroke-opacity: 0`) until its own animation begins.
@@ -143,9 +155,9 @@ Standing brief:
 
 Agreed but not done yet. Remove each when it ships.
 
-- Booking engine and the shower, laundry and cleaning screens (the rest of the MVP).
-- Google sign-in. The user wants to be walked through the Google Cloud setup step by step. Do it after booking works and before real roommates are invited.
+- Google sign-in. The user wants to be walked through the Google Cloud setup step by step.
 - A domain, then email sending: password reset and verified addresses depend on it.
-- A separate Neon branch for local work and tests.
-- A simplified logo for small sizes, and the app icon.
+- A separate Neon branch for local work and tests. The database is in US East while the users are in Norway; moving it to an EU region would also make local work much faster.
+- Reminders (web push), repeating bookings, Norwegian.
+- Add-ons: shared shopping list; dinner suggestions with voting.
 - Live site: https://kubbe-zeta.vercel.app

@@ -175,3 +175,6 @@ playwright/.cache/
 .DS_Store
 Thumbs.db
 .idea/
+
+# Screenshots the end-to-end tests take for review
+test-shots/

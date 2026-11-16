@@ -8,7 +8,7 @@ config({ path: ".env.local", quiet: true });
 const run = Date.now().toString(36);
 const email = (who: string) => `e2e-${who}-${run}@kubbe.test`;
 const password = "correct-horse-battery";
-const shot = (name: string) => ({ path: `test-results/shots/${name}.png`, fullPage: true, caret: "initial" as const, animations: "disabled" as const });
+const shot = (name: string) => ({ path: `test-shots/${name}.png`, fullPage: true, caret: "initial" as const, animations: "disabled" as const });
 
 async function signUp(page: Page, name: string, who: string) {
   await page.getByLabel("Your name").fill(name);

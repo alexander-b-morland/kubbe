@@ -31,7 +31,7 @@ test("create a household, invite a roommate by link, sign back in", async ({ bro
   await signUp(ida, "Ida", "ida");
   await expect(ida).toHaveURL(/\/onboarding$/);
   await expect(ida.getByRole("heading", { level: 1 })).toContainText("Hi Ida");
-  await ida.screenshot({ path: "test-results/shots/1-onboarding.png", fullPage: true, caret: "initial" });
+  await ida.screenshot({ path: "test-shots/1-onboarding.png", fullPage: true, caret: "initial" });
 
   // A wrong code is explained, not just rejected.
   await ida.getByLabel("Join code").fill("zzz zzz");
@@ -49,7 +49,7 @@ test("create a household, invite a roommate by link, sign back in", async ({ bro
   await ida.getByRole("button", { name: "Share invite link" }).click();
   await expect(ida.getByRole("button", { name: "Link copied" })).toBeVisible();
   expect(await ida.evaluate(() => navigator.clipboard.readText())).toBe(`http://localhost:3000/join/${code}`);
-  await ida.screenshot({ path: "test-results/shots/2-home-alone.png", fullPage: true, caret: "initial" });
+  await ida.screenshot({ path: "test-shots/2-home-alone.png", fullPage: true, caret: "initial" });
 
   // --- Knut opens the invite link without an account ---
   const knutContext = await browser.newContext();
@@ -57,10 +57,10 @@ test("create a household, invite a roommate by link, sign back in", async ({ bro
   await knut.goto(`/join/${code.toLowerCase()}`);
   await expect(knut).toHaveURL(/\/sign-up\?next=/);
   await expect(knut.getByRole("heading", { level: 1 })).toHaveText("Create your account");
-  await knut.screenshot({ path: "test-results/shots/3-sign-up.png", fullPage: true, caret: "initial" });
+  await knut.screenshot({ path: "test-shots/3-sign-up.png", fullPage: true, caret: "initial" });
   await signUp(knut, "Knut", "knut");
   await expect(knut.getByRole("heading", { level: 1 })).toHaveText("Join Kollektivet?");
-  await knut.screenshot({ path: "test-results/shots/4-join.png", fullPage: true, caret: "initial" });
+  await knut.screenshot({ path: "test-shots/4-join.png", fullPage: true, caret: "initial" });
   await knut.getByRole("button", { name: "Join household" }).click();
   await expect(knut).toHaveURL(/\/home$/);
   await expect(knut.getByText("2 people live here")).toBeVisible();
@@ -69,7 +69,7 @@ test("create a household, invite a roommate by link, sign back in", async ({ bro
   await expect(knut.getByTestId("band-shower")).toBeVisible();
   await knut.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Household" }).click();
   await expect(knut.getByText("Knut (you)")).toBeVisible();
-  await knut.screenshot({ path: "test-results/shots/5-home-two.png", fullPage: true, caret: "initial", animations: "disabled" });
+  await knut.screenshot({ path: "test-shots/5-home-two.png", fullPage: true, caret: "initial", animations: "disabled" });
 
   // Ida sees Knut after a reload, and only Ida is admin.
   await ida.reload();
