@@ -19,7 +19,7 @@ export default async function ShowerPage({ searchParams }: PageProps<"/shower">)
       basePath="/shower"
       room="shower"
       label={shower.name}
-      theme={{ header: "bg-fjord text-paper", mine: "bg-fjord/10", pen: "var(--color-fjord)" }}
+      theme={{ header: "bg-fjord text-paper", mine: "bg-fjord/15", pen: "var(--color-fjord)" }}
       resource={shower}
       household={household}
       userId={user.id}

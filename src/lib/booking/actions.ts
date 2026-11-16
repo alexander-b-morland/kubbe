@@ -10,12 +10,12 @@ export type BookingActionResult = { error?: string };
 
 const refusalMessage: Record<Refusal | "not-found", string> = {
   taken: "Someone just took that slot. Pick another one.",
-  "back-to-back": "That's right next to a slot you already have. Leave a gap so others get a turn.",
-  "daily-limit": "You've used all your slots for that day.",
-  over: "That slot is over.",
-  "too-far-ahead": "That day isn't open for booking yet.",
-  "not-a-slot": "That slot no longer exists. Reload and pick again.",
-  "not-found": "That isn't available any more. Reload and try again.",
+  "back-to-back": "That's straight before or after a slot you have. Leave a gap so others get a turn.",
+  "daily-limit": "You've used all your slots for that day. Cancel one to take this.",
+  over: "That slot is over. Pick a later one.",
+  "too-far-ahead": "That day isn't open for booking yet. Pick an earlier day.",
+  "not-a-slot": "The slot times just changed. Pick from the updated list.",
+  "not-found": "That can't be booked any more. An admin may have switched it off.",
 };
 
 const resourceIdSchema = z.uuid();
@@ -56,5 +56,5 @@ export async function cancelResourceBooking(bookingId: string): Promise<BookingA
     ? await cancelBooking({ userId: user.id, householdId: household.id, bookingId: parsed.data })
     : { ok: false };
   refresh();
-  return result.ok ? {} : { error: "That booking can't be cancelled any more." };
+  return result.ok ? {} : { error: "That slot has ended, so there's nothing to cancel." };
 }

@@ -25,11 +25,15 @@ export function QuickBook({
           if (pending) return;
           setError(undefined);
           startTransition(async () => {
-            const result = await book();
-            if (result.error) setError(result.error);
+            try {
+              const result = await book();
+              if (result.error) setError(result.error);
+            } catch {
+              setError("Couldn't reach Kubbe. Check your connection and try again.");
+            }
           });
         }}
-        className={`h-11 w-fit rounded-full bg-ink px-5 font-bold text-paper outline-none focus-visible:ring-4 focus-visible:ring-fjord/35 ${pending ? "opacity-70" : ""}`}
+        className={`h-11 w-fit rounded-full bg-ink px-5 font-bold text-paper outline-none focus-visible:ring-4 focus-visible:ring-fjord ${pending ? "opacity-70" : ""}`}
       >
         {pending ? pendingLabel : label}
       </button>

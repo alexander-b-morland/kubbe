@@ -7,7 +7,7 @@ import type { Resource } from "@/db/schema";
 import { bookResource, cancelResourceBooking } from "@/lib/booking/actions";
 import { refusalFor, slotsForDay } from "@/lib/booking/rules";
 import { listDayBookings } from "@/lib/booking/service";
-import { describeNow } from "@/lib/booking/status";
+import { clockLabel, describeNow, describeSlotLength } from "@/lib/booking/status";
 import { addDays, clockTime, dayInZone, describeDay, isDay } from "@/lib/time";
 
 export type BookingTheme = {
@@ -38,7 +38,7 @@ type Props = {
   children?: (context: { day: string; now: Date }) => ReactNode;
 };
 
-const focusRing = "outline-none focus-visible:ring-4 focus-visible:ring-fjord/35";
+const focusRing = "outline-none focus-visible:ring-4 focus-visible:ring-fjord";
 
 /** The whole booking screen for one resource: header, day picker and slots. */
 export async function BookingScreen(props: Props) {
@@ -57,17 +57,36 @@ export async function BookingScreen(props: Props) {
   const rows: SlotRow[] = upcoming.map((slot) => {
     const key = slot.startsAt.toISOString();
     const time = clockTime(slot.startsAt, timeZone);
+    // A slot that has started can still be taken, but say that part of it is gone.
+    const underWay = slot.startsAt <= now ? `Now, until ${clockTime(slot.endsAt, timeZone)}` : undefined;
     const booked = bookings.find((b) => b.startsAt < slot.endsAt && b.endsAt > slot.startsAt);
     if (booked?.userId === userId) {
-      return { key, time, state: "mine", bookingId: booked.id, cancellable: booked.endsAt > now };
+      return { key, time, state: "mine", bookingId: booked.id, cancellable: booked.endsAt > now, underWay };
     }
-    if (booked) return { key, time, state: "taken", name: booked.name, colour: booked.colour };
+    if (booked) return { key, time, state: "taken", name: booked.name, colour: booked.colour, underWay };
 
     const refusal = refusalFor({ slot, rules: resource, timeZone, now, dayBookings: bookings, userId });
-    if (refusal === "back-to-back") return { key, time, state: "blocked", reason: "Right next to your slot" };
-    if (refusal === "daily-limit") return { key, time, state: "blocked", reason: "You've used your slots" };
-    return { key, time, state: "free" };
+    if (refusal === "back-to-back") return { key, time, state: "blocked", reason: "Leave a gap next to your slot" };
+    if (refusal === "daily-limit") {
+      return { key, time, state: "blocked", reason: `You've booked your ${resource.maxPerDay} for ${isToday ? "today" : "this day"}` };
+    }
+    return { key, time, state: "free", underWay };
   });
+
+  // A booking made before an admin changed the hours or slot length may no longer line
+  // up with any slot. It is still a booking, so it gets a row of its own.
+  for (const booked of bookings) {
+    const onGrid = upcoming.some((slot) => booked.startsAt < slot.endsAt && booked.endsAt > slot.startsAt);
+    if (onGrid || booked.endsAt <= now) continue;
+    const key = booked.startsAt.toISOString();
+    const time = clockTime(booked.startsAt, timeZone);
+    rows.push(
+      booked.userId === userId
+        ? { key, time, state: "mine", bookingId: booked.id, cancellable: true }
+        : { key, time, state: "taken", name: booked.name, colour: booked.colour },
+    );
+  }
+  rows.sort((a, b) => a.key.localeCompare(b.key));
 
   // The headline says what matters right now: who has it, or how long it is free.
   const describe = describeDay(day);
@@ -82,16 +101,17 @@ export async function BookingScreen(props: Props) {
     return search ? `${basePath}?${search}` : basePath;
   };
   const days = Array.from({ length: resource.bookAheadDays + 1 }, (_, index) => addDays(today, index));
-  const length =
-    resource.slotMinutes % 60 === 0
-      ? `${resource.slotMinutes / 60} hour slots`
-      : `${resource.slotMinutes} minute slots`;
-  const rules = [length, `up to ${resource.maxPerDay} a day`, resource.allowBackToBack ? null : "not back to back"]
+  const rules = [
+    `${describeSlotLength(resource.slotMinutes)} slots`,
+    `up to ${resource.maxPerDay} a day`,
+    resource.allowBackToBack ? null : "not two in a row",
+  ]
     .filter(Boolean)
     .join(", ");
+  const canBookTomorrow = resource.bookAheadDays > 0;
 
   return (
-    <main className="mx-auto flex min-h-dvh max-w-md flex-col" style={{ "--pen": theme.pen } as CSSProperties}>
+    <main className="mx-auto flex max-w-md flex-col" style={{ "--pen": theme.pen } as CSSProperties}>
       <AutoRefresh />
 
       <header className={`flex flex-col gap-3 p-6 pt-8 ${theme.header}`}>
@@ -138,10 +158,14 @@ export async function BookingScreen(props: Props) {
           />
         ) : (
           <div className="flex flex-col items-start gap-3 px-3 pt-6">
-            <h2 className="type-display text-3xl">No slots left today</h2>
-            <Link href={hrefFor(addDays(today, 1))} className="font-bold underline underline-offset-4">
-              Book for tomorrow
-            </Link>
+            <h2 className="type-display text-3xl">No slots left {isToday ? "today" : "this day"}</h2>
+            {canBookTomorrow && isToday ? (
+              <Link href={hrefFor(addDays(today, 1))} className="flex h-11 items-center font-bold underline underline-offset-4">
+                Book for tomorrow
+              </Link>
+            ) : (
+              <p>Booking opens again at {clockLabel(resource.opensAt)} tomorrow.</p>
+            )}
           </div>
         )}
       </section>

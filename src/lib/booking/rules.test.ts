@@ -126,3 +126,20 @@ describe("cancelling", () => {
     expect(canCancel(mine, "knut", at("06:00"))).toBe(false);
   });
 });
+
+describe("around midnight", () => {
+  const allDay: ResourceRules = { ...shower, opensAt: 0, closesAt: 24 * 60 };
+  const nextDay = "2026-11-18";
+
+  it("still refuses two slots in a row", () => {
+    const lastOfTheDay = { userId: "ida", startsAt: at("23:40"), endsAt: at("00:00", nextDay) };
+    expect(check({ rules: allDay, slot: slot("00:00", nextDay), dayBookings: [lastOfTheDay] })).toBe("back-to-back");
+    expect(check({ rules: allDay, slot: slot("00:20", nextDay), dayBookings: [lastOfTheDay] })).toBeNull();
+  });
+
+  it("counts the daily limit for the slot's own day only", () => {
+    const yesterday = [booked("ida", "09:00"), booked("ida", "12:00"), booked("ida", "18:00")];
+    expect(check({ rules: allDay, slot: slot("12:00", nextDay), dayBookings: yesterday })).toBeNull();
+    expect(check({ rules: allDay, slot: slot("21:00"), dayBookings: yesterday })).toBe("daily-limit");
+  });
+});

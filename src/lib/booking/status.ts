@@ -27,7 +27,11 @@ export function describeNow(input: {
   if (!slotsLeft) return "Closed for today";
 
   const next = bookings.find((b) => b.startsAt > now);
-  return next ? `Free until ${clockTime(next.startsAt, timeZone)}` : "Free all day";
+  if (next) return `Free until ${clockTime(next.startsAt, timeZone)}`;
+  // "All day" is the wrong thing to say when the day is nearly over.
+  const closes = instantInZone(today, rules.closesAt, timeZone);
+  const nearlyClosed = closes.getTime() - now.getTime() <= 3 * 3_600_000;
+  return nearlyClosed ? `Free until ${clockTime(closes, timeZone)}` : "Free all day";
 }
 
 /** "07:00 today", "07:00 tomorrow", "07:00 on Thursday". */
@@ -39,4 +43,14 @@ export function describeWhen(startsAt: Date, now: Date, timeZone: string): strin
   const tomorrow = dayInZone(new Date(instantInZone(today, 0, timeZone).getTime() + 36 * 3_600_000), timeZone);
   if (day === tomorrow) return `${time} tomorrow`;
   return `${time} on ${describeDay(day).weekday}`;
+}
+
+/** "20-minute" or "2-hour": the one way a slot length is written, wherever it shows. */
+export function describeSlotLength(minutes: number): string {
+  return minutes % 60 === 0 ? `${minutes / 60}-hour` : `${minutes}-minute`;
+}
+
+/** "06:00" from minutes after midnight. */
+export function clockLabel(minutes: number): string {
+  return `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
 }

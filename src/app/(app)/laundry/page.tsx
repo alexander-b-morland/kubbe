@@ -16,7 +16,7 @@ export const instant = false;
 export const metadata: Metadata = { title: "Laundry" };
 
 export default async function LaundryPage({ searchParams }: PageProps<"/laundry">) {
-  const { user, household } = await requireHousehold();
+  const { user, household, membership } = await requireHousehold();
   const params = await searchParams;
   const machines = (await listResources(household.id)).filter(
     (machine) => machine.enabled && machine.kind !== "shower",
@@ -33,7 +33,7 @@ export default async function LaundryPage({ searchParams }: PageProps<"/laundry"
       query={active === machines[0] ? {} : { machine: active.kind }}
       room="laundry"
       label={active.name}
-      theme={{ header: "bg-ochre text-ink", mine: "bg-ochre/25", pen: "var(--color-ink)" }}
+      theme={{ header: "bg-ochre text-ink", mine: "bg-ochre/30", pen: "var(--color-ink)" }}
       resource={active}
       household={household}
       userId={user.id}
@@ -51,7 +51,7 @@ export default async function LaundryPage({ searchParams }: PageProps<"/laundry"
                   key={machine.id}
                   href={search ? `/laundry?${search}` : "/laundry"}
                   aria-current={machine === active ? "page" : undefined}
-                  className={`rounded-full border-2 border-ink px-4 py-1.5 font-bold outline-none focus-visible:ring-4 focus-visible:ring-ink/40 ${machine === active ? "bg-ink text-paper" : ""}`}
+                  className={`flex h-11 items-center rounded-full border-2 border-ink px-4 font-bold outline-none focus-visible:ring-4 focus-visible:ring-ink ${machine === active ? "bg-ink text-paper" : ""}`}
                 >
                   {machine.name}
                 </Link>
@@ -71,6 +71,14 @@ export default async function LaundryPage({ searchParams }: PageProps<"/laundry"
             day={shownDay}
             now={now}
           />
+        ) : active.kind === "washer" && !dryer && membership.role === "admin" ? (
+          <p className="px-3 pb-1 text-sm text-ink-soft">
+            Have a dryer too?{" "}
+            <Link href="/settings" className="font-bold underline underline-offset-4">
+              Switch it on under Household
+            </Link>
+            .
+          </p>
         ) : null
       }
     </BookingScreen>
@@ -97,11 +105,20 @@ async function DryerSuggestion(props: {
   const dryerSlots = slotsForDay(day, dryer, timeZone);
 
   for (const wash of myWashes) {
-    // Already drying after this wash? Then there is nothing to suggest.
-    const covered = drying.some(
+    // Already drying after this wash? Then say so, so nobody has to go and check.
+    const booked = drying.find(
       (b) => b.userId === userId && b.startsAt >= wash.endsAt && b.startsAt.getTime() - wash.endsAt.getTime() < 3 * 3_600_000,
     );
-    if (covered) continue;
+    if (booked) {
+      return (
+        <aside className="mx-3 mb-2 flex items-center gap-2 rounded-2xl border-2 border-ink p-4 font-semibold" data-testid="dryer-booked">
+          <svg viewBox="0 0 24 24" className="tick-draw size-6 shrink-0" aria-hidden="true">
+            <path d="M4 13C7 15 9 17 10 19C13 13 17 8 21 5" pathLength={1} />
+          </svg>
+          Dryer booked for {clockTime(booked.startsAt, timeZone)}, after your wash.
+        </aside>
+      );
+    }
 
     const slot = dryerSlots.find(
       (candidate) =>
@@ -114,10 +131,10 @@ async function DryerSuggestion(props: {
     return (
       <aside className="mx-3 mb-2 flex flex-col gap-3 rounded-2xl border-2 border-ink p-4" data-testid="dryer-suggestion">
         <p className="font-semibold">
-          Your wash ends at {clockTime(wash.endsAt, timeZone)}. The dryer is free from {start}.
+          Your wash ends at {clockTime(wash.endsAt, timeZone)}. Want the dryer after it?
         </p>
         <QuickBook
-          label={`Book dryer ${start}`}
+          label={`Book dryer at ${start}`}
           pendingLabel="Booking dryer…"
           book={bookResource.bind(null, dryer.id, slot.startsAt.toISOString())}
         />

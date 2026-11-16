@@ -113,10 +113,18 @@ export async function bookSlot(input: {
 
       const slot = { startsAt, endsAt: new Date(startsAt.getTime() + found.slotMinutes * 60_000) };
       const [from, to] = dayRange(dayInZone(startsAt, timeZone), timeZone);
+      // One slot length either side of the day, so a slot at midnight sees its neighbour.
+      const margin = found.slotMinutes * 60_000;
       const dayBookings = await tx
         .select({ userId: booking.userId, startsAt: booking.startsAt, endsAt: booking.endsAt })
         .from(booking)
-        .where(and(eq(booking.resourceId, resourceId), gte(booking.startsAt, from), lt(booking.startsAt, to)));
+        .where(
+          and(
+            eq(booking.resourceId, resourceId),
+            gte(booking.startsAt, new Date(from.getTime() - margin)),
+            lt(booking.startsAt, new Date(to.getTime() + margin)),
+          ),
+        );
 
       const refusal = refusalFor({ slot, rules: found, timeZone, now, dayBookings, userId });
       if (refusal) return { ok: false, reason: refusal };

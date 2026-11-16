@@ -47,7 +47,11 @@ type Check = {
   rules: ResourceRules;
   timeZone: string;
   now: Date;
-  /** Bookings of this resource on the slot's day, by anyone. */
+  /**
+   * Bookings of this resource around the slot, by anyone: at least the slot's own day.
+   * The server also passes the ones just before and after it, so that "not two in a
+   * row" holds across midnight.
+   */
   dayBookings: { userId: string; startsAt: Date; endsAt: Date }[];
   userId: string;
 };
@@ -70,7 +74,8 @@ export function refusalFor({ slot, rules, timeZone, now, dayBookings, userId }: 
   if (dayBookings.some(overlaps)) return "taken";
 
   const mine = dayBookings.filter((booking) => booking.userId === userId);
-  if (mine.length >= rules.maxPerDay) return "daily-limit";
+  const mineThatDay = mine.filter((booking) => dayInZone(booking.startsAt, timeZone) === day);
+  if (mineThatDay.length >= rules.maxPerDay) return "daily-limit";
 
   const touches = (other: Slot) =>
     other.endsAt.getTime() === slot.startsAt.getTime() ||

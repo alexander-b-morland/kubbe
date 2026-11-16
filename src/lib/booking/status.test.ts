@@ -38,7 +38,7 @@ describe("what a resource is doing right now", () => {
 
   it("is closed once the last slot is over", () => {
     expect(now("23:00")).toBe("Closed for today");
-    expect(now("22:50")).toBe("Free all day");
+    expect(now("22:50")).toBe("Free until 23:00");
   });
 });
 

@@ -16,6 +16,8 @@ export type SlotRow = {
   colour?: string;
   /** For a free slot you may not take: why. */
   reason?: string;
+  /** For a slot that has already started: "Now, until 07:20". */
+  underWay?: string;
 };
 
 type ActionResult = { error?: string };
@@ -31,10 +33,11 @@ type Props = {
 type Change = { key: string; to: "mine" | "leaving" };
 type ShownRow = SlotRow & { leaving?: boolean };
 
-const focusRing = "outline-none focus-visible:ring-4 focus-visible:ring-fjord/35";
+const focusRing = "outline-none focus-visible:ring-4 focus-visible:ring-fjord";
+const unreachable = "Couldn't reach Kubbe. Check your connection and try again.";
 
 /** The ladder of slots for one day. Booking is like signing a sheet: your time gets circled. */
-export function SlotList({ rows, mineClassName = "bg-fjord/10", book, cancel }: Props) {
+export function SlotList({ rows, mineClassName = "bg-fjord/15", book, cancel }: Props) {
   const [, startTransition] = useTransition();
   const [shown, change] = useOptimistic<ShownRow[], Change>(rows, (current, { key, to }) =>
     current.map((row) =>
@@ -45,25 +48,28 @@ export function SlotList({ rows, mineClassName = "bg-fjord/10", book, cancel }: 
   const [drawn, setDrawn] = useState<ReadonlySet<string>>(new Set());
   const [problem, setProblem] = useState<{ key: string; message: string } | null>(null);
 
-  function onBook(row: SlotRow) {
+  /** Run a booking action. A lost connection becomes a message on the row, not a broken screen. */
+  function run(key: string, to: Change["to"], action: () => Promise<ActionResult>) {
     setProblem(null);
-    setDrawn((previous) => new Set(previous).add(row.key));
     startTransition(async () => {
-      change({ key: row.key, to: "mine" });
-      const result = await book(row.key);
-      if (result.error) setProblem({ key: row.key, message: result.error });
+      change({ key, to });
+      try {
+        const result = await action();
+        if (result.error) setProblem({ key, message: result.error });
+      } catch {
+        setProblem({ key, message: unreachable });
+      }
     });
   }
 
+  function onBook(row: SlotRow) {
+    setDrawn((previous) => new Set(previous).add(row.key));
+    run(row.key, "mine", () => book(row.key));
+  }
+
   function onCancel(row: SlotRow) {
-    if (!row.bookingId) return;
     const bookingId = row.bookingId;
-    setProblem(null);
-    startTransition(async () => {
-      change({ key: row.key, to: "leaving" });
-      const result = await cancel(bookingId);
-      if (result.error) setProblem({ key: row.key, message: result.error });
-    });
+    if (bookingId) run(row.key, "leaving", () => cancel(bookingId));
   }
 
   return (
@@ -88,44 +94,40 @@ export function SlotList({ rows, mineClassName = "bg-fjord/10", book, cancel }: 
                 ) : null}
               </span>
 
-              {row.state === "taken" ? (
-                <span className="flex items-center gap-2 font-semibold">
-                  <span aria-hidden="true" className="size-3 rounded-full" style={{ backgroundColor: row.colour }} />
-                  {row.name}
-                </span>
-              ) : null}
+              <span className="flex min-w-0 flex-col">
+                {row.state === "taken" ? (
+                  <span className="flex items-center gap-2 font-semibold">
+                    <span aria-hidden="true" className="size-3 shrink-0 rounded-full" style={{ backgroundColor: row.colour }} />
+                    <span className="truncate">{row.name}</span>
+                  </span>
+                ) : null}
+                {mine ? <span className="font-bold">You</span> : null}
+                {row.state === "free" && !row.underWay ? <span className="text-ink-soft">Free</span> : null}
+                {row.state === "blocked" ? <span className="text-ink-soft">{row.reason}</span> : null}
+                {row.underWay ? <span className="text-sm font-semibold text-barn">{row.underWay}</span> : null}
+              </span>
 
-              {mine ? (
-                <>
-                  <span className="font-bold">You</span>
-                  {row.cancellable && row.bookingId && !row.leaving ? (
-                    <button
-                      type="button"
-                      onClick={() => onCancel(row)}
-                      aria-label={`Cancel ${row.time}`}
-                      className={`ml-auto h-11 rounded-full border-2 border-ink px-4 font-bold ${focusRing}`}
-                    >
-                      Cancel
-                    </button>
-                  ) : null}
-                </>
+              {mine && row.cancellable && row.bookingId && !row.leaving ? (
+                <button
+                  type="button"
+                  onClick={() => onCancel(row)}
+                  aria-label={`Cancel ${row.time}`}
+                  className={`ml-auto h-11 shrink-0 rounded-full border-2 border-ink px-4 font-bold ${focusRing}`}
+                >
+                  Cancel
+                </button>
               ) : null}
 
               {row.state === "free" ? (
-                <>
-                  <span className="text-ink-soft">Free</span>
-                  <button
-                    type="button"
-                    onClick={() => onBook(row)}
-                    aria-label={`Book ${row.time}`}
-                    className={`ml-auto h-11 rounded-full bg-ink px-5 font-bold text-paper transition-transform active:scale-[0.97] ${focusRing}`}
-                  >
-                    Book
-                  </button>
-                </>
+                <button
+                  type="button"
+                  onClick={() => onBook(row)}
+                  aria-label={`Book ${row.time}`}
+                  className={`ml-auto h-11 shrink-0 rounded-full bg-ink px-5 font-bold text-paper transition-transform active:scale-[0.97] ${focusRing}`}
+                >
+                  Book
+                </button>
               ) : null}
-
-              {row.state === "blocked" ? <span className="text-ink-soft">{row.reason}</span> : null}
             </div>
 
             {problem?.key === row.key ? (
