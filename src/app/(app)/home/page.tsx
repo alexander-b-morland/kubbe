@@ -14,7 +14,7 @@ export const metadata: Metadata = { title: "Home" };
 
 const rooms: { name: string; room: Room; className: string; href?: string }[] = [
   { name: "Shower", room: "shower", className: "bg-fjord text-paper", href: "/shower" },
-  { name: "Laundry", room: "laundry", className: "bg-ochre text-ink" },
+  { name: "Laundry", room: "laundry", className: "bg-ochre text-ink", href: "/laundry" },
   { name: "Cleaning", room: "cleaning", className: "bg-spruce text-paper" },
 ];
 
