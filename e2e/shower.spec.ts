@@ -13,7 +13,7 @@ const shot = (name: string) => ({ path: `test-shots/${name}.png`, fullPage: true
 async function signUp(page: Page, name: string, who: string) {
   await page.getByLabel("Your name").fill(name);
   await page.getByLabel("Email").fill(email(who));
-  await page.getByLabel("Password").fill(password);
+  await page.getByLabel("Password", { exact: true }).fill(password);
   await page.getByRole("button", { name: "Create account" }).click();
 }
 
@@ -33,10 +33,19 @@ async function book(page: Page, time: string) {
   await expect(page.getByRole("button", { name: `Cancel ${time}` })).toBeVisible();
 }
 
+// A network blip during clean-up must not leave test accounts behind, so it is retried.
 test.afterAll(async () => {
   const sql = neon(process.env.DATABASE_URL!);
-  await sql`delete from household where created_by in (select id from "user" where email like 'e2e-%@kubbe.test')`;
-  await sql`delete from "user" where email like 'e2e-%@kubbe.test'`;
+  for (let attempt = 1; ; attempt++) {
+    try {
+      await sql`delete from household where created_by in (select id from "user" where email like 'e2e-%@kubbe.test')`;
+      await sql`delete from "user" where email like 'e2e-%@kubbe.test'`;
+      return;
+    } catch (error) {
+      if (attempt === 4) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 1500 * attempt));
+    }
+  }
 });
 
 test("book the shower, with the rules holding between two roommates", async ({ browser }) => {
@@ -68,7 +77,7 @@ test("book the shower, with the rules holding between two roommates", async ({ b
   // No back to back: the slots on either side are closed to Ida, and say why.
   for (const time of ["06:40", "07:20"]) {
     await expect(slot(ida, time)).toHaveAttribute("data-state", "blocked");
-    await expect(slot(ida, time)).toContainText("Right next to your slot");
+    await expect(slot(ida, time)).toContainText("Leave a gap next to your slot");
   }
   await expect(ida.getByRole("button", { name: "Book 07:20" })).toHaveCount(0);
   await ida.screenshot({ ...shot("s3-booked"), animations: "disabled" });
@@ -76,8 +85,10 @@ test("book the shower, with the rules holding between two roommates", async ({ b
   // --- Knut joins and sees Ida's slot as taken ---
   const knut = await (await browser.newContext()).newPage();
   await knut.goto(`/join/${code}`);
+  await expect(knut.getByRole("heading", { level: 1 })).toHaveText("You're invited to Kollektivet");
+  await knut.getByRole("link", { name: "Create account" }).click();
   await signUp(knut, "Knut", "knut");
-  await knut.getByRole("button", { name: "Join household" }).click();
+  await knut.getByRole("button", { name: "Join Kollektivet" }).click();
   await expect(knut).toHaveURL(/\/home$/);
   await knut.goto(new URL(ida.url()).pathname + new URL(ida.url()).search);
   await expect(slot(knut, "07:00")).toHaveAttribute("data-state", "taken");
@@ -109,7 +120,7 @@ test("book the shower, with the rules holding between two roommates", async ({ b
   // --- The daily limit is three ---
   for (const time of idaWon ? ["12:00"] : ["12:00", "15:00"]) await book(ida, time);
   await expect(slot(ida, "18:00")).toHaveAttribute("data-state", "blocked");
-  await expect(slot(ida, "18:00")).toContainText("You've used your slots");
+  await expect(slot(ida, "18:00")).toContainText("You've booked your 3 for this day");
 
   // --- Home tells Knut about his next slot ---
   await knut.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Home" }).click();

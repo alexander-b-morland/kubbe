@@ -13,7 +13,7 @@ const shot = (name: string) => ({ path: `test-shots/${name}.png`, fullPage: true
 async function signUp(page: Page, name: string, who: string) {
   await page.getByLabel("Your name").fill(name);
   await page.getByLabel("Email").fill(email(who));
-  await page.getByLabel("Password").fill(password);
+  await page.getByLabel("Password", { exact: true }).fill(password);
   await page.getByRole("button", { name: "Create account" }).click();
 }
 
@@ -21,10 +21,19 @@ const tab = (page: Page, name: string) => page.getByRole("navigation", { name: "
 const turn = (page: Page, room: string) => page.getByTestId(`turn-${room}`).filter({ visible: true });
 const headline = (page: Page) => page.getByTestId("headline").filter({ visible: true });
 
+// A network blip during clean-up must not leave test accounts behind, so it is retried.
 test.afterAll(async () => {
   const sql = neon(process.env.DATABASE_URL!);
-  await sql`delete from household where created_by in (select id from "user" where email like 'e2e-%@kubbe.test')`;
-  await sql`delete from "user" where email like 'e2e-%@kubbe.test'`;
+  for (let attempt = 1; ; attempt++) {
+    try {
+      await sql`delete from household where created_by in (select id from "user" where email like 'e2e-%@kubbe.test')`;
+      await sql`delete from "user" where email like 'e2e-%@kubbe.test'`;
+      return;
+    } catch (error) {
+      if (attempt === 4) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 1500 * attempt));
+    }
+  }
 });
 
 test("rooms go round between roommates, and turns can be done or taken over", async ({ browser }) => {
@@ -49,15 +58,25 @@ test("rooms go round between roommates, and turns can be done or taken over", as
   await expect(turn(ida, "Kitchen")).toContainText("about 45 min");
   await expect(headline(ida)).toHaveText("2 rooms are yours");
 
-  // --- A second person joins, and the rooms are shared out ---
+  // --- A second person joins. Turns already under way stay with whoever has them ---
   const knut = await (await browser.newContext()).newPage();
   await knut.goto(`/join/${code}`);
+  await expect(knut.getByRole("heading", { level: 1 })).toHaveText("You're invited to Kollektivet");
+  await knut.getByRole("link", { name: "Create account" }).click();
   await signUp(knut, "Knut", "knut");
-  await knut.getByRole("button", { name: "Join household" }).click();
+  await knut.getByRole("button", { name: "Join Kollektivet" }).click();
   await expect(knut).toHaveURL(/\/home$/);
   await tab(knut, "Cleaning").click();
-  await expect(headline(knut)).toHaveText("Your turn: Kitchen");
+  await expect(headline(knut)).toHaveText("Nothing for you now");
   await expect(knut.getByRole("heading", { name: "Rooms" })).toHaveCount(0);
+  await ida.reload();
+  await expect(headline(ida)).toHaveText("2 rooms are yours");
+  // The rotation only takes Knut in from the next round: he is next for the bathroom.
+  await expect(turn(ida, "Bathroom")).toContainText("Next: Knut");
+
+  // Knut offers to take the kitchen now.
+  await knut.getByRole("button", { name: "Take over Kitchen" }).click();
+  await expect(headline(knut)).toHaveText("Your turn: Kitchen");
 
   await ida.reload();
   await expect(headline(ida)).toHaveText("Your turn: Bathroom");
@@ -91,20 +110,20 @@ test("rooms go round between roommates, and turns can be done or taken over", as
   await ida.reload();
   await expect(headline(ida)).toHaveText("All clean");
   await expect(turn(ida, "Kitchen")).toContainText("Done by Knut");
-  await expect(ida.getByRole("region", { name: "Last 8 weeks" })).toContainText("You1 turn done");
+  await expect(ida.getByRole("region", { name: "Turns done, last 8 weeks" })).toContainText("You1 turn done");
   await ida.screenshot(shot("c3-all-clean"));
 
   // --- An admin changes and removes rooms ---
   const rooms = ida.getByRole("region", { name: "Rooms" });
   await rooms.locator("summary", { hasText: "Bathroom" }).click();
   await rooms.getByLabel("How often").first().selectOption("14");
-  await rooms.getByRole("button", { name: "Save bathroom" }).click();
+  await rooms.getByRole("button", { name: "Save", exact: true }).click();
   await expect(rooms.locator("summary", { hasText: "Bathroom" })).toContainText("Every 2 weeks");
   // A new rhythm starts over, so the room is open again.
   await expect(turn(ida, "Bathroom")).not.toHaveAttribute("data-state", "done");
 
   await rooms.locator("summary", { hasText: "Kitchen" }).click();
-  await rooms.getByRole("button", { name: "Remove room" }).last().click();
+  await rooms.getByRole("button", { name: "Remove Kitchen", exact: true }).click();
   await expect(turn(ida, "Kitchen")).toBeVisible();
   await rooms.getByRole("button", { name: "Remove Kitchen for everyone?" }).click();
   await expect(turn(ida, "Kitchen")).toHaveCount(0);

@@ -2,6 +2,10 @@ import { defineConfig } from "@playwright/test";
 
 // End-to-end tests run against the dev server in a phone-sized window.
 // They use the Edge that ships with Windows, so no browser download is needed.
+// Set E2E_BASE_URL to run the same tests against a deployed site instead of the dev server.
+const deployed = process.env.E2E_BASE_URL;
+const baseURL = deployed ?? "http://localhost:3000";
+
 export default defineConfig({
   testDir: "./e2e",
   outputDir: "./test-results",
@@ -12,7 +16,7 @@ export default defineConfig({
   // The database is far from a developer machine, so a save can take a few seconds locally.
   expect: { timeout: 15_000 },
   use: {
-    baseURL: "http://localhost:3000",
+    baseURL,
     channel: "msedge",
     viewport: { width: 390, height: 844 },
     deviceScaleFactor: 2,
@@ -20,10 +24,7 @@ export default defineConfig({
     isMobile: true,
     trace: "retain-on-failure",
   },
-  webServer: {
-    command: "npm run dev",
-    url: "http://localhost:3000",
-    reuseExistingServer: true,
-    timeout: 120_000,
-  },
+  webServer: deployed
+    ? undefined
+    : { command: "npm run dev", url: baseURL, reuseExistingServer: true, timeout: 120_000 },
 });

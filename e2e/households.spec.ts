@@ -12,14 +12,23 @@ const password = "correct-horse-battery";
 async function signUp(page: Page, name: string, who: string) {
   await page.getByLabel("Your name").fill(name);
   await page.getByLabel("Email").fill(email(who));
-  await page.getByLabel("Password").fill(password);
+  await page.getByLabel("Password", { exact: true }).fill(password);
   await page.getByRole("button", { name: "Create account" }).click();
 }
 
+// A network blip during clean-up must not leave test accounts behind, so it is retried.
 test.afterAll(async () => {
   const sql = neon(process.env.DATABASE_URL!);
-  await sql`delete from household where created_by in (select id from "user" where email like 'e2e-%@kubbe.test')`;
-  await sql`delete from "user" where email like 'e2e-%@kubbe.test'`;
+  for (let attempt = 1; ; attempt++) {
+    try {
+      await sql`delete from household where created_by in (select id from "user" where email like 'e2e-%@kubbe.test')`;
+      await sql`delete from "user" where email like 'e2e-%@kubbe.test'`;
+      return;
+    } catch (error) {
+      if (attempt === 4) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 1500 * attempt));
+    }
+  }
 });
 
 test("create a household, invite a roommate by link, sign back in", async ({ browser }) => {
@@ -48,22 +57,26 @@ test("create a household, invite a roommate by link, sign back in", async ({ bro
   // Sharing copies the invite link and says so.
   await ida.getByRole("button", { name: "Share invite link" }).click();
   await expect(ida.getByRole("button", { name: "Link copied" })).toBeVisible();
-  expect(await ida.evaluate(() => navigator.clipboard.readText())).toBe(`http://localhost:3000/join/${code}`);
+  expect(await ida.evaluate(() => navigator.clipboard.readText())).toBe(`${new URL(ida.url()).origin}/join/${code}`);
   await ida.screenshot({ path: "test-shots/2-home-alone.png", fullPage: true, caret: "initial" });
 
   // --- Knut opens the invite link without an account ---
   const knutContext = await browser.newContext();
   const knut = await knutContext.newPage();
   await knut.goto(`/join/${code.toLowerCase()}`);
+  // He is told what he is invited to before being asked for anything.
+  await expect(knut.getByRole("heading", { level: 1 })).toHaveText("You're invited to Kollektivet");
+  await expect(knut.getByText("One person lives there so far.")).toBeVisible();
+  await knut.screenshot({ path: "test-shots/3-invite.png", fullPage: true, caret: "initial", animations: "disabled" });
+  await knut.getByRole("link", { name: "Create account" }).click();
   await expect(knut).toHaveURL(/\/sign-up\?next=/);
   await expect(knut.getByRole("heading", { level: 1 })).toHaveText("Create your account");
-  await knut.screenshot({ path: "test-shots/3-sign-up.png", fullPage: true, caret: "initial" });
   await signUp(knut, "Knut", "knut");
   await expect(knut.getByRole("heading", { level: 1 })).toHaveText("Join Kollektivet?");
-  await knut.screenshot({ path: "test-shots/4-join.png", fullPage: true, caret: "initial" });
-  await knut.getByRole("button", { name: "Join household" }).click();
+  await knut.screenshot({ path: "test-shots/4-join.png", fullPage: true, caret: "initial", animations: "disabled" });
+  await knut.getByRole("button", { name: "Join Kollektivet" }).click();
   await expect(knut).toHaveURL(/\/home$/);
-  await expect(knut.getByText("2 people live here")).toBeVisible();
+  await expect(knut.getByText("You and Ida live here")).toBeVisible();
   // Once there are two of you, the invite card makes way for what is going on.
   await expect(knut.getByTestId("join-code")).toHaveCount(0);
   await expect(knut.getByTestId("band-shower")).toBeVisible();
@@ -73,7 +86,7 @@ test("create a household, invite a roommate by link, sign back in", async ({ bro
 
   // Ida sees Knut after a reload, and only Ida is admin.
   await ida.reload();
-  await expect(ida.getByText("2 people live here")).toBeVisible();
+  await expect(ida.getByText("You and Knut live here")).toBeVisible();
   await ida.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Household" }).click();
   await expect(ida.getByText("Admin", { exact: true })).toHaveCount(1);
 
@@ -83,10 +96,13 @@ test("create a household, invite a roommate by link, sign back in", async ({ bro
   await knut.goto("/home");
   await expect(knut).toHaveURL(/\/sign-in$/);
   await knut.getByLabel("Email").fill(email("knut"));
-  await knut.getByLabel("Password").fill("wrong-password");
+  await knut.getByLabel("Password", { exact: true }).fill("wrong-password");
   await knut.getByRole("button", { name: "Sign in" }).click();
-  await expect(knut.getByTestId("form-error")).toHaveText("Wrong email or password.");
-  await knut.getByLabel("Password").fill(password);
+  await expect(knut.getByTestId("form-error")).toHaveText("Wrong email or password. Check both and try again.");
+  // The Show button reveals what was typed, since there is no password reset yet.
+  await knut.getByRole("button", { name: "Show password" }).click();
+  await expect(knut.getByLabel("Password", { exact: true })).toHaveAttribute("type", "text");
+  await knut.getByLabel("Password", { exact: true }).fill(password);
   await knut.getByRole("button", { name: "Sign in" }).click();
   await expect(knut).toHaveURL(/\/home$/);
 
@@ -95,4 +111,17 @@ test("create a household, invite a roommate by link, sign back in", async ({ bro
   await third.goto("/sign-up");
   await signUp(third, "Imposter", "ida");
   await expect(third.getByTestId("form-error")).toContainText("already has an account");
+
+  // A redirect after signing in can only lead to an invite, never to another site.
+  const fourth = await (await browser.newContext()).newPage();
+  await fourth.goto("/sign-in?next=/%5Cexample.com");
+  await fourth.getByLabel("Email").fill(email("ida"));
+  await fourth.getByLabel("Password", { exact: true }).fill(password);
+  await fourth.getByRole("button", { name: "Sign in" }).click();
+  await expect(fourth).toHaveURL(/\/home$/);
+
+  // A link with a code nobody has says so straight away, before any sign-up.
+  const lost = await (await browser.newContext()).newPage();
+  await lost.goto("/join/ZZZZZZ");
+  await expect(lost.getByRole("heading", { level: 1 })).toHaveText("That link doesn't work");
 });
