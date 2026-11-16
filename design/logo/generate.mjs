@@ -1,7 +1,8 @@
 // Generates the Kubbe logo: an ink line drawing of a carved wooden hand holding a trout.
 //
 //   node design/logo/generate.mjs            writes the SVGs next to this file and the app data module
-//   node design/logo/generate.mjs --preview  also renders PNG previews (needs `npm i --no-save sharp`)
+//   node design/logo/generate.mjs --preview  also renders PNG previews
+//   node design/logo/generate.mjs --icons    also renders the app icons into src/app and public/icons
 //
 // Coordinates are in a 560 x 556 drawing space. Layers are listed back to front.
 import fs from 'node:fs';
@@ -248,6 +249,41 @@ fs.writeFileSync(path.join(out, 'kubbe-logo-line.svg'), still({ colour: false })
 fs.writeFileSync(path.join(out, 'kubbe-logo-animated.svg'), animated());
 if (dataFile !== 'none') { fs.mkdirSync(path.dirname(dataFile), { recursive: true }); fs.writeFileSync(dataFile, dataModule()); }
 console.log('layers', layers.length, 'clips', clips.length);
+
+// A simplified cut for small sizes: the shapes and their colours, heavier outlines,
+// and none of the hatching, grain, fin rays or spots that turn to mud when tiny.
+function icon({ background = PAPER, scale = 0.84, weight = 1.5 } = {}) {
+  const size = 600;
+  let body = '';
+  for (const l of layers) {
+    if (l.kind === 'line' && (l.w < 3.5 || l.d.includes('h.01'))) continue;
+    if (l.kind === 'tint' && l.tone === 'shadow') continue;
+    const tf = l.tf ? ` transform="${l.tf}"` : '';
+    if (l.kind === 'tint') body += wrapClips(l, `<path d="${l.d}" fill="${TONE[l.tone]}"${tf}/>`);
+    else if (l.kind === 'shape') body += `<path d="${l.d}" fill="${TONE[l.tone]}" stroke="${INK}" stroke-width="${l.w * weight}"/>`;
+    else if (l.kind === 'ink') body += `<path d="${l.d}" fill="${INK}"/>`;
+    else body += wrapClips(l, `<path d="${l.d}" fill="none" stroke="${INK}" stroke-width="${l.w * weight}"/>`);
+  }
+  const x = (size - VB[2] * scale) / 2 - VB[0] * scale;
+  const y = (size - VB[3] * scale) / 2 - VB[1] * scale;
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${size} ${size}" stroke-linecap="round" stroke-linejoin="round"><defs>${defs()}</defs><rect width="${size}" height="${size}" fill="${background}"/><g transform="translate(${f(x)} ${f(y)}) scale(${scale})">${body}</g></svg>`;
+}
+fs.writeFileSync(path.join(out, 'kubbe-icon.svg'), icon());
+
+// App icons. Needs sharp, which Next.js already brings along.
+if (process.argv.includes('--icons')) {
+  const { default: sharp } = await import('sharp');
+  const root = path.join(import.meta.dirname, '..', '..');
+  const render = (svg, px, file) => sharp(Buffer.from(svg), { density: 72 * px / 600 }).resize(px, px).png().toFile(path.join(root, file));
+  fs.mkdirSync(path.join(root, 'public', 'icons'), { recursive: true });
+  await render(icon({ scale: 0.92, weight: 2 }), 96, 'src/app/icon.png');
+  await render(icon(), 180, 'src/app/apple-icon.png');
+  await render(icon(), 192, 'public/icons/icon-192.png');
+  await render(icon(), 512, 'public/icons/icon-512.png');
+  // Phones may crop a maskable icon to a circle, so the drawing keeps to the middle.
+  await render(icon({ scale: 0.64 }), 512, 'public/icons/icon-maskable-512.png');
+  console.log('icons written');
+}
 
 if (process.argv.includes('--preview')) {
   // sharp is not a project dependency: install it ad hoc when previews are needed
