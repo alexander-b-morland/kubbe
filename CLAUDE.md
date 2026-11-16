@@ -82,6 +82,14 @@ Package manager is npm. Keep this list current as scripts are added.
 - **No double booking.** The database rejects overlapping bookings for the same resource with a constraint, as the last line of defence.
 - **Time.** Store timestamps in UTC. Each household has a time zone, and all slot maths happens in that zone.
 - **Secrets.** Never commit `.env` files, keys, or tokens. No fallback secrets in code: a missing secret is a startup error. Only `.env.example` with empty values is committed.
+- **Who lives where changes under a lock.** Joining, leaving, removing someone and changing a role each start with `lockHousehold(tx, id)` inside one transaction. Without it, two people pressing at once can both pass a check only one should (the last two admins both leaving).
+- **Removing someone replaces the join code.** They know the old one.
+- **Cleaning turns under way do not move.** Before anything that shifts the rotation (someone joins or leaves, a room is removed), call `pinCurrentTurns(tx, householdId, today)` in the same transaction.
+- **An action applies to what was on screen.** Cleaning actions carry the period the person was looking at and do nothing if a new one has started. Booking actions carry the exact slot start.
+- **Guessable things are rate limited.** Sign-in, sign-up, join attempts and invite-link lookups go through `allowAttempt` in `src/lib/rate-limit.ts`. The limits are active in production only.
+- **Redirects after signing in go through `safeNextPath`,** which accepts only an invite link. Never redirect to a path taken from the URL any other way.
+- **There is no public auth route.** All sign-in and sign-up goes through server actions, which validate and rate limit. Google sign-in will need `/api/auth` back: when adding it, also add name validation in the auth library's database hooks and database-backed rate limiting there.
+- **Server actions validate every argument,** including ones bound on the server such as a member id or a role. They arrive from the browser like any other input.
 
 ## Design
 
@@ -135,6 +143,14 @@ The three room drawings are the `RoomArt` component (`src/components/illustratio
 
 **Screenshots.** The browser tests save phone-sized screenshots of every screen to `test-shots/` (ignored by git). Look at them after changing a screen.
 
+**People have their own colours.** `MEMBER_COLOURS` never contains a room colour or `barn`, so a dot beside a name never reads as a room. Every one of them carries paper-coloured text at readable contrast; a unit test checks both.
+
+**Contrast and focus.** Secondary text is `ink-soft` (#586072), chosen to pass 4.5:1 on paper and on the tinted rows. Focus rings are solid `ring-fjord` (or `ring-ink` on a coloured band), never a faint tint.
+
+**Wording that is settled.** "Two in a row" (not "back to back"). Slot lengths through `describeSlotLength`: "20-minute slots", "2-hour slots". A blocked slot says "Leave a gap next to your slot". Buttons that save say "Save". The sentence on the front page is the owner's own wording: do not rewrite it.
+
+**Confirming.** Anything that removes or replaces goes through `ActionButton` with `confirm` worded as what will happen ("Remove Knut and cancel their bookings?"). It shows a "Keep as it is" button beside the question.
+
 **No CSS Modules.** The Tailwind rule in `next.config.ts` treats every `.css` file as global, so `*.module.css` imports come back empty and the styles silently do not apply. Use Tailwind utilities, or a plain `.css` file with prefixed class names (see `src/components/logo/kubbe-logo.css`).
 
 **Stroke-drawing gotcha.** A path with round caps that is fully dashed out still shows a dot at its start. Keep each stroke invisible (`stroke-opacity: 0`) until its own animation begins.
@@ -153,11 +169,23 @@ Standing brief:
 
 ## Open items
 
-Agreed but not done yet. Remove each when it ships.
+Agreed or suggested, not done yet. Remove each when it ships.
 
-- Google sign-in. The user wants to be walked through the Google Cloud setup step by step.
-- A domain, then email sending: password reset and verified addresses depend on it.
-- A separate Neon branch for local work and tests. The database is in US East while the users are in Norway; moving it to an EU region would also make local work much faster.
+Needs the owner:
+
+- Google sign-in. He wants to be walked through the Google Cloud setup step by step. Before turning it on, check how the auth library links a Google login to an existing password account whose email was never verified.
+- A domain, then email sending. Password reset and verified addresses depend on it. Until then a forgotten password cannot be recovered, and sign-up tells you whether an email already has an account.
+- A separate Neon branch for local work and tests. The browser tests run against the live database. The database is in US East while the users are in Norway; an EU region would also make local work much faster.
+
+Can be built any time:
+
 - Reminders (web push), repeating bookings, Norwegian.
 - Add-ons: shared shopping list; dinner suggestions with voting.
-- Live site: https://kubbe-zeta.vercel.app
+- An admin cancelling someone else's booking, for the roommate who booked and left town.
+- Telling a removed person why they landed on the start screen (leaving on your own already says so).
+- A squiggle under "You" on a booked slot, from the first design sketch.
+- Longer or expiring join codes, and a content security policy beyond `frame-ancestors`.
+- Refusing duplicate room names. Keeping the eight-week cleaning tally when a room's rhythm changes.
+- Clock-change days are only verified for Europe/Oslo with the default hours. Zones that change at midnight, and households open before 03:00, have known rough edges on those two days.
+
+Live site: https://kubbe-zeta.vercel.app

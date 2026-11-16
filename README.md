@@ -14,7 +14,7 @@ Kubbe is a small web app for people who share a home. You book the shower and th
 
 ## What it does
 
-**Households.** You create an account, then start a household or join one. Whoever starts it is the admin and gets a six-character code and an invite link to share. Everything happens inside one household, and nothing is shared between households.
+**Households.** You create an account, then start a household or join one. Whoever starts it is the admin and gets a six-character code and an invite link to share. Someone opening the link sees which household they are invited to before being asked for anything. Everything happens inside one household, and nothing is shared between households.
 
 **Shower.** The day is cut into slots. You tap Book, and your time gets circled like on a paper sign-up sheet. You see who has which slot, and the headline tells you who is in there now or how long it is free.
 
@@ -27,13 +27,13 @@ Kubbe is a small web app for people who share a home. You book the shower and th
 - whether two slots in a row are allowed (off by default, so nobody camps in the bathroom)
 - how many days ahead you can book
 
-The server enforces all of it. If two people press Book on the same slot at the same moment, exactly one gets it and the other is told who did.
+The server enforces all of it. If two people press Book on the same slot at the same moment, exactly one gets it and the other is told who did. A slot that cannot be booked says why, and what to do instead.
 
-**Cleaning.** The admin adds rooms or chores, how often each is due and roughly how long it takes. Turns rotate between roommates in the order they joined, and each room starts one person further along so nobody gets everything in the same week. You mark your turn done, take over someone else's, or hand one back. A tally shows who has done how many turns in the last eight weeks.
+**Cleaning.** The admin adds rooms or chores, how often each is due and roughly how long it takes. Turns rotate between roommates in the order they joined, and each room starts one person further along so nobody gets everything in the same week. You mark your turn done, take over someone else's, or hand one back. When someone moves in or out, the turns already under way stay with whoever has them, and the new rotation starts with the next round. A tally shows who has done how many turns in the last eight weeks.
 
 **Home.** One screen says what matters right now: whether the shower is free, when your next slot is, and whether it is your turn to clean.
 
-**Household.** Admins rename the household, replace the join code, make others admin and remove people who moved out. Everyone can change their name and colour, or leave. A household always keeps at least one admin.
+**Household.** Admins rename the household, set its time zone, replace the join code, make others admin and remove people who moved out (which also replaces the code, since they knew it). Everyone can change their name and colour, or leave. Anything that removes something asks first, and a household always keeps at least one admin.
 
 ## How it is built
 
@@ -55,6 +55,8 @@ A few decisions worth knowing about:
 - **Rules are plain functions.** `src/lib/booking/rules.ts` and `src/lib/cleaning/rota.ts` have no database or framework in them, which is what makes them easy to test, including on the days the clocks change.
 - **The household comes from the session.** Every screen and action starts with `requireHousehold()`. Ids sent by the browser are looked up inside that household, so an id from another household finds nothing.
 - **Times are stored in UTC and shown in the household's time zone.**
+- **Guessing is slowed down.** Sign-in attempts, sign-ups and join-code tries are counted in the database and refused past a limit. After signing in, the only place the app will send you on to is an invite link.
+- **Changes to who lives where are atomic.** They lock the household first, so two people acting at once cannot, for example, both be the last admin to leave.
 
 ### Where things are
 
@@ -80,6 +82,7 @@ src/
     booking/         rules, service, server actions
     cleaning/        rota, service
     session.ts       who is asking, and which household they are in
+    rate-limit.ts    counting attempts at things that can be guessed
 design/logo/         the logo generator: the single source of the logo and app icons
 drizzle/             SQL migrations
 e2e/                 browser tests
@@ -138,6 +141,14 @@ The browser tests use the Edge that ships with Windows. They create accounts end
 
 Push to `main` and Vercel builds it. The production environment needs `DATABASE_URL` (set by the Neon integration) and `BETTER_AUTH_SECRET`. Run `npm run db:migrate` against the production database after a migration is added.
 
+To run the browser tests against a deployed site instead of your machine, set `E2E_BASE_URL`, for example `E2E_BASE_URL=https://your-site.example npm run test:e2e`.
+
+## How it was checked
+
+- **Unit tests** cover the booking rules (the slot grid, the daily cap, two in a row, the booking horizon, both clock-change days), the cleaning rota, the status lines, join codes, colours and the redirect guard.
+- **Browser tests** run whole stories at phone size with two or three people at once: signing up and joining by invite link, two roommates pressing Book on the same slot at the same moment, an admin changing the rules, washing then drying, the cleaning rota, removing someone, and leaving.
+- **Two independent reviews**, one for security and correctness and one for the experience of using it, were done before this version. Neither found a way for one household to see or change another's data. Most of what they did find is fixed; what is left is listed under "Not done yet".
+
 ## Design
 
 The look is deliberate, and recorded in [CLAUDE.md](CLAUDE.md):
@@ -150,10 +161,12 @@ The look is deliberate, and recorded in [CLAUDE.md](CLAUDE.md):
 ## Not done yet
 
 - **Google sign-in.** Needs credentials from a Google Cloud project.
-- **Password reset and verified email addresses.** Both need the app to send email, which needs a domain.
+- **Password reset and verified email addresses.** Both need the app to send email, which needs a domain. Until then a forgotten password cannot be recovered, which is why password fields have a Show button.
 - **Reminders.** For example "your wash is done" or "your shower slot starts in ten minutes".
 - **Repeating bookings.** For example the same shower slot every weekday.
 - **A separate database for local work and tests.**
+- **An admin cancelling someone else's booking,** for the roommate who booked and then left town.
+- **Known limits.** Signing up tells you whether an email already has an account. Join codes are six characters and do not expire, though guessing them is rate limited and an admin can replace one at any time. Clock-change days are only verified for Europe/Oslo with the default opening hours.
 - **Norwegian.** The interface is in English, with the text kept close to the screens so it can be translated.
 - **Add-ons a household can switch on:** a shared shopping list, and dinner suggestions that roommates vote on, which then produce a shopping list and say who is responsible.
 
