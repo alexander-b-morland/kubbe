@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { signOut } from "@/app/(auth)/actions";
+import { RoomArt, type Room } from "@/components/illustrations/room-art";
 import { listMembers } from "@/lib/households";
 import { formatJoinCode } from "@/lib/join-code";
 import { requireHousehold } from "@/lib/session";
@@ -10,10 +11,10 @@ export const instant = false;
 
 export const metadata: Metadata = { title: "Home" };
 
-const rooms = [
-  { name: "Shower", className: "bg-fjord text-paper" },
-  { name: "Laundry", className: "bg-ochre text-ink" },
-  { name: "Cleaning", className: "bg-spruce text-paper" },
+const rooms: { name: string; room: Room; className: string }[] = [
+  { name: "Shower", room: "shower", className: "bg-fjord text-paper" },
+  { name: "Laundry", room: "laundry", className: "bg-ochre text-ink" },
+  { name: "Cleaning", room: "cleaning", className: "bg-spruce text-paper" },
 ];
 
 export default async function HomePage() {
@@ -71,9 +72,13 @@ export default async function HomePage() {
           Booking opens here next
         </h2>
         <ul className="flex flex-col gap-2">
-          {rooms.map((room) => (
-            <li key={room.name} className={`type-display rounded-xl px-4 py-3 text-3xl ${room.className}`}>
+          {rooms.map((room, index) => (
+            <li
+              key={room.name}
+              className={`type-display flex items-center justify-between rounded-xl py-2 pr-3 pl-4 text-4xl ${room.className}`}
+            >
               {room.name}
+              <RoomArt room={room.room} animate delay={0.2 + index * 0.35} className="size-20" />
             </li>
           ))}
         </ul>

@@ -1,0 +1,37 @@
+/* Plain global CSS with prefixed class names: CSS Modules are not available here. */
+.room-art {
+  display: block;
+}
+
+.room-art path {
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* Each stroke stays invisible until its turn, so no start dots show early. */
+.room-art--draw path {
+  stroke-opacity: 0;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: room-art-draw 0.5s cubic-bezier(0.6, 0, 0.3, 1) var(--t) forwards;
+}
+
+@keyframes room-art-draw {
+  from {
+    stroke-opacity: 1;
+  }
+  to {
+    stroke-opacity: 1;
+    stroke-dashoffset: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .room-art--draw path {
+    animation: none;
+    stroke-opacity: 1;
+    stroke-dashoffset: 0;
+  }
+}
