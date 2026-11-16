@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { AutoRefresh } from "@/components/booking/auto-refresh";
 import { RoomArt } from "@/components/illustrations/room-art";
 import { ActionButton } from "@/components/ui/action-button";
 import { describeDue, describeInterval } from "@/lib/cleaning/rota";
@@ -48,7 +49,9 @@ export default async function CleaningPage() {
   }
 
   return (
-    <main className="mx-auto flex min-h-dvh max-w-md flex-col">
+    <main className="mx-auto flex max-w-md flex-col">
+      {/* A phone can keep this screen open for days. Keep it showing the turn that is running. */}
+      <AutoRefresh everySeconds={120} />
       <header className="flex flex-col gap-3 bg-spruce p-6 pt-8 text-paper">
         <div className="flex items-start justify-between">
           <p className="pt-2 font-semibold">Cleaning</p>
@@ -64,7 +67,7 @@ export default async function CleaningPage() {
           <p className="text-lg">
             {admin
               ? "Add the rooms and chores you share below. Turns then go round by themselves."
-              : "An admin hasn't added any rooms yet. Ask them to, under Cleaning."}
+              : "No rooms yet. Ask an admin to add the ones you share here."}
           </p>
         ) : (
           <section aria-labelledby="now-heading" className="flex flex-col gap-2">
@@ -94,16 +97,16 @@ export default async function CleaningPage() {
                       </span>
                       {row.done ? (
                         row.done.by?.userId === user.id ? (
-                          <ActionButton label={`Not done: ${row.name}`} action={undoDoneAction.bind(null, row.areaId)}>
+                          <ActionButton label={`Not done: ${row.name}`} action={undoDoneAction.bind(null, row.areaId, row.period)}>
                             Undo
                           </ActionButton>
                         ) : null
                       ) : yours ? (
-                        <ActionButton look="filled" label={`Done: ${row.name}`} pendingLabel="Saving…" action={markDoneAction.bind(null, row.areaId)}>
+                        <ActionButton look="filled" label={`Done: ${row.name}`} pendingLabel="Saving…" action={markDoneAction.bind(null, row.areaId, row.period)}>
                           Done
                         </ActionButton>
                       ) : (
-                        <ActionButton label={`Take over ${row.name}`} action={takeOverAction.bind(null, row.areaId)}>
+                        <ActionButton label={`Take over ${row.name}`} action={takeOverAction.bind(null, row.areaId, row.period)}>
                           I&apos;ll take it
                         </ActionButton>
                       )}
@@ -129,12 +132,12 @@ export default async function CleaningPage() {
                     </p>
                     {!row.done && yours && row.takenOver ? (
                       <div className="flex justify-start">
-                        <ActionButton label={`Give back ${row.name}`} action={giveBackAction.bind(null, row.areaId)}>
+                        <ActionButton align="start" label={`Give back ${row.name}`} action={giveBackAction.bind(null, row.areaId, row.period)}>
                           Give it back
                         </ActionButton>
                       </div>
                     ) : null}
-                    {!row.done && row.lastWasSkipped ? <p className="text-sm font-semibold text-barn">Last time was skipped.</p> : null}
+                    {!row.done && row.lastWasSkipped ? <p className="text-sm font-semibold text-barn">Nobody marked this done last time.</p> : null}
                     <p className="text-sm text-ink-soft">
                       {describeInterval(row.intervalDays)}. Next: {row.next ? (row.next.userId === user.id ? "you" : row.next.name) : "nobody"}.
                     </p>
@@ -148,7 +151,7 @@ export default async function CleaningPage() {
         {rota.length > 0 && members.length > 1 ? (
           <section aria-labelledby="tally-heading" className="flex flex-col gap-2">
             <h2 id="tally-heading" className="type-display text-3xl">
-              Last {WEEKS_COUNTED} weeks
+              Turns done, last {WEEKS_COUNTED} weeks
             </h2>
             <ul className="flex flex-col">
               {members.map((member) => {
@@ -184,6 +187,7 @@ export default async function CleaningPage() {
                 ))}
               </div>
             ) : null}
+            <h3 className="pt-2 text-lg font-bold">Add a room</h3>
             <AddAreaForm intervals={INTERVALS} estimates={ESTIMATES} existing={areas.map((area) => area.name)} action={addAreaAction} />
           </section>
         ) : null}

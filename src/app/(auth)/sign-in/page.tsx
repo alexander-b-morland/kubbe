@@ -18,6 +18,9 @@ export default async function SignInPage({ searchParams }: PageProps<"/sign-in">
     <>
       <h1 className="type-display text-5xl">Sign in</h1>
       <SignInForm next={nextPath || undefined} />
+      <p className="text-ink-soft">
+        Forgot your password? Resetting it isn&apos;t possible yet. Press Show to check what you typed.
+      </p>
       <p>
         New here?{" "}
         <Link href={nextPath ? `/sign-up?next=${encodeURIComponent(nextPath)}` : "/sign-up"} className="font-bold underline underline-offset-4">

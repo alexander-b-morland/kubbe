@@ -9,7 +9,7 @@ export default function NotFound() {
       <p className="text-lg">The link may be old, or mistyped.</p>
       <Link
         href="/home"
-        className="flex h-14 items-center justify-center rounded-full bg-ink text-lg font-bold text-paper outline-none focus-visible:ring-4 focus-visible:ring-fjord/35"
+        className="flex h-14 items-center justify-center rounded-full bg-ink text-lg font-bold text-paper outline-none focus-visible:ring-4 focus-visible:ring-fjord"
       >
         Go home
       </Link>

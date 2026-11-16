@@ -35,7 +35,7 @@ export function CreateHouseholdForm() {
 export function JoinHouseholdForm({ code }: { code?: string }) {
   const [state, action] = useActionState(joinHouseholdAction, undefined);
   return (
-    <form action={action} className="flex flex-col gap-4">
+    <form action={action} noValidate className="flex flex-col gap-4">
       <Field
         label="Join code"
         name="code"
@@ -46,12 +46,23 @@ export function JoinHouseholdForm({ code }: { code?: string }) {
         maxLength={12}
         defaultValue={state?.values?.code ?? code}
         look="code"
-        required
       />
       <FormError message={state?.error} />
       <SubmitButton pendingLabel="Joining…" variant="secondary">
         Join household
       </SubmitButton>
+    </form>
+  );
+}
+
+/** Joining from an invite link: the code is already known, so there is one button. */
+export function JoinByLinkForm({ code, name }: { code: string; name: string }) {
+  const [state, action] = useActionState(joinHouseholdAction, undefined);
+  return (
+    <form action={action} className="flex flex-col gap-4">
+      <input type="hidden" name="code" value={code} />
+      <FormError message={state?.error} />
+      <SubmitButton pendingLabel="Joining…">Join {name}</SubmitButton>
     </form>
   );
 }

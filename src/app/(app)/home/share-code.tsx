@@ -34,7 +34,7 @@ export function ShareCode({ code }: { code: string }) {
     <button
       type="button"
       onClick={copyLink}
-      className="min-h-12 rounded-full bg-ink px-6 py-2 font-bold text-paper outline-none transition-transform focus-visible:ring-4 focus-visible:ring-fjord/35 active:scale-[0.98]"
+      className="min-h-12 rounded-full bg-ink px-6 py-2 font-bold text-paper outline-none transition-transform focus-visible:ring-4 focus-visible:ring-fjord active:scale-[0.98]"
     >
       <span aria-live="polite">{labels[status]}</span>
     </button>

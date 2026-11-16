@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { KubbeLogo } from "@/components/logo/kubbe-logo";
 
-const focusRing = "outline-none focus-visible:ring-4 focus-visible:ring-fjord/35";
+const focusRing = "outline-none focus-visible:ring-4 focus-visible:ring-fjord";
 
 export default function FrontPage() {
   return (

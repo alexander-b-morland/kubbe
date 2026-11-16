@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useState } from "react";
 import { RoomArt, type Art } from "@/components/illustrations/room-art";
 
 const tabs: { href: string; label: string; art: Art }[] = [
@@ -15,6 +16,11 @@ const tabs: { href: string; label: string; art: Art }[] = [
 /** The bar at the bottom of every signed-in screen. */
 export function TabBar() {
   const pathname = usePathname();
+  // The tab you pressed is marked at once, before the server has answered with its screen.
+  // The press is remembered together with the screen it was made on, so it stops counting
+  // by itself once that screen has been replaced.
+  const [pressed, setPressed] = useState<{ href: string; from: string } | null>(null);
+  const current = pressed?.from === pathname ? pressed.href : pathname;
 
   return (
     <nav
@@ -23,13 +29,14 @@ export function TabBar() {
     >
       <ul className="mx-auto flex max-w-md">
         {tabs.map((tab) => {
-          const active = pathname === tab.href || pathname.startsWith(`${tab.href}/`);
+          const active = current === tab.href || current.startsWith(`${tab.href}/`);
           return (
             <li key={tab.href} className="flex-1">
               <Link
                 href={tab.href}
+                onClick={() => setPressed({ href: tab.href, from: pathname })}
                 aria-current={active ? "page" : undefined}
-                className={`flex flex-col items-center gap-0.5 pt-2 pb-1.5 text-xs font-semibold outline-none focus-visible:bg-fjord/15 ${active ? "text-ink" : "text-ink-soft"}`}
+                className={`flex flex-col items-center gap-0.5 pt-2 pb-1.5 text-xs font-semibold outline-none focus-visible:ring-4 focus-visible:ring-fjord focus-visible:ring-inset ${active ? "text-ink" : "text-ink-soft"}`}
               >
                 <RoomArt room={tab.art} className="size-7" />
                 {tab.label}

@@ -1,37 +1,59 @@
 "use client";
 
-import { useActionState, useState, type ReactNode } from "react";
+import { useActionState, useEffect, useRef, useState, type ReactNode } from "react";
 
-type Result = { error?: string } | undefined;
+type Result = { error?: string; saved?: boolean } | undefined;
+
+const base =
+  "min-h-11 rounded-full border-2 px-4 py-1.5 text-sm font-bold outline-none transition-transform focus-visible:ring-4 focus-visible:ring-fjord active:scale-[0.97]";
 
 /**
  * A small button that runs one server action and shows what went wrong, if anything.
- * With `confirm`, the first press only turns the button into that question.
+ *
+ * With `confirm`, the first press only asks: the button turns into that question, next
+ * to a way out. Nothing happens until the question itself is pressed.
  */
 export function ActionButton({
   children,
   confirm,
   look = "outline",
   pendingLabel = "Working…",
+  doneLabel,
   label,
+  align = "end",
   action,
 }: {
   children: ReactNode;
+  /** The question to ask before doing it, worded as what will happen. */
   confirm?: string;
-  look?: "outline" | "filled";
+  look?: "outline" | "filled" | "link";
   pendingLabel?: string;
-  /** Accessible name, when the visible text alone is not enough. */
+  /** Shown for a moment after the action succeeds, when the screen itself would not show it. */
+  doneLabel?: string;
+  /** Accessible name, when the visible text alone does not say what it acts on. */
   label?: string;
+  align?: "start" | "end";
   action: () => Promise<Result>;
 }) {
   const [state, formAction, pending] = useActionState<Result>(action, undefined);
   const [asking, setAsking] = useState(false);
-  const base =
-    "h-11 rounded-full border-2 px-4 text-sm font-bold outline-none transition-transform focus-visible:ring-4 focus-visible:ring-fjord/35 active:scale-[0.97]";
-  const colours = look === "filled" ? "border-ink bg-ink text-paper" : "border-ink";
+  const question = useRef<HTMLButtonElement>(null);
+
+  // Put the keyboard and screen reader on the question when it appears.
+  useEffect(() => {
+    if (asking) question.current?.focus();
+  }, [asking]);
+
+  const colours =
+    look === "filled"
+      ? "border-ink bg-ink text-paper"
+      : look === "link"
+        ? "border-transparent px-0 text-base underline underline-offset-4"
+        : "border-ink";
+  const edge = align === "end" ? "items-end" : "items-start";
 
   return (
-    <form action={formAction} className="flex flex-col items-end gap-1">
+    <form action={formAction} className={`flex flex-col gap-1 ${edge}`}>
       {confirm && !asking ? (
         // The two buttons have different keys so React makes a new element for the question.
         // Reusing one element would turn it into a submit button during the first press,
@@ -48,20 +70,40 @@ export function ActionButton({
         >
           {children}
         </button>
+      ) : confirm ? (
+        <span className={`flex flex-wrap gap-2 ${align === "end" ? "justify-end" : "justify-start"}`}>
+          <button key="back" type="button" onClick={() => setAsking(false)} className={`${base} border-ink`}>
+            Keep as it is
+          </button>
+          <button
+            key="do"
+            ref={question}
+            type="submit"
+            aria-disabled={pending}
+            className={`${base} border-barn bg-barn text-left text-paper ${pending ? "opacity-70" : ""}`}
+          >
+            {pending ? pendingLabel : confirm}
+          </button>
+        </span>
       ) : (
         <button
           key="do"
           type="submit"
-          aria-label={confirm ? undefined : label}
+          aria-label={label}
           aria-disabled={pending}
-          className={`${base} ${confirm ? "border-barn bg-barn text-paper" : colours} ${pending ? "opacity-70" : ""}`}
+          className={`${base} ${colours} ${pending ? "opacity-70" : ""}`}
         >
-          {pending ? pendingLabel : (confirm ?? children)}
+          {pending ? pendingLabel : children}
         </button>
       )}
       {state?.error ? (
-        <p role="alert" className="max-w-56 text-right text-sm font-semibold text-barn">
+        <p role="alert" className={`max-w-64 text-sm font-semibold text-barn ${align === "end" ? "text-right" : ""}`}>
           {state.error}
+        </p>
+      ) : null}
+      {state?.saved && doneLabel ? (
+        <p role="status" className="text-sm font-bold text-spruce">
+          {doneLabel}
         </p>
       ) : null}
     </form>
