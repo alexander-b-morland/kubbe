@@ -28,16 +28,16 @@ Kubbe is a mobile-first web app for roommates to share bathroom and laundry time
 
 ## Stack
 
-Approved 2026-11-15. Items marked "not installed yet" are agreed but have not been added.
+Approved 2026-11-15.
 
 - Next.js 16 (App Router, Turbopack) with TypeScript, deployed on Vercel
 - Tailwind CSS 4
-- Neon Postgres, connected through the Vercel Marketplace integration (not installed yet)
-- Drizzle ORM and SQL migrations (not installed yet)
-- Better Auth, storing users and sessions in the same Postgres database (not installed yet)
-- Motion for animation (not installed yet)
-- Zod for input validation (not installed yet)
-- Vitest for unit tests, Playwright for end-to-end tests (not installed yet)
+- Neon Postgres, connected through the Vercel Marketplace integration. The app uses the pooled WebSocket driver so it can run real transactions.
+- Drizzle ORM. Schema in `src/db/schema.ts`, SQL migrations in `drizzle/`.
+- Better Auth (email and password for now), storing users and sessions in the same database. Config in `src/lib/auth.ts`.
+- Zod for input validation
+- Vitest for unit tests (`src/**/*.test.ts`), Playwright for end-to-end tests (`e2e/`), driving the Edge that ships with Windows
+- Animation is plain CSS so far. Motion is agreed for later if CSS is not enough; it is not installed.
 
 Next.js 16 differs from older versions. Follow @AGENTS.md: read the matching guide in `node_modules/next/dist/docs/` before writing Next.js code.
 
@@ -51,9 +51,25 @@ Package manager is npm. Keep this list current as scripts are added.
 - Lint: `npm run lint`
 - Typecheck: `npm run typecheck`
 - Regenerate the logo: `node design/logo/generate.mjs` (add `--preview` for PNGs; needs `npm i --no-save sharp`)
-- Unit tests: _not set up yet_
-- End-to-end tests: _not set up yet_
-- Database migrate: _not set up yet_
+- Unit tests: `npm test`
+- End-to-end tests: `npm run test:e2e` (starts the dev server if it is not running)
+- After changing `src/db/schema.ts`: `npm run db:generate`, review the SQL in `drizzle/`, then `npm run db:migrate`
+- Browse the database: `npm run db:studio`
+- Fetch database settings from Vercel: `npx vercel env pull .env.local` (the CLI then appends `.env*` to `.gitignore`, which would hide `.env.example`: undo that with `git checkout -- .gitignore`)
+
+## Environment
+
+- `.env.local` is written by `vercel env pull` and holds the database settings. It is overwritten on every pull.
+- `.env.development.local` and `.env.production.local` hold the local auth secret. They survive a pull.
+- `.env.example` lists every variable the app needs, with empty values. `src/lib/env.ts` checks them at startup.
+- There is one database for local work, previews and production. End-to-end tests therefore run against it: they only create accounts ending in `@kubbe.test` and delete them afterwards. Move local work to its own Neon branch before real users arrive.
+
+## Where things live
+
+- `src/app`: screens. `(auth)` is sign in and sign up, `onboarding` is create or join, `join/[code]` is the invite link, `home` is the household.
+- `src/lib/session.ts`: `requireUser()` and `requireHousehold()`. Every screen and action that touches household data starts with `requireHousehold()` and uses the household id it returns.
+- `src/lib/households.ts`: creating, joining and listing. Database rules live here, not in the screens.
+- `src/components/ui/form.tsx`: `Field`, `SubmitButton`, `FormError`. Forms post to server actions and get errors back through `useActionState`.
 
 ## Rules that must hold
 
@@ -100,6 +116,10 @@ On `fjord` and `spruce` use `paper` for text and lines; on `ochre` use `ink`.
 - A simplified cut is still needed for sizes under about 64 px.
 
 **Check drawings by looking at them.** Never present an illustration or a screen without rendering it and viewing the result first. Render SVG to PNG (for example with `sharp`), and screenshot real pages and animation frames with headless Edge: `msedge --headless=new --window-size=500,900 --virtual-time-budget=<ms> --screenshot=<file> <url>` (Edge will not go narrower than about 500 px).
+
+**Screens that read the session.** Cache Components is on, so anything that reads cookies must sit inside a Suspense boundary (the root layout has one). Each such page also sets `export const instant = false`, which tells Next.js the page is allowed to wait for the server. Without it the dev server reports an error on every load.
+
+**Do not stack conflicting Tailwind classes.** `text-lg text-3xl` does not resolve to the last one; the order in the built CSS decides, and it put `text-lg` last. Give a component a named look to choose between instead (see `Field`).
 
 **No CSS Modules.** The Tailwind rule in `next.config.ts` treats every `.css` file as global, so `*.module.css` imports come back empty and the styles silently do not apply. Use Tailwind utilities, or a plain `.css` file with prefixed class names (see `src/components/logo/kubbe-logo.css`).
 
