@@ -1,30 +1,31 @@
+import Link from "next/link";
 import { KubbeLogo } from "@/components/logo/kubbe-logo";
 
-// Placeholder until the real screens exist. It also shows the design tokens in use.
-const rooms = [
-  { name: "Shower", className: "bg-fjord text-paper" },
-  { name: "Laundry", className: "bg-ochre text-ink" },
-  { name: "Cleaning", className: "bg-spruce text-paper" },
-];
+const focusRing = "outline-none focus-visible:ring-4 focus-visible:ring-fjord/35";
 
-export default function Home() {
+export default function FrontPage() {
   return (
     <main className="mx-auto flex min-h-dvh max-w-md flex-col justify-center gap-6 p-6">
       <KubbeLogo animate label="" className="mx-auto max-w-72" />
       <h1 className="type-display text-7xl">kubbe</h1>
       <p className="text-lg">
-        Shower, laundry and cleaning for people who share a home. Coming soon.
+        Book the shower and the washing machine, and share the cleaning, with the people you live
+        with.
       </p>
-      <ul className="flex flex-col gap-2">
-        {rooms.map((room) => (
-          <li
-            key={room.name}
-            className={`type-display rounded-xl px-4 py-3 text-3xl ${room.className}`}
-          >
-            {room.name}
-          </li>
-        ))}
-      </ul>
+      <div className="flex flex-col gap-3 pt-2">
+        <Link
+          href="/sign-up"
+          className={`flex h-14 items-center justify-center rounded-full bg-ink text-lg font-bold text-paper ${focusRing}`}
+        >
+          Create account
+        </Link>
+        <Link
+          href="/sign-in"
+          className={`flex h-14 items-center justify-center rounded-full border-2 border-ink text-lg font-bold ${focusRing}`}
+        >
+          Sign in
+        </Link>
+      </div>
     </main>
   );
 }
