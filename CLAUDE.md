@@ -66,13 +66,31 @@ Package manager is npm. Keep this list current as scripts are added.
 
 Mobile first: design every screen for a phone, then widen.
 
-> Status: **second direction proposed, awaiting approval.** Record the approved tokens here.
+Approved 2026-11-15, except the logo, which is still being drawn. Tokens live in `src/app/globals.css`.
 
-Feedback so far (2026-11-15):
+**Colour means room.** Muted colours taken from Norwegian house paint. Bright, saturated or neon colours were rejected as AI-looking; do not drift back to them.
 
-- Bright, saturated, neon-like colours read as AI-made. Use muted, grounded colours that feel authentic.
-- Drawing must be clearly visible: hand-drawn line illustrations that draw themselves, not only a thin outline effect.
-- The logo is a carved wooden hand holding a fish (a trout), as a line drawing that draws itself. Draw it fresh; do not use the photo from the old project.
+| Token | Hex | Use |
+|---|---|---|
+| `paper` | `#F5F4EF` | Background |
+| `ink` | `#1E2A44` | Text and drawn lines (never pure black) |
+| `ink-soft` | `#6B7385` | Secondary text |
+| `fjord` | `#2E5270` | Shower |
+| `ochre` | `#D2A24C` | Laundry |
+| `spruce` | `#476B52` | Cleaning |
+| `barn` | `#A6402F` | Happening right now, warnings |
+
+On `fjord` and `spruce` use `paper` for text and lines; on `ochre` use `ink`.
+
+**Type.** Times and headlines use the `type-display` utility (Archivo, condensed, weight 800). Everything else is Schibsted Grotesk.
+
+**Drawing.** Illustrations are hand-drawn line art with round caps and slightly uneven strokes, one per room (shower head, washing machine, broom), and they draw themselves once when they appear.
+
+**Booking a slot** looks like signing a paper sheet: tapping a free slot draws a pen circle around the time, then a squiggle under your name. Cancelling runs it backwards.
+
+**Free slots must look tappable.** A free slot shows a filled `ink` "Book" button and a dotted circle around the time where the pen stroke will land. Never rely on the word "Free" alone.
+
+**Logo.** A jointed wooden hand holding a fish (a trout), as a line drawing that draws itself. It must read clearly as a wooden hand: palm, thumb, segmented fingers, wrist joint. Draw it fresh; do not use the photo from the old project. Not final yet.
 
 Standing brief:
 
