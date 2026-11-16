@@ -167,6 +167,26 @@ Standing brief:
 - Plan first for anything bigger than a small change, and get approval before writing app code.
 - Sentence case in the UI. Write errors as what happened and what to do next.
 
+## Second round of features (agreed 2026-11-16)
+
+The owner asked for these after the MVP. Tick each off here as it ships; the answers below are his.
+
+- [ ] **Several showers, washers and dryers.** An admin adds and removes them; booking screens get a switcher.
+- [ ] **Navigation.** Tabs become Home, Shower, Laundry, Cleaning, Flat. "Flat" is a hub for everything else (dinner, happenings, shopping, expenses, noticeboard, people and settings).
+- [ ] **Noticeboard**, "like a virtual whiteboard": anyone writes a note. A note can also be a to-do, assigned to a person or to nobody, and ticked off.
+- [ ] **Shopping list** for the flat. Dinner ingredients that need buying land here.
+- [ ] **Expenses**, only if the link to shopping is truly logical: tick off what you bought, enter what you paid, and it becomes an expense split between people. Balances show who owes whom. Drop it rather than ship something confusing.
+- [ ] **Happenings.** Suggest something social with a time and place; roommates answer "I'm in" or not. Idea from the older project's calendar.
+- [ ] **Dinners.** Common dinners on fixed weekdays and one-off dates, with the roommates taking part. The dish is chosen by **suggest and vote**. Cooking is **volunteered each time**, not rotated. Each ingredient is either "we have it" or claimed by someone who will buy it. Someone can also volunteer to clean up after.
+- [ ] **AI dinner ideas with Claude.** Needs `ANTHROPIC_API_KEY`, which the owner adds himself. Without the key the app falls back to a built-in list of dishes, so nothing depends on it.
+- [ ] **Profiles.** A drawn avatar picked from a set (no photo upload, it fits the drawing style and needs no file storage), a bio, a few fun questions, and what the person does not eat (used for dinner ideas). Roommates can view each other's profile.
+- [ ] **Personal dashboard.** Home shows what you, specifically, need to do: your bookings, cleaning turns, dinner duties, to-dos assigned to you, unanswered happenings, money owed.
+- [ ] **Cleaning covers chores, not only rooms** (emptying the dishwasher, taking out the trash). The rota already allows any name and a daily rhythm; the wording and suggestions should say so.
+
+Already true: several admins are possible ("Make admin" under Household).
+
+Design for all of it: simple, animated, drawn. New areas get a drawing of their own and reuse the pen strokes (tick, strike, circle). No new bright colours: the new areas live on paper with ink, not on a fourth and fifth room colour.
+
 ## Open items
 
 Agreed or suggested, not done yet. Remove each when it ships.
