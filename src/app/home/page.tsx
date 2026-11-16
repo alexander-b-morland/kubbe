@@ -36,7 +36,7 @@ export default async function HomePage() {
         <p className="type-display text-6xl tracking-widest" data-testid="join-code">
           {formatJoinCode(household.joinCode)}
         </p>
-        <ShareCode code={household.joinCode} householdName={household.name} />
+        <ShareCode code={household.joinCode} />
       </section>
 
       <section aria-labelledby="members-heading" className="flex flex-col gap-3">

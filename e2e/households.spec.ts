@@ -24,7 +24,7 @@ test.afterAll(async () => {
 
 test("create a household, invite a roommate by link, sign back in", async ({ browser }) => {
   // --- Ida creates an account and a household ---
-  const idaContext = await browser.newContext();
+  const idaContext = await browser.newContext({ permissions: ["clipboard-read", "clipboard-write"] });
   const ida = await idaContext.newPage();
   await ida.goto("/");
   await ida.getByRole("link", { name: "Create account" }).click();
@@ -45,6 +45,11 @@ test("create a household, invite a roommate by link, sign back in", async ({ bro
   await expect(ida.getByText("Just you so far")).toBeVisible();
   const code = (await ida.getByTestId("join-code").innerText()).replace(/\s/g, "");
   expect(code).toMatch(/^[A-HJ-NP-Z2-9]{6}$/);
+
+  // Sharing copies the invite link and says so.
+  await ida.getByRole("button", { name: "Share invite link" }).click();
+  await expect(ida.getByRole("button", { name: "Link copied" })).toBeVisible();
+  expect(await ida.evaluate(() => navigator.clipboard.readText())).toBe(`http://localhost:3000/join/${code}`);
   await ida.screenshot({ path: "test-results/shots/2-home-alone.png", fullPage: true, caret: "initial" });
 
   // --- Knut opens the invite link without an account ---
