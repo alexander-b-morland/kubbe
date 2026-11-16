@@ -93,3 +93,16 @@ export function isTimeZone(value: unknown): value is string {
     return false;
   }
 }
+
+/** "just now", "5 min ago", "3 h ago", "yesterday", "4 days ago", then the date. */
+export function timeAgo(then: Date, now: Date, timeZone: string): string {
+  const minutes = Math.floor((now.getTime() - then.getTime()) / 60_000);
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes} min ago`;
+  const days = daysBetween(dayInZone(then, timeZone), dayInZone(now, timeZone));
+  if (days === 0) return `${Math.floor(minutes / 60)} h ago`;
+  if (days === 1) return "yesterday";
+  if (days < 7) return `${days} days ago`;
+  const { dayOfMonth, monthShort } = describeDay(dayInZone(then, timeZone));
+  return `${dayOfMonth} ${monthShort}`;
+}
