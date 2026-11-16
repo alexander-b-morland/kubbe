@@ -74,9 +74,14 @@ test("rooms go round between roommates, and turns can be done or taken over", as
   // The rotation only takes Knut in from the next round: he is next for the bathroom.
   await expect(turn(ida, "Bathroom")).toContainText("Next: Knut");
 
-  // Knut offers to take the kitchen now.
-  await knut.getByRole("button", { name: "Take over Kitchen" }).click();
+  // The admin deals this round out again, now that there are two of them.
+  const redeal = ida.getByTestId("redeal");
+  await redeal.getByRole("button", { name: "Deal turns out again" }).click();
+  await redeal.getByRole("button", { name: "Deal this round's turns out again?" }).click();
+  await expect(redeal.getByRole("status")).toHaveText("Dealt out again.");
+  await knut.reload();
   await expect(headline(knut)).toHaveText("Your turn: Kitchen");
+  await expect(knut.getByTestId("redeal")).toHaveCount(0);
 
   await ida.reload();
   await expect(headline(ida)).toHaveText("Your turn: Bathroom");
@@ -116,6 +121,8 @@ test("rooms go round between roommates, and turns can be done or taken over", as
   // --- An admin changes and removes rooms ---
   const rooms = ida.getByRole("region", { name: "Rooms" });
   await rooms.locator("summary", { hasText: "Bathroom" }).click();
+  // Nothing to save until something is changed.
+  await expect(rooms.getByRole("button", { name: "Save", exact: true })).toHaveCount(0);
   await rooms.getByLabel("How often").first().selectOption("14");
   await rooms.getByRole("button", { name: "Save", exact: true }).click();
   await expect(rooms.locator("summary", { hasText: "Bathroom" })).toContainText("Every 2 weeks");

@@ -75,8 +75,11 @@ test("an admin sets the rules, then washes and dries", async ({ browser }) => {
   // --- Rules: switch the dryer on, make shower slots 30 minutes ---
   await tab(ida, "Household").click();
   await expect(ida).toHaveURL(/\/settings$/);
+  // Settings that already have a value show no Save button until something changes.
+  await expect(ida.getByRole("button", { name: /^Save/ })).toHaveCount(0);
   const dryer = ida.getByTestId("resource-dryer");
   await dryer.locator("summary").click();
+  await expect(dryer.getByRole("button", { name: "Save", exact: true })).toHaveCount(0);
   await dryer.getByLabel("Switched on").check();
   await dryer.getByRole("button", { name: "Save", exact: true }).click();
   await expect(dryer.getByRole("status")).toHaveText("Saved");
@@ -150,9 +153,17 @@ test("an admin sets the rules, then washes and dries", async ({ browser }) => {
 
   // --- You: change your name; replace the join code ---
   const you = knut.getByRole("region", { name: "You" });
+  await expect(you.getByRole("button", { name: "Save", exact: true })).toHaveCount(0);
   await you.getByLabel("Your name").fill("Knut B");
   await you.getByRole("button", { name: "Save", exact: true }).click();
   await expect(knut.getByTestId("member-Knut B")).toContainText("(you)");
+
+  // Picking a time zone saves it, with no button.
+  const details = knut.getByRole("region", { name: "Name and time zone" });
+  await details.getByLabel("Time zone").selectOption("Europe/Oslo");
+  await expect(details.getByRole("status")).toHaveText("Saved");
+  await expect(details.getByLabel("Time zone")).toHaveValue("Europe/Oslo");
+  await expect(details.getByRole("button", { name: /^Save/ })).toHaveCount(0);
 
   // Replacing the code asks first, and the old link is dead afterwards.
   const replace = knut.getByTestId("replace-code");
