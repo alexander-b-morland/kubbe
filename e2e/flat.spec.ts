@@ -159,3 +159,53 @@ test("shopping leads to expenses, and expenses to being square", async ({ browse
   await knut.reload();
   await expect(headline(knut)).toHaveText("You owe 49.75 kr");
 });
+
+test("a happening collects who is in", async ({ browser }) => {
+  const { ida, knut } = await twoRoommates(browser);
+  const cards = (page: Page) => page.getByTestId("happening").filter({ visible: true });
+
+  // --- Ida suggests a film night ---
+  await ida.goto("/flat");
+  await ida.getByRole("link", { name: /Happenings/ }).click();
+  await expect(headline(ida)).toHaveText("Nothing planned");
+
+  // Without a title it is refused with a reason.
+  await ida.getByRole("button", { name: "Suggest it" }).click();
+  await expect(ida.getByTestId("form-error").filter({ visible: true })).toContainText("Say what the plan is");
+
+  const inAWeek = new Date(Date.now() + 7 * 86_400_000).toISOString().slice(0, 10);
+  await ida.getByLabel("What's the plan").fill("Film night");
+  await ida.getByLabel("Day").fill(inAWeek);
+  await ida.getByLabel("Time").fill("19:30");
+  await ida.getByLabel("Where").fill("Our living room");
+  await ida.getByRole("button", { name: "Suggest it" }).click();
+  await expect(headline(ida)).toHaveText("Film night");
+  await expect(cards(ida)).toHaveCount(1);
+  // Whoever suggests it is in.
+  await expect(cards(ida).first()).toHaveAttribute("data-reply", "in");
+  await expect(cards(ida).first()).toContainText("19:30, Our living room");
+
+  // --- Knut has not answered, then says he is in ---
+  await knut.goto("/happenings");
+  await expect(cards(knut).first()).toHaveAttribute("data-reply", "unanswered");
+  await expect(cards(knut).first()).toContainText("Ida is in");
+  // He did not suggest it and is not an admin, so he cannot call it off.
+  await expect(knut.getByRole("button", { name: "Call off Film night" })).toHaveCount(0);
+  await knut.getByRole("button", { name: "I'm in for Film night" }).click();
+  await expect(cards(knut).first()).toHaveAttribute("data-reply", "in");
+  await expect(cards(knut).first()).toContainText("You and Ida are in");
+  await knut.screenshot(shot("h1-happenings"));
+
+  // --- He changes his mind ---
+  await knut.getByRole("button", { name: "I can't make Film night" }).click();
+  await expect(cards(knut).first()).toHaveAttribute("data-reply", "out");
+  await expect(cards(knut).first()).toContainText("You can't make it.");
+
+  // --- Ida calls it off. It asks first. ---
+  await ida.reload();
+  await expect(cards(ida).first()).toContainText("You are in");
+  await ida.getByRole("button", { name: "Call off Film night" }).click();
+  await expect(cards(ida)).toHaveCount(1);
+  await ida.getByRole("button", { name: "Call off Film night?" }).click();
+  await expect(headline(ida)).toHaveText("Nothing planned");
+});
