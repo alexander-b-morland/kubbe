@@ -9,8 +9,8 @@ export default function FrontPage() {
       <KubbeLogo animate label="" className="mx-auto max-w-72" />
       <h1 className="type-display text-7xl">kubbe</h1>
       <p className="text-lg">
-        Book the shower and the washing machine, and share the cleaning, with the people you live
-        with.
+        Take back your shower time, your slot with the washing machine, and make your roommates
+        clean up the common areas. All with kubbe.
       </p>
       <div className="flex flex-col gap-3 pt-2">
         <Link

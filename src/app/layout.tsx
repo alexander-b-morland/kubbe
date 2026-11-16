@@ -22,7 +22,7 @@ const archivo = Archivo({
 export const metadata: Metadata = {
   title: { default: "Kubbe", template: "%s | Kubbe" },
   description:
-    "Book the shower and the washing machine, and share the cleaning, with the people you live with.",
+    "Take back your shower time, your slot with the washing machine, and make your roommates clean up the common areas. All with kubbe.",
 };
 
 export const viewport: Viewport = {
