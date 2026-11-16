@@ -21,6 +21,8 @@ const archivo = Archivo({
 
 export const metadata: Metadata = {
   title: { default: "Kubbe", template: "%s | Kubbe" },
+  applicationName: "Kubbe",
+  appleWebApp: { capable: true, title: "Kubbe", statusBarStyle: "default" },
   description:
     "Take back your shower time, your slot with the washing machine, and make your roommates clean up the common areas. All with kubbe.",
 };
