@@ -111,6 +111,12 @@ test("book the shower, with the rules holding between two roommates", async ({ b
   await expect(slot(ida, "18:00")).toHaveAttribute("data-state", "blocked");
   await expect(slot(ida, "18:00")).toContainText("You've used your slots");
 
+  // --- Home tells Knut about his next slot ---
+  await knut.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Home" }).click();
+  await expect(knut.getByTestId("band-shower")).toContainText("Your slot: 07:20 tomorrow");
+  await knut.screenshot({ ...shot("s5-home"), animations: "disabled" });
+  await knut.goBack();
+
   // --- Cancelling gives the slot back ---
   await ida.getByRole("button", { name: "Cancel 07:00" }).click();
   await expect(slot(ida, "07:00")).toHaveAttribute("data-state", "free");

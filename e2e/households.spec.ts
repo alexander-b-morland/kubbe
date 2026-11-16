@@ -42,7 +42,6 @@ test("create a household, invite a roommate by link, sign back in", async ({ bro
   await ida.getByRole("button", { name: "Create household" }).click();
   await expect(ida).toHaveURL(/\/home$/);
   await expect(ida.getByRole("heading", { level: 1 })).toHaveText("Kollektivet");
-  await expect(ida.getByText("Just you so far")).toBeVisible();
   const code = (await ida.getByTestId("join-code").innerText()).replace(/\s/g, "");
   expect(code).toMatch(/^[A-HJ-NP-Z2-9]{6}$/);
 
@@ -65,13 +64,18 @@ test("create a household, invite a roommate by link, sign back in", async ({ bro
   await knut.getByRole("button", { name: "Join household" }).click();
   await expect(knut).toHaveURL(/\/home$/);
   await expect(knut.getByText("2 people live here")).toBeVisible();
+  // Once there are two of you, the invite card makes way for what is going on.
+  await expect(knut.getByTestId("join-code")).toHaveCount(0);
+  await expect(knut.getByTestId("band-shower")).toBeVisible();
+  await knut.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Household" }).click();
   await expect(knut.getByText("Knut (you)")).toBeVisible();
   await knut.screenshot({ path: "test-results/shots/5-home-two.png", fullPage: true, caret: "initial", animations: "disabled" });
 
   // Ida sees Knut after a reload, and only Ida is admin.
   await ida.reload();
   await expect(ida.getByText("2 people live here")).toBeVisible();
-  await expect(ida.getByText("Admin")).toHaveCount(1);
+  await ida.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Household" }).click();
+  await expect(ida.getByText("Admin", { exact: true })).toHaveCount(1);
 
   // --- Knut signs out and back in ---
   await knut.getByRole("button", { name: "Sign out" }).click();
