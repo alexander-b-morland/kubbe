@@ -2,9 +2,22 @@ import type { CSSProperties } from "react";
 import "./room-art.css";
 
 export type Room = "shower" | "laundry" | "cleaning";
+/** Rooms, plus the two drawings used only in navigation. */
+export type Art = Room | "home" | "people";
 
 // Hand-drawn strokes in a 120 x 120 space, in the order a pen would make them.
-const strokes: Record<Room, { d: string; w: number }[]> = {
+const strokes: Record<Art, { d: string; w: number }[]> = {
+  home: [
+    { d: "M16 58C30 46 46 32 60 18C74 32 90 46 104 58", w: 6 },
+    { d: "M30 50C29 68 29 84 30 102C50 104 70 104 90 102C91 84 91 68 90 50", w: 6 },
+    { d: "M52 102C51 92 51 82 52 72C58 71 63 71 68 72C69 82 69 92 68 102", w: 5 },
+  ],
+  people: [
+    { d: "M57 40a13 13 0 1 1-26 0a13 13 0 1 1 26 0", w: 6 },
+    { d: "M16 100C17 76 30 64 44 64C58 64 71 76 72 100", w: 6 },
+    { d: "M98 48a10 10 0 1 1-20 0a10 10 0 1 1 20 0", w: 5 },
+    { d: "M78 68C84 64 92 64 98 68C104 74 107 86 108 100", w: 5 },
+  ],
   shower: [
     { d: "M10 14C9 22 9 32 10 42", w: 5 },
     { d: "M10 28C34 26 58 24 72 30C81 34 84 42 84 50", w: 5 },
@@ -38,7 +51,7 @@ const strokes: Record<Room, { d: string; w: number }[]> = {
 };
 
 type Props = {
-  room: Room;
+  room: Art;
   /** Draw the strokes one after another. */
   animate?: boolean;
   /** Seconds to wait before the first stroke, to stagger several drawings. */

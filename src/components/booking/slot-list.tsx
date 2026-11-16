@@ -22,6 +22,8 @@ type ActionResult = { error?: string };
 
 type Props = {
   rows: SlotRow[];
+  /** Class for the row of a slot you have, in the room's colour. */
+  mineClassName?: string;
   book: (startsAt: string) => Promise<ActionResult>;
   cancel: (bookingId: string) => Promise<ActionResult>;
 };
@@ -32,7 +34,7 @@ type ShownRow = SlotRow & { leaving?: boolean };
 const focusRing = "outline-none focus-visible:ring-4 focus-visible:ring-fjord/35";
 
 /** The ladder of slots for one day. Booking is like signing a sheet: your time gets circled. */
-export function SlotList({ rows, book, cancel }: Props) {
+export function SlotList({ rows, mineClassName = "bg-fjord/10", book, cancel }: Props) {
   const [, startTransition] = useTransition();
   const [shown, change] = useOptimistic<ShownRow[], Change>(rows, (current, { key, to }) =>
     current.map((row) =>
@@ -74,7 +76,7 @@ export function SlotList({ rows, book, cancel }: Props) {
             key={row.key}
             data-testid={`slot-${row.time}`}
             data-state={row.leaving ? "leaving" : row.state}
-            className={`border-b-2 border-ink/15 transition-colors duration-300 ${mine && !row.leaving ? "bg-fjord/10" : ""}`}
+            className={`border-b-2 border-ink/15 transition-colors duration-300 ${mine && !row.leaving ? mineClassName : ""}`}
           >
             <div className="flex min-h-16 items-center gap-4 px-3 py-2">
               <span className="type-display relative text-3xl tabular-nums">

@@ -30,6 +30,23 @@ export async function findResource(householdId: string, kind: Resource["kind"]) 
   return found ?? null;
 }
 
+/** One resource by id, only if it belongs to this household and is switched on. */
+export async function findResourceById(householdId: string, resourceId: string) {
+  const [found] = await db
+    .select()
+    .from(resource)
+    .where(and(eq(resource.id, resourceId), eq(resource.householdId, householdId), eq(resource.enabled, true)))
+    .limit(1);
+  return found ?? null;
+}
+
+/** Every resource of the household, switched on or not, in a stable order. */
+export async function listResources(householdId: string) {
+  const order = { shower: 0, washer: 1, dryer: 2 } as const;
+  const rows = await db.select().from(resource).where(eq(resource.householdId, householdId));
+  return rows.sort((x, y) => order[x.kind] - order[y.kind] || x.createdAt.getTime() - y.createdAt.getTime());
+}
+
 const dayRange = (day: string, timeZone: string) =>
   [instantInZone(day, 0, timeZone), instantInZone(addDays(day, 1), 0, timeZone)] as const;
 
