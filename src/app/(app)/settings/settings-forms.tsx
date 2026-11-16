@@ -167,38 +167,27 @@ export function TimeZoneForm({ timeZone, zones, action }: { timeZone: string; zo
   );
 }
 
-export function ProfileForm({
-  name,
-  colour,
-  colours,
-  colourNames,
+export function ExtrasForm({
+  extras,
+  enabled,
   action,
 }: {
-  name: string;
-  colour: string;
-  colours: readonly string[];
-  colourNames: readonly string[];
+  extras: readonly { key: string; name: string; blurb: string }[];
+  enabled: readonly string[];
   action: Action;
 }) {
   const [state, formAction] = useActionState(action, undefined);
   return (
-    <SavableForm action={formAction} state={state} resetKey={`${name}-${colour}`}>
-      <Field label="Your name" name="name" defaultValue={name} maxLength={60} autoComplete="given-name" />
-      <fieldset className="flex flex-col gap-2">
-        <legend className="pb-2 text-sm font-semibold">Your colour</legend>
-        <div className="flex flex-wrap gap-3">
-          {colours.map((option, index) => (
-            <label key={option} className="relative">
-              <input type="radio" name="colour" value={option} defaultChecked={option === colour} className="peer sr-only" />
-              <span
-                className="block size-11 rounded-full outline-offset-2 peer-checked:outline-4 peer-checked:outline-ink peer-focus-visible:ring-4 peer-focus-visible:ring-fjord peer-focus-visible:ring-offset-4 peer-focus-visible:ring-offset-paper"
-                style={{ backgroundColor: option }}
-              />
-              <span className="sr-only">{colourNames[index] ?? `Colour ${index + 1}`}</span>
-            </label>
-          ))}
-        </div>
-      </fieldset>
+    <SavableForm action={formAction} state={state} resetKey={enabled.join(",")}>
+      {extras.map((extra) => (
+        <label key={extra.key} className="flex flex-col gap-1">
+          <span className="flex items-center gap-3 text-lg font-semibold">
+            <input type="checkbox" name={extra.key} defaultChecked={enabled.includes(extra.key)} className="size-6 accent-ink" />
+            {extra.name}
+          </span>
+          <span className="text-sm text-ink-soft">{extra.blurb}</span>
+        </label>
+      ))}
     </SavableForm>
   );
 }

@@ -1,7 +1,9 @@
+import { sql } from "drizzle-orm";
 import {
   boolean,
   index,
   integer,
+  jsonb,
   pgEnum,
   pgTable,
   primaryKey,
@@ -85,6 +87,13 @@ export const household = pgTable("household", {
   joinCode: text("join_code").notNull().unique(),
   /** IANA zone name. All slot maths happens in this zone. */
   timeZone: text("time_zone").notNull().default("Europe/Oslo"),
+  /** The extras this household has switched on. See src/lib/extras.ts. */
+  extras: text("extras")
+    .array()
+    .notNull()
+    .default(sql`'{dinner,happenings,shopping,expenses,board}'::text[]`),
+  /** What an amount of money is followed by: "kr". */
+  currency: text("currency").notNull().default("kr"),
   createdBy: text("created_by")
     .notNull()
     .references(() => user.id),
@@ -241,6 +250,249 @@ export const rateLimit = pgTable("rate_limit", {
   count: integer("count").notNull(),
   resetsAt: timestamp("resets_at", { withTimezone: true }).notNull(),
 });
+
+// ---------------------------------------------------------------------------
+// Profiles. One per person, wherever they live.
+// ---------------------------------------------------------------------------
+
+export const profile = pgTable("profile", {
+  userId: text("user_id")
+    .primaryKey()
+    .references(() => user.id, { onDelete: "cascade" }),
+  /** One of the drawn avatars in src/components/avatar. */
+  avatar: text("avatar").notNull().default("trout"),
+  bio: text("bio").notNull().default(""),
+  /** What this person does not eat. Used when suggesting dinners. */
+  avoids: text("avoids").notNull().default(""),
+  /** Answers to the fun questions, by question key. */
+  answers: jsonb("answers").$type<Record<string, string>>().notNull().default({}),
+});
+
+// ---------------------------------------------------------------------------
+// Noticeboard. A note is free text. A note can also be a to-do, for one person
+// or for anyone, which gets ticked off.
+// ---------------------------------------------------------------------------
+
+export const note = pgTable(
+  "note",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    householdId: uuid("household_id")
+      .notNull()
+      .references(() => household.id, { onDelete: "cascade" }),
+    authorId: text("author_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    body: text("body").notNull(),
+    isTask: boolean("is_task").notNull().default(false),
+    /** Who the to-do is for. Null means anyone. */
+    assigneeId: text("assignee_id").references(() => user.id, { onDelete: "set null" }),
+    doneAt: timestamp("done_at", { withTimezone: true }),
+    doneBy: text("done_by").references(() => user.id, { onDelete: "set null" }),
+    createdAt: createdAt(),
+  },
+  (table) => [index("note_household_idx").on(table.householdId, table.createdAt)],
+);
+
+// ---------------------------------------------------------------------------
+// Money. An expense is paid by one person and shared between some. A settlement
+// (one person paying another back) is an expense whose only share is the receiver's.
+// Amounts are whole minor units (øre, cents), never fractions.
+// ---------------------------------------------------------------------------
+
+export const expense = pgTable(
+  "expense",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    householdId: uuid("household_id")
+      .notNull()
+      .references(() => household.id, { onDelete: "cascade" }),
+    paidBy: text("paid_by")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    amount: integer("amount").notNull(),
+    description: text("description").notNull(),
+    isSettlement: boolean("is_settlement").notNull().default(false),
+    createdAt: createdAt(),
+  },
+  (table) => [index("expense_household_idx").on(table.householdId, table.createdAt)],
+);
+
+export const expenseShare = pgTable(
+  "expense_share",
+  {
+    expenseId: uuid("expense_id")
+      .notNull()
+      .references(() => expense.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    amount: integer("amount").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.expenseId, table.userId] })],
+);
+
+// ---------------------------------------------------------------------------
+// Happenings. Something social, with who is in.
+// ---------------------------------------------------------------------------
+
+export const happening = pgTable(
+  "happening",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    householdId: uuid("household_id")
+      .notNull()
+      .references(() => household.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    startsAt: timestamp("starts_at", { withTimezone: true }).notNull(),
+    place: text("place").notNull().default(""),
+    details: text("details").notNull().default(""),
+    createdBy: text("created_by")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    createdAt: createdAt(),
+  },
+  (table) => [index("happening_household_idx").on(table.householdId, table.startsAt)],
+);
+
+export const happeningReply = pgTable(
+  "happening_reply",
+  {
+    happeningId: uuid("happening_id")
+      .notNull()
+      .references(() => happening.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    going: boolean("going").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.happeningId, table.userId] })],
+);
+
+// ---------------------------------------------------------------------------
+// Dinners. A dinner is on one day. Roommates say whether they are in, suggest
+// dishes, vote, and volunteer to cook and to clean up. Fixed weekdays are rules
+// that new dinners are made from.
+// ---------------------------------------------------------------------------
+
+export const dinnerRule = pgTable(
+  "dinner_rule",
+  {
+    householdId: uuid("household_id")
+      .notNull()
+      .references(() => household.id, { onDelete: "cascade" }),
+    /** 1 is Monday, 7 is Sunday. */
+    weekday: integer("weekday").notNull(),
+    /** Minutes after midnight in the household's zone. */
+    time: integer("time").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.householdId, table.weekday] })],
+);
+
+export const dinner = pgTable(
+  "dinner",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    householdId: uuid("household_id")
+      .notNull()
+      .references(() => household.id, { onDelete: "cascade" }),
+    /** YYYY-MM-DD in the household's zone. One dinner a day. */
+    day: text("day").notNull(),
+    time: integer("time").notNull(),
+    cookId: text("cook_id").references(() => user.id, { onDelete: "set null" }),
+    cleanerId: text("cleaner_id").references(() => user.id, { onDelete: "set null" }),
+    /** The dish that will be cooked, once it is settled. */
+    chosenDishId: uuid("chosen_dish_id"),
+    /** A dinner made from a weekday rule that someone then called off. */
+    cancelled: boolean("cancelled").notNull().default(false),
+    createdAt: createdAt(),
+  },
+  (table) => [uniqueIndex("dinner_one_per_day").on(table.householdId, table.day)],
+);
+
+/** Someone who said they are not coming. Everyone else in the household is in. */
+export const dinnerAbsence = pgTable(
+  "dinner_absence",
+  {
+    dinnerId: uuid("dinner_id")
+      .notNull()
+      .references(() => dinner.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+  },
+  (table) => [primaryKey({ columns: [table.dinnerId, table.userId] })],
+);
+
+export const dish = pgTable(
+  "dish",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    dinnerId: uuid("dinner_id")
+      .notNull()
+      .references(() => dinner.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    /** Null when the idea came from the suggestion helper, not a person. */
+    suggestedBy: text("suggested_by").references(() => user.id, { onDelete: "set null" }),
+    createdAt: createdAt(),
+  },
+  (table) => [index("dish_dinner_idx").on(table.dinnerId)],
+);
+
+export const dishVote = pgTable(
+  "dish_vote",
+  {
+    dishId: uuid("dish_id")
+      .notNull()
+      .references(() => dish.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+  },
+  (table) => [primaryKey({ columns: [table.dishId, table.userId] })],
+);
+
+export const dishIngredient = pgTable(
+  "dish_ingredient",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    dishId: uuid("dish_id")
+      .notNull()
+      .references(() => dish.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    /** "We already have that": nobody needs to buy it. */
+    atHome: boolean("at_home").notNull().default(false),
+  },
+  (table) => [index("dish_ingredient_dish_idx").on(table.dishId)],
+);
+
+// ---------------------------------------------------------------------------
+// Shopping. One list per household. An item can come from a dinner's chosen dish.
+// Someone can say "I'll buy it"; whoever buys it ticks it off; and what was paid
+// for a batch of ticked items becomes an expense.
+// ---------------------------------------------------------------------------
+
+export const shoppingItem = pgTable(
+  "shopping_item",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    householdId: uuid("household_id")
+      .notNull()
+      .references(() => household.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    addedBy: text("added_by").references(() => user.id, { onDelete: "set null" }),
+    /** Who said they will buy it. */
+    claimedBy: text("claimed_by").references(() => user.id, { onDelete: "set null" }),
+    boughtAt: timestamp("bought_at", { withTimezone: true }),
+    boughtBy: text("bought_by").references(() => user.id, { onDelete: "set null" }),
+    /** Set once what was paid for it has been logged. */
+    expenseId: uuid("expense_id").references(() => expense.id, { onDelete: "set null" }),
+    /** Set when the item is an ingredient of a dinner's dish. */
+    ingredientId: uuid("ingredient_id").references(() => dishIngredient.id, { onDelete: "cascade" }),
+    createdAt: createdAt(),
+  },
+  (table) => [index("shopping_item_household_idx").on(table.householdId, table.createdAt)],
+);
 
 export type Household = typeof household.$inferSelect;
 export type Membership = typeof membership.$inferSelect;

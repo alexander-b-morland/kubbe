@@ -20,6 +20,12 @@ async function signUp(page: Page, name: string, who: string) {
 // Next.js keeps the previous screen in the page, hidden, so only look at what is visible.
 const slot = (page: Page, time: string) => page.getByTestId(`slot-${time}`).filter({ visible: true });
 const tab = (page: Page, name: string) => page.getByRole("navigation", { name: "Main" }).getByRole("link", { name });
+/** The Household screen sits behind the Flat tab. */
+async function openHousehold(page: Page) {
+  await tab(page, "Flat").click();
+  await page.getByRole("navigation", { name: "Settings" }).filter({ visible: true }).getByRole("link", { name: /Household/ }).click();
+  await expect(page).toHaveURL(/\/settings$/);
+}
 /**
  * Press "Leave household", then the question it turns into. Right after a reload the page
  * may not be interactive yet, so the first press is retried until the question shows.
@@ -73,8 +79,7 @@ test("an admin sets the rules, then washes and dries", async ({ browser }) => {
   await expect(ida).toHaveURL(/\/home$/);
 
   // --- Rules: switch the dryer on, make shower slots 30 minutes ---
-  await tab(ida, "Household").click();
-  await expect(ida).toHaveURL(/\/settings$/);
+  await openHousehold(ida);
   // Settings that already have a value show no Save button until something changes.
   await expect(ida.getByRole("button", { name: /^Save/ })).toHaveCount(0);
   const dryer = ida.getByTestId("resource-dryer");
@@ -113,7 +118,7 @@ test("an admin sets the rules, then washes and dries", async ({ browser }) => {
   // The second shower has its own, default rules: 20-minute slots.
   await ida.getByRole("button", { name: "Book 06:20" }).click();
   await expect(ida.getByRole("button", { name: "Cancel 06:20" })).toBeVisible();
-  await tab(ida, "Household").click();
+  await openHousehold(ida);
   await second.locator("summary").click();
   await second.getByRole("button", { name: "Remove Shower 2", exact: true }).click();
   await second.getByRole("button", { name: "Remove Shower 2 and its bookings?" }).click();
@@ -148,7 +153,7 @@ test("an admin sets the rules, then washes and dries", async ({ browser }) => {
   await ida.screenshot(shot("l3-dryer"));
 
   // --- People: a member cannot change rules; the last admin cannot leave ---
-  await tab(ida, "Household").click();
+  await openHousehold(ida);
   const code = (await ida.getByTestId("join-code").innerText()).replace(/\s/g, "");
   const knut = await (await browser.newContext()).newPage();
   await knut.goto(`/join/${code}`);
@@ -157,7 +162,7 @@ test("an admin sets the rules, then washes and dries", async ({ browser }) => {
   await signUp(knut, "Knut", "knut");
   await knut.getByRole("button", { name: "Join Kollektivet" }).click();
   await expect(knut).toHaveURL(/\/home$/);
-  await tab(knut, "Household").click();
+  await openHousehold(knut);
   await expect(knut.getByText("Only an admin can change these.")).toBeVisible();
   await expect(knut.getByTestId("resource-shower")).toHaveCount(0);
   await expect(knut.getByRole("button", { name: "Make Ida admin" })).toHaveCount(0);
@@ -173,10 +178,26 @@ test("an admin sets the rules, then washes and dries", async ({ browser }) => {
   await expect(knut.getByTestId("resource-shower")).toBeVisible();
 
   // --- You: change your name; replace the join code ---
-  const you = knut.getByRole("region", { name: "You" });
-  await expect(you.getByRole("button", { name: "Save", exact: true })).toHaveCount(0);
-  await you.getByLabel("Your name").fill("Knut B");
-  await you.getByRole("button", { name: "Save", exact: true }).click();
+  // --- Your profile: a name, a drawn avatar, a bio and a fun answer ---
+  await knut.getByRole("region", { name: "You" }).getByRole("link", { name: "Edit your profile" }).click();
+  await expect(knut.getByRole("heading", { level: 1 })).toHaveText("Your profile");
+  await expect(knut.getByRole("button", { name: "Save", exact: true })).toHaveCount(0);
+  await knut.getByLabel("Your name").fill("Knut B");
+  await knut.getByLabel("Ghost").check({ force: true });
+  await knut.getByLabel("About you").fill("Plays the trombone. Trades dishes for coffee.");
+  await knut.getByLabel("My signature dish").fill("Taco, every Friday");
+  await knut.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(knut.getByRole("status")).toHaveText("Saved");
+  await knut.screenshot(shot("p1-profile-edit"));
+  // Ida sees it on his page.
+  await tab(ida, "Flat").click();
+  await ida.getByRole("link", { name: "Knut B" }).filter({ visible: true }).click();
+  await expect(ida.getByRole("heading", { level: 1 })).toHaveText("Knut B");
+  await expect(ida.getByText("Plays the trombone. Trades dishes for coffee.")).toBeVisible();
+  await expect(ida.getByText("Taco, every Friday")).toBeVisible();
+  await ida.screenshot(shot("p2-profile"));
+  await openHousehold(ida);
+  await openHousehold(knut);
   await expect(knut.getByTestId("member-Knut B")).toContainText("(you)");
 
   // Picking a time zone saves it, with no button.

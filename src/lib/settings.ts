@@ -209,6 +209,11 @@ export async function setMemberColour(householdId: string, userId: string, colou
   return true;
 }
 
+/** Switch the household's extras on and off. Unknown keys are dropped. */
+export async function setExtras(householdId: string, extras: string[]) {
+  await db.update(household).set({ extras }).where(eq(household.id, householdId));
+}
+
 export async function setTimeZone(householdId: string, timeZone: string) {
   if (!isTimeZone(timeZone)) return false;
   await db.update(household).set({ timeZone }).where(eq(household.id, householdId));

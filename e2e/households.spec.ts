@@ -80,14 +80,17 @@ test("create a household, invite a roommate by link, sign back in", async ({ bro
   // Once there are two of you, the invite card makes way for what is going on.
   await expect(knut.getByTestId("join-code")).toHaveCount(0);
   await expect(knut.getByTestId("band-shower")).toBeVisible();
-  await knut.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Household" }).click();
+  await knut.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Flat" }).click();
+  await expect(knut.getByRole("heading", { level: 1 })).toHaveText("The flat");
+  await knut.screenshot({ path: "test-shots/6-flat.png", fullPage: true, caret: "initial", animations: "disabled" });
+  await knut.getByRole("navigation", { name: "Settings" }).getByRole("link", { name: /Household/ }).click();
   await expect(knut.getByText("Knut (you)")).toBeVisible();
   await knut.screenshot({ path: "test-shots/5-home-two.png", fullPage: true, caret: "initial", animations: "disabled" });
 
   // Ida sees Knut after a reload, and only Ida is admin.
   await ida.reload();
   await expect(ida.getByText("You and Knut live here")).toBeVisible();
-  await ida.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Household" }).click();
+  await ida.goto("/settings");
   await expect(ida.getByText("Admin", { exact: true })).toHaveCount(1);
 
   // --- Knut signs out and back in ---

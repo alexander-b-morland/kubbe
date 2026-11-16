@@ -10,8 +10,11 @@ const tabs: { href: string; label: string; art: Art }[] = [
   { href: "/shower", label: "Shower", art: "shower" },
   { href: "/laundry", label: "Laundry", art: "laundry" },
   { href: "/cleaning", label: "Cleaning", art: "cleaning" },
-  { href: "/settings", label: "Household", art: "people" },
+  { href: "/flat", label: "Flat", art: "flat" },
 ];
+
+// Screens reached through the Flat tab keep it marked.
+const underFlat = ["/flat", "/settings", "/dinner", "/shopping", "/expenses", "/happenings", "/board", "/people", "/profile"];
 
 /** The bar at the bottom of every signed-in screen. */
 export function TabBar() {
@@ -29,7 +32,8 @@ export function TabBar() {
     >
       <ul className="mx-auto flex max-w-md">
         {tabs.map((tab) => {
-          const active = current === tab.href || current.startsWith(`${tab.href}/`);
+          const inside = (base: string) => current === base || current.startsWith(`${base}/`);
+          const active = tab.href === "/flat" ? underFlat.some(inside) : inside(tab.href);
           return (
             <li key={tab.href} className="flex-1">
               <Link

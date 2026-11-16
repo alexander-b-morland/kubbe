@@ -1,10 +1,9 @@
 "use server";
 
-import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { auth } from "@/lib/auth";
+import { EXTRA_KEYS } from "@/lib/extras";
 import type { FormState } from "@/lib/form-state";
 import { requireHousehold } from "@/lib/session";
 import {
@@ -14,7 +13,7 @@ import {
   removeResource,
   renameHousehold,
   replaceJoinCode,
-  setMemberColour,
+  setExtras,
   setMemberRole,
   setTimeZone,
   SLOT_LENGTHS,
@@ -117,6 +116,14 @@ export async function replaceJoinCodeAction(): Promise<SettingsState> {
   return { saved: true };
 }
 
+export async function setExtrasAction(_previous: SettingsState, form: FormData): Promise<SettingsState> {
+  const { household, membership } = await requireHousehold();
+  if (membership.role !== "admin") return { error: adminsOnly };
+  await setExtras(household.id, EXTRA_KEYS.filter((key) => form.get(key) === "on"));
+  refreshAll();
+  return { saved: true };
+}
+
 export async function setTimeZoneAction(_previous: SettingsState, form: FormData): Promise<SettingsState> {
   const { household, membership } = await requireHousehold();
   if (membership.role !== "admin") return { error: adminsOnly };
@@ -154,18 +161,5 @@ export async function removeMemberAction(userId: string): Promise<SettingsState>
   }
   refreshAll();
   if (leaving) redirect("/onboarding?left=1");
-  return { saved: true };
-}
-
-export async function updateProfileAction(_previous: SettingsState, form: FormData): Promise<SettingsState> {
-  const { user, household } = await requireHousehold();
-  const name = z.string().trim().min(1, "Enter your name.").max(60, "Keep your name under 60 characters.").safeParse(form.get("name"));
-  if (!name.success) return { error: name.error.issues[0].message };
-
-  // Through the auth library, so the copy of the session kept in the cookie is refreshed too.
-  if (name.data !== user.name) await auth.api.updateUser({ body: { name: name.data }, headers: await headers() });
-  const colour = String(form.get("colour") ?? "");
-  if (colour && !(await setMemberColour(household.id, user.id, colour))) return { error: "Pick one of the colours shown." };
-  refreshAll();
   return { saved: true };
 }

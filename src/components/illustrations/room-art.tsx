@@ -2,11 +2,49 @@ import type { CSSProperties } from "react";
 import "./room-art.css";
 
 export type Room = "shower" | "laundry" | "cleaning";
-/** Rooms, plus the two drawings used only in navigation. */
-export type Art = Room | "home" | "people";
+/** Rooms, plus the drawings for navigation and for the other areas of the app. */
+export type Art = Room | "home" | "people" | "flat" | "dinner" | "happening" | "shopping" | "money" | "board";
 
 // Hand-drawn strokes in a 120 x 120 space, in the order a pen would make them.
 const strokes: Record<Art, { d: string; w: number }[]> = {
+  flat: [
+    { d: "M22 104C46 103 74 103 98 104", w: 5 },
+    { d: "M34 104C33 76 33 46 34 20C50 16 70 16 86 20C87 46 87 76 86 104", w: 6 },
+    { d: "M73 64h.01", w: 9 },
+  ],
+  dinner: [
+    { d: "M44 44C38 36 50 30 44 20", w: 4 },
+    { d: "M60 46C54 38 66 32 60 22", w: 4 },
+    { d: "M76 44C70 36 82 30 76 20", w: 4 },
+    { d: "M18 58C40 55 80 55 102 58", w: 6 },
+    { d: "M24 58C24 84 34 102 60 102C86 102 96 84 96 58", w: 6 },
+    { d: "M19 66C8 66 8 78 22 77M101 66C112 66 112 78 98 77", w: 5 },
+  ],
+  happening: [
+    { d: "M60 14C40 14 30 30 32 46C34 62 50 72 60 74C70 72 86 62 88 46C90 30 80 14 60 14Z", w: 6 },
+    { d: "M55 75L60 83L65 75", w: 5 },
+    { d: "M60 83C55 92 66 98 60 110", w: 4 },
+    { d: "M98 18L98 32M91 25L105 25", w: 4 },
+    { d: "M20 76L20 88M14 82L26 82", w: 4 },
+  ],
+  shopping: [
+    { d: "M36 52C38 28 82 28 84 52", w: 5 },
+    { d: "M14 52C40 50 80 50 106 52", w: 6 },
+    { d: "M22 53C24 74 28 92 34 100C50 103 70 103 86 100C92 92 96 74 98 53", w: 6 },
+    { d: "M46 62L48 94M60 62L60 96M74 62L72 94", w: 4 },
+  ],
+  money: [
+    { d: "M32 14C31 44 31 76 32 106L42 97L52 106L62 97L72 106L82 97L88 106C89 76 89 44 88 14C70 12 50 12 32 14Z", w: 6 },
+    { d: "M44 34L76 34", w: 4 },
+    { d: "M44 50L76 50", w: 4 },
+    { d: "M44 66L64 66", w: 4 },
+  ],
+  board: [
+    { d: "M66 20a6 6 0 1 1-12 0a6 6 0 1 1 12 0", w: 5 },
+    { d: "M26 30C50 26 74 26 96 28C98 50 98 74 96 98C80 100 60 100 44 100L24 80C24 62 24 46 26 30Z", w: 6 },
+    { d: "M44 100C46 92 44 86 24 80", w: 5 },
+    { d: "M40 50L80 50M40 64L70 64", w: 4 },
+  ],
   home: [
     { d: "M16 58C30 46 46 32 60 18C74 32 90 46 104 58", w: 6 },
     { d: "M30 50C29 68 29 84 30 102C50 104 70 104 90 102C91 84 91 68 90 50", w: 6 },

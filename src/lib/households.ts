@@ -1,6 +1,6 @@
 import { count, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { household, membership, resource, user } from "@/db/schema";
+import { household, membership, profile, resource, user } from "@/db/schema";
 import { defaultResourcesFor } from "@/lib/booking/defaults";
 import { generateJoinCode } from "@/lib/join-code";
 import { pinCurrentTurns } from "@/lib/cleaning/service";
@@ -124,9 +124,11 @@ export async function listMembers(householdId: string) {
       role: membership.role,
       colour: membership.colour,
       joinedAt: membership.joinedAt,
+      avatar: profile.avatar,
     })
     .from(membership)
     .innerJoin(user, eq(membership.userId, user.id))
+    .leftJoin(profile, eq(profile.userId, user.id))
     .where(eq(membership.householdId, householdId));
   return rows.sort(
     (a, b) =>

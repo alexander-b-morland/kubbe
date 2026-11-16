@@ -1,11 +1,13 @@
 import type { Metadata } from "next";
 import { signOut } from "@/app/(auth)/actions";
+import Link from "next/link";
+import { Avatar } from "@/components/avatar/avatar";
 import { ActionButton } from "@/components/ui/action-button";
 import { listResources } from "@/lib/booking/service";
 import { clockLabel, describeSlotLength } from "@/lib/booking/status";
 import { listMembers } from "@/lib/households";
 import { formatJoinCode } from "@/lib/join-code";
-import { MEMBER_COLOUR_NAMES, MEMBER_COLOURS } from "@/lib/member-colours";
+import { EXTRAS } from "@/lib/extras";
 import { requireHousehold } from "@/lib/session";
 import { SLOT_LENGTHS } from "@/lib/settings";
 import { ShareCode } from "../home/share-code";
@@ -15,12 +17,12 @@ import {
   removeResourceAction,
   renameHouseholdAction,
   replaceJoinCodeAction,
+  setExtrasAction,
   setRoleAction,
   setTimeZoneAction,
-  updateProfileAction,
   updateResourceAction,
 } from "./actions";
-import { ProfileForm, RenameForm, ResourceForm, TimeZoneForm } from "./settings-forms";
+import { ExtrasForm, RenameForm, ResourceForm, TimeZoneForm } from "./settings-forms";
 
 // This screen depends on who is signed in, so it is rendered per request.
 export const instant = false;
@@ -75,17 +77,14 @@ export default async function SettingsPage() {
             return (
               <li key={member.userId} className="flex flex-col gap-2 border-b-2 border-ink/15 py-3" data-testid={`member-${member.name}`}>
                 <div className="flex items-center gap-3">
-                  <span
-                    aria-hidden="true"
-                    className="type-display flex size-10 shrink-0 items-center justify-center rounded-full text-xl text-paper"
-                    style={{ backgroundColor: member.colour }}
+                  <Avatar avatar={member.avatar} colour={member.colour} />
+                  <Link
+                    href={`/people/${member.userId}`}
+                    className="min-w-0 rounded text-lg font-semibold break-words underline-offset-4 outline-none hover:underline focus-visible:ring-4 focus-visible:ring-fjord"
                   >
-                    {member.name.slice(0, 1).toUpperCase()}
-                  </span>
-                  <span className="min-w-0 text-lg font-semibold break-words">
                     {member.name}
                     {self ? " (you)" : ""}
-                  </span>
+                  </Link>
                   {member.role === "admin" ? (
                     <span className="ml-auto shrink-0 rounded-full border-2 border-ink px-3 py-0.5 text-sm font-bold">Admin</span>
                   ) : null}
@@ -175,6 +174,16 @@ export default async function SettingsPage() {
         )}
       </section>
 
+      {admin ? (
+        <section aria-labelledby="extras-heading" className="flex flex-col gap-4">
+          <h2 id="extras-heading" className="type-display text-4xl">
+            Extras
+          </h2>
+          <p className="text-ink-soft">What shows up under Flat. Switching one off hides it; nothing is deleted.</p>
+          <ExtrasForm extras={EXTRAS} enabled={household.extras} action={setExtrasAction} />
+        </section>
+      ) : null}
+
       <section aria-labelledby="details-heading" className="flex flex-col gap-5">
         <h2 id="details-heading" className="type-display text-4xl">
           Name and time zone
@@ -195,13 +204,12 @@ export default async function SettingsPage() {
         <h2 id="you-heading" className="type-display text-4xl">
           You
         </h2>
-        <ProfileForm
-          name={user.name}
-          colour={membership.colour}
-          colours={MEMBER_COLOURS}
-          colourNames={MEMBER_COLOUR_NAMES}
-          action={updateProfileAction}
-        />
+        <Link
+          href="/profile"
+          className="flex min-h-11 w-fit items-center rounded font-bold underline underline-offset-4 outline-none focus-visible:ring-4 focus-visible:ring-fjord"
+        >
+          Edit your profile
+        </Link>
         <p className="text-ink-soft break-words">Signed in as {user.email}</p>
         <form action={signOut}>
           <button
