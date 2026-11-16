@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState, type ReactNode } from "react";
+import { useActionState } from "react";
 import { Field, FormError, SubmitButton } from "@/components/ui/form";
 import type { SettingsState } from "./actions";
 
@@ -167,49 +167,5 @@ export function ProfileForm({
   );
 }
 
-/** A small button that runs one action. Dangerous ones ask once more before doing it. */
-export function MemberAction({
-  children,
-  confirm,
-  action,
-}: {
-  children: ReactNode;
-  /** When set, the first press only changes the label to this question. */
-  confirm?: string;
-  action: (previous: SettingsState) => Promise<SettingsState>;
-}) {
-  const [state, formAction, pending] = useActionState(action, undefined);
-  const [asking, setAsking] = useState(false);
-  const base =
-    "h-10 rounded-full border-2 px-4 text-sm font-bold outline-none focus-visible:ring-4 focus-visible:ring-fjord/35";
-
-  return (
-    <form action={formAction} className="flex flex-col items-end gap-1">
-      {confirm && !asking ? (
-        // The two buttons have different keys so React makes a new element for the question.
-        // Reusing one element would turn it into a submit button during the first press,
-        // and the browser would then submit the form with that same press.
-        <button
-          key="ask"
-          type="button"
-          onClick={(event) => {
-            event.preventDefault();
-            setAsking(true);
-          }}
-          className={`${base} border-ink`}
-        >
-          {children}
-        </button>
-      ) : (
-        <button key="do" type="submit" aria-disabled={pending} className={`${base} ${confirm ? "border-barn bg-barn text-paper" : "border-ink"}`}>
-          {pending ? "Working…" : (confirm ?? children)}
-        </button>
-      )}
-      {state?.error ? (
-        <p role="alert" className="max-w-56 text-right text-sm font-semibold text-barn">
-          {state.error}
-        </p>
-      ) : null}
-    </form>
-  );
-}
+// The confirm-then-do button lives with the other shared controls.
+export { ActionButton as MemberAction } from "@/components/ui/action-button";
