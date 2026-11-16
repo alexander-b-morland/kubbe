@@ -16,6 +16,11 @@ export const auth = betterAuth({
     // No email sender yet, so addresses are not verified. Turn on with a domain.
     requireEmailVerification: false,
   },
+  session: {
+    // Keep a short-lived signed copy of the session in the cookie, so most
+    // requests do not need a database trip just to know who is asking.
+    cookieCache: { enabled: true, maxAge: 5 * 60 },
+  },
   // Must be last: lets server actions set the session cookie.
   plugins: [nextCookies()],
 });

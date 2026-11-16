@@ -1,6 +1,7 @@
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
-import { household, membership, user } from "@/db/schema";
+import { household, membership, resource, user } from "@/db/schema";
+import { defaultResourcesFor } from "@/lib/booking/defaults";
 import { generateJoinCode } from "@/lib/join-code";
 import { MEMBER_COLOURS, nextMemberColour } from "@/lib/member-colours";
 
@@ -27,7 +28,7 @@ export function resolveTimeZone(input: string): string {
 
 export type CreateResult = { ok: true } | { ok: false; reason: "already-member" };
 
-/** Create a household and make the creator its admin, in one transaction. */
+/** Create a household with its default resources and make the creator its admin, in one transaction. */
 export async function createHousehold(
   userId: string,
   name: string,
@@ -49,6 +50,7 @@ export async function createHousehold(
         await tx
           .insert(membership)
           .values({ householdId: created.id, userId, role: "admin", colour: MEMBER_COLOURS[0] });
+        await tx.insert(resource).values(defaultResourcesFor(created.id));
       });
       return { ok: true };
     } catch (error) {
