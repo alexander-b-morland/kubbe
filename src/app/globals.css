@@ -66,3 +66,37 @@
     stroke-dashoffset: 0;
   }
 }
+
+/* A pen line through something that is done. */
+.strike {
+  position: absolute;
+  inset: 0 -0.3rem;
+  width: calc(100% + 0.6rem);
+  height: 100%;
+  pointer-events: none;
+  overflow: visible;
+}
+
+.strike path {
+  fill: none;
+  stroke: var(--color-ink);
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 0;
+}
+
+.strike--draw path {
+  stroke-opacity: 0;
+  stroke-dashoffset: 1;
+  animation: tick-draw 0.5s cubic-bezier(0.6, 0, 0.3, 1) forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .strike--draw path {
+    animation: none;
+    stroke-opacity: 1;
+    stroke-dashoffset: 0;
+  }
+}
