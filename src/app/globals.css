@@ -35,3 +35,34 @@
     font-family: var(--font-sans);
   }
 }
+
+/* A tick that draws itself, for "Saved" and "Done". */
+.tick-draw path {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  stroke-opacity: 0;
+  animation: tick-draw 0.4s cubic-bezier(0.6, 0, 0.3, 1) forwards;
+}
+
+@keyframes tick-draw {
+  from {
+    stroke-opacity: 1;
+  }
+  to {
+    stroke-opacity: 1;
+    stroke-dashoffset: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tick-draw path {
+    animation: none;
+    stroke-opacity: 1;
+    stroke-dashoffset: 0;
+  }
+}
