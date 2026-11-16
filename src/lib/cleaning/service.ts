@@ -173,6 +173,22 @@ export async function deleteArea(householdId: string, areaId: string, today: str
   });
 }
 
+/**
+ * Deal the turns that are under way out again, between everyone who lives there now.
+ * Turns normally stay where they are when people move in or out; this is the admin
+ * saying "share this round out afresh". Turns already marked done stay done.
+ */
+export async function redealTurns(householdId: string, today: string) {
+  await db.transaction(async (tx) => {
+    const areas = await tx.select().from(cleaningArea).where(eq(cleaningArea.householdId, householdId));
+    for (const area of areas) {
+      await tx
+        .delete(cleaningTakeover)
+        .where(and(eq(cleaningTakeover.areaId, area.id), eq(cleaningTakeover.period, periodOn(area, today))));
+    }
+  });
+}
+
 /** "stale" means the screen showed an earlier period than the one that is running now. */
 export type TurnResult = "ok" | "gone" | "stale";
 

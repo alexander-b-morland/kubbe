@@ -12,6 +12,7 @@ import {
   deleteAreaAction,
   giveBackAction,
   markDoneAction,
+  redealTurnsAction,
   takeOverAction,
   undoDoneAction,
   updateAreaAction,
@@ -147,6 +148,26 @@ export default async function CleaningPage() {
             </ul>
           </section>
         )}
+
+        {admin && rota.length > 0 && members.length > 1 ? (
+          <section aria-labelledby="redeal-heading" className="flex flex-col gap-2" data-testid="redeal">
+            <h2 id="redeal-heading" className="text-lg font-bold">
+              Someone moved in or out?
+            </h2>
+            <p className="text-ink-soft">
+              Turns already under way stay with whoever has them. You can share this round out again between
+              everyone who lives here now.
+            </p>
+            <ActionButton
+              align="start"
+              confirm="Deal this round's turns out again?"
+              doneLabel="Dealt out again."
+              action={redealTurnsAction}
+            >
+              Deal turns out again
+            </ActionButton>
+          </section>
+        ) : null}
 
         {rota.length > 0 && members.length > 1 ? (
           <section aria-labelledby="tally-heading" className="flex flex-col gap-2">

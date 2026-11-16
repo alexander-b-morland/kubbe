@@ -10,6 +10,7 @@ import {
   INTERVALS,
   markDone,
   MAX_AREAS,
+  redealTurns,
   takeOver,
   undoDone,
   updateArea,
@@ -69,6 +70,14 @@ export async function deleteAreaAction(areaId: string): Promise<CleaningState> {
   const { household, membership, today } = await context();
   if (membership.role !== "admin") return { error: adminsOnly };
   if (idSchema.safeParse(areaId).success) await deleteArea(household.id, areaId, today);
+  refresh();
+  return { saved: true };
+}
+
+export async function redealTurnsAction(): Promise<CleaningState> {
+  const { household, membership, today } = await context();
+  if (membership.role !== "admin") return { error: adminsOnly };
+  await redealTurns(household.id, today);
   refresh();
   return { saved: true };
 }
