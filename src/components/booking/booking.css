@@ -1,0 +1,62 @@
+/* Plain global CSS with prefixed class names: CSS Modules are not available here. */
+
+/* The pen circle around the time of a slot you have booked. */
+.pen-circle {
+  position: absolute;
+  inset: -0.35rem -0.6rem;
+  width: calc(100% + 1.2rem);
+  height: calc(100% + 0.7rem);
+  pointer-events: none;
+  overflow: visible;
+}
+
+.pen-circle path {
+  fill: none;
+  stroke: var(--color-fjord);
+  stroke-width: 2.6;
+  stroke-linecap: round;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 0;
+}
+
+/* Booked just now: the circle is drawn. */
+.pen-circle--draw path {
+  stroke-opacity: 0;
+  stroke-dashoffset: 1;
+  animation: pen-circle-draw 0.55s cubic-bezier(0.6, 0, 0.3, 1) forwards;
+}
+
+/* Being cancelled: the circle is taken back, the way it came. */
+.pen-circle--erase path {
+  animation: pen-circle-erase 0.35s cubic-bezier(0.6, 0, 0.3, 1) forwards;
+}
+
+@keyframes pen-circle-draw {
+  from {
+    stroke-opacity: 1;
+  }
+  to {
+    stroke-opacity: 1;
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes pen-circle-erase {
+  to {
+    stroke-dashoffset: 1;
+    stroke-opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pen-circle--draw path {
+    animation: none;
+    stroke-opacity: 1;
+    stroke-dashoffset: 0;
+  }
+
+  .pen-circle--erase path {
+    animation: none;
+    stroke-opacity: 0;
+  }
+}

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { signOut } from "@/app/(auth)/actions";
 import { RoomArt, type Room } from "@/components/illustrations/room-art";
 import { listMembers } from "@/lib/households";
@@ -11,8 +12,8 @@ export const instant = false;
 
 export const metadata: Metadata = { title: "Home" };
 
-const rooms: { name: string; room: Room; className: string }[] = [
-  { name: "Shower", room: "shower", className: "bg-fjord text-paper" },
+const rooms: { name: string; room: Room; className: string; href?: string }[] = [
+  { name: "Shower", room: "shower", className: "bg-fjord text-paper", href: "/shower" },
   { name: "Laundry", room: "laundry", className: "bg-ochre text-ink" },
   { name: "Cleaning", room: "cleaning", className: "bg-spruce text-paper" },
 ];
@@ -68,19 +69,35 @@ export default async function HomePage() {
       </section>
 
       <section aria-labelledby="rooms-heading" className="flex flex-col gap-2">
-        <h2 id="rooms-heading" className="font-semibold text-ink-soft">
-          Booking opens here next
+        <h2 id="rooms-heading" className="sr-only">
+          Rooms
         </h2>
         <ul className="flex flex-col gap-2">
-          {rooms.map((room, index) => (
-            <li
-              key={room.name}
-              className={`type-display flex items-center justify-between rounded-xl py-2 pr-3 pl-4 text-4xl ${room.className}`}
-            >
-              {room.name}
-              <RoomArt room={room.room} animate delay={0.2 + index * 0.35} className="size-20" />
-            </li>
-          ))}
+          {rooms.map((room, index) => {
+            const band = `type-display flex items-center justify-between rounded-xl py-2 pr-3 pl-4 text-4xl ${room.className}`;
+            const art = <RoomArt room={room.room} animate delay={0.2 + index * 0.35} className="size-20" />;
+            return (
+              <li key={room.name}>
+                {room.href ? (
+                  <Link
+                    href={room.href}
+                    className={`${band} outline-none transition-transform focus-visible:ring-4 focus-visible:ring-ink/40 active:scale-[0.98]`}
+                  >
+                    {room.name}
+                    {art}
+                  </Link>
+                ) : (
+                  <div className={band}>
+                    <span className="flex items-baseline gap-3">
+                      {room.name}
+                      <span className="font-sans text-base font-semibold tracking-normal">Soon</span>
+                    </span>
+                    {art}
+                  </div>
+                )}
+              </li>
+            );
+          })}
         </ul>
       </section>
 
