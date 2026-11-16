@@ -165,7 +165,62 @@ export const booking = pgTable(
   (table) => [index("booking_resource_time_idx").on(table.resourceId, table.startsAt)],
 );
 
+// ---------------------------------------------------------------------------
+// Cleaning. A room has a rhythm; whose turn it is follows from that and from the
+// order people joined (see src/lib/cleaning/rota.ts). Only exceptions are stored.
+// ---------------------------------------------------------------------------
+
+export const cleaningArea = pgTable(
+  "cleaning_area",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    householdId: uuid("household_id")
+      .notNull()
+      .references(() => household.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    intervalDays: integer("interval_days").notNull(),
+    /** A rough guide for whoever's turn it is. */
+    estimateMinutes: integer("estimate_minutes").notNull(),
+    /** First day of the first period, YYYY-MM-DD in the household's zone. */
+    startDay: text("start_day").notNull(),
+    createdAt: createdAt(),
+  },
+  (table) => [index("cleaning_area_household_idx").on(table.householdId)],
+);
+
+/** A period of a room that somebody cleaned. */
+export const cleaningDone = pgTable(
+  "cleaning_done",
+  {
+    areaId: uuid("area_id")
+      .notNull()
+      .references(() => cleaningArea.id, { onDelete: "cascade" }),
+    period: integer("period").notNull(),
+    doneBy: text("done_by")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    doneAt: timestamp("done_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [primaryKey({ columns: [table.areaId, table.period] })],
+);
+
+/** A period of a room that somebody took over from whoever's turn it was. */
+export const cleaningTakeover = pgTable(
+  "cleaning_takeover",
+  {
+    areaId: uuid("area_id")
+      .notNull()
+      .references(() => cleaningArea.id, { onDelete: "cascade" }),
+    period: integer("period").notNull(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+  },
+  (table) => [primaryKey({ columns: [table.areaId, table.period] })],
+);
+
 export type Household = typeof household.$inferSelect;
 export type Membership = typeof membership.$inferSelect;
 export type Resource = typeof resource.$inferSelect;
 export type Booking = typeof booking.$inferSelect;
+export type CleaningArea = typeof cleaningArea.$inferSelect;
