@@ -1,13 +1,18 @@
 import { and, asc, count, desc, eq, gte, inArray, isNotNull, isNull } from "drizzle-orm";
-import { db } from "@/db";
+import { db, type Transaction } from "@/db";
 import { dishIngredient, expense, expenseShare, membership, shoppingItem } from "@/db/schema";
-import { splitEvenly } from "@/lib/money";
+import { resyncIngredient } from "@/lib/dinner/service";
+import { balances, settleUp, splitEvenly } from "@/lib/money";
+import { lockHousehold } from "@/lib/settings";
 
 // The shopping list and what was paid for it. Callers have already established who is
 // asking and which household they are in (see requireExtra).
 
 export const MAX_ITEMS = 200;
 export const ITEM_LENGTH = 60;
+export const MAX_EXPENSES = 5000;
+/** How long something ticked off waits to be paid up for. */
+const BAG_DAYS = 14;
 
 /** What still needs buying, oldest first, so the list keeps its order as people add to it. */
 export async function listToBuy(householdId: string) {
@@ -20,7 +25,7 @@ export async function listToBuy(householdId: string) {
 
 /** What has been bought but not paid up for yet, from the last two weeks. */
 export async function listBought(householdId: string, now: Date) {
-  const since = new Date(now.getTime() - 14 * 86_400_000);
+  const since = new Date(now.getTime() - BAG_DAYS * 86_400_000);
   return db
     .select()
     .from(shoppingItem)
@@ -48,20 +53,39 @@ export async function addItem(householdId: string, userId: string, name: string)
 const inHousehold = (householdId: string, itemId: string) =>
   and(eq(shoppingItem.id, itemId), eq(shoppingItem.householdId, householdId));
 
-/** Say "I'll buy it", or take that back. */
+/** Say "I'll buy it", or take that back. Nobody takes over or drops someone else's claim. */
 export async function setClaim(householdId: string, userId: string, itemId: string, claim: boolean) {
   await db
     .update(shoppingItem)
     .set({ claimedBy: claim ? userId : null })
-    .where(and(inHousehold(householdId, itemId), isNull(shoppingItem.boughtAt)));
+    .where(
+      and(
+        inHousehold(householdId, itemId),
+        isNull(shoppingItem.boughtAt),
+        claim ? isNull(shoppingItem.claimedBy) : eq(shoppingItem.claimedBy, userId),
+      ),
+    );
 }
 
-/** Tick an item off as bought, or put it back on the list. Only what is not paid up for can go back. */
+/**
+ * Tick an item off as bought, or put it back on the list. Only what is not paid up for
+ * can go back, and only by whoever ticked it off. Something already ticked off stays
+ * with whoever got there first.
+ */
 export async function setBought(householdId: string, userId: string, itemId: string, bought: boolean) {
-  await db
+  const [changed] = await db
     .update(shoppingItem)
     .set(bought ? { boughtAt: new Date(), boughtBy: userId } : { boughtAt: null, boughtBy: null })
-    .where(and(inHousehold(householdId, itemId), isNull(shoppingItem.expenseId)));
+    .where(
+      and(
+        inHousehold(householdId, itemId),
+        isNull(shoppingItem.expenseId),
+        bought ? isNull(shoppingItem.boughtAt) : eq(shoppingItem.boughtBy, userId),
+      ),
+    )
+    .returning({ ingredientId: shoppingItem.ingredientId });
+  // Back on the list, a dinner ingredient is only wanted if the dinner still needs it.
+  if (!bought && changed?.ingredientId) await resyncIngredient(householdId, userId, changed.ingredientId);
 }
 
 /**
@@ -97,10 +121,12 @@ export type ExpenseInput = { paidBy: string; amount: number; description: string
  * Record that someone paid for something, shared evenly between some of the household.
  * Returns "nobody" when none of the people named live there.
  */
-export async function addExpense(householdId: string, input: ExpenseInput): Promise<"ok" | "nobody"> {
+export async function addExpense(householdId: string, input: ExpenseInput): Promise<"ok" | "nobody" | "full"> {
   const [payer] = await membersAmong(householdId, [input.paidBy]);
   const sharers = await membersAmong(householdId, input.sharedBy);
   if (!payer || sharers.length === 0) return "nobody";
+  const [existing] = await db.select({ expenses: count() }).from(expense).where(eq(expense.householdId, householdId));
+  if (existing.expenses >= MAX_EXPENSES) return "full";
   await db.transaction(async (tx) => {
     const [created] = await tx
       .insert(expense)
@@ -120,9 +146,12 @@ export async function payForBought(
   userId: string,
   amount: number,
   sharedBy: readonly string[],
+  now: Date,
 ): Promise<"ok" | "nothing" | "nobody"> {
   const sharers = await membersAmong(householdId, sharedBy);
   if (sharers.length === 0) return "nobody";
+  // The same things the screen shows as "You got": nothing older is swept along.
+  const since = new Date(now.getTime() - BAG_DAYS * 86_400_000);
   return db.transaction(async (tx) => {
     const items = await tx
       .select({ id: shoppingItem.id, name: shoppingItem.name })
@@ -133,6 +162,7 @@ export async function payForBought(
           eq(shoppingItem.boughtBy, userId),
           isNotNull(shoppingItem.boughtAt),
           isNull(shoppingItem.expenseId),
+          gte(shoppingItem.boughtAt, since),
         ),
       )
       // In the order they were ticked off, so the description reads the way the shop went.
@@ -155,25 +185,36 @@ export async function payForBought(
   });
 }
 
-/** One person paying another back. Stored as an expense whose only share is the receiver's. */
-export async function addSettlement(householdId: string, from: string, to: string, amount: number): Promise<"ok" | "nobody"> {
-  const both = await membersAmong(householdId, [from, to]);
-  if (from === to || both.length !== 2) return "nobody";
-  await db.transaction(async (tx) => {
+/**
+ * One person paying another back. Stored as an expense whose only share is the receiver's.
+ *
+ * It applies to what was on screen: the payment is only recorded while the books still
+ * say that much is owed between those two. So two people pressing "Paid" on the same
+ * line record it once, and a debt with someone who has moved out can still be closed.
+ */
+export async function addSettlement(householdId: string, from: string, to: string, amount: number): Promise<"ok" | "settled"> {
+  return db.transaction(async (tx) => {
+    await lockHousehold(tx, householdId);
+    const owed = settleUp(balances(await readExpenses(tx, householdId)));
+    if (!owed.some((transfer) => transfer.from === from && transfer.to === to && transfer.amount >= amount)) return "settled";
     const [created] = await tx
       .insert(expense)
       .values({ householdId, paidBy: from, amount, description: "Paid back", isSettlement: true })
       .returning({ id: expense.id });
     await tx.insert(expenseShare).values({ expenseId: created.id, userId: to, amount });
+    return "ok";
   });
-  return "ok";
 }
 
 /** Every expense of the household with its shares, newest first. */
 export async function listExpenses(householdId: string) {
-  const rows = await db.select().from(expense).where(eq(expense.householdId, householdId)).orderBy(desc(expense.createdAt));
+  return readExpenses(db, householdId);
+}
+
+async function readExpenses(executor: typeof db | Transaction, householdId: string) {
+  const rows = await executor.select().from(expense).where(eq(expense.householdId, householdId)).orderBy(desc(expense.createdAt));
   if (rows.length === 0) return [];
-  const shares = await db
+  const shares = await executor
     .select()
     .from(expenseShare)
     .where(inArray(expenseShare.expenseId, rows.map((row) => row.id)));

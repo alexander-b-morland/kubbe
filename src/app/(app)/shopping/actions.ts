@@ -62,7 +62,7 @@ export async function payForBoughtAction(_previous: ShoppingState, form: FormDat
   const sharedBy = form.getAll("sharedBy").map(String);
   if (sharedBy.length === 0) return { error: "Tick at least one person to split it between.", values: { amount: typed } };
 
-  const result = await payForBought(household.id, user.id, amount, sharedBy);
+  const result = await payForBought(household.id, user.id, amount, sharedBy, new Date());
   if (result === "nothing") return { error: "There is nothing ticked off to pay for. Tick off what you bought first." };
   if (result === "nobody") return { error: "None of those people live here any more.", values: { amount: typed } };
   refresh();

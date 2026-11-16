@@ -97,7 +97,9 @@ Package manager is npm. Keep this list current as scripts are added.
 - **Redirects after signing in go through `safeNextPath`,** which accepts only an invite link. Never redirect to a path taken from the URL any other way.
 - **There is no public auth route.** All sign-in and sign-up goes through server actions, which validate and rate limit. Google sign-in will need `/api/auth` back: when adding it, also add name validation in the auth library's database hooks and database-backed rate limiting there.
 - **The shopping list follows the dinner.** Every change to a dinner, its dishes or ingredients ends with `syncShopping` in the same transaction. Do not insert or delete a dinner's shopping items anywhere else.
-- **Dinner ideas never send names.** `ideas.ts` gets a head count, the "I don't eat" texts and dish names. What comes back is cut to size and shown; it is stored only when someone puts it to the vote. Asking is rate limited per household.
+- **Dinner ideas never send names.** `ideas.ts` gets a head count, the "I don't eat" texts and dish names. What comes back is cut to size and shown; it is stored only when someone puts it to the vote. Asking is rate limited per person, per household and for the whole app, and `max_tokens` is kept low, because each answer costs money.
+- **Paying back applies to what was on screen.** `addSettlement` locks the household, works the balances out again and records the payment only while that much is still owed between those two. Do not add a way to record a repayment that skips it.
+- **Ticks and claims belong to whoever made them.** `setBought` and `setClaim` never overwrite another person's tick or claim.
 - **Someone who leaves is released.** `removeMember` calls `releaseDinnerDuties` so they no longer cook, clean up or hold a shopping claim.
 - **Server actions validate every argument,** including ones bound on the server such as a member id or a role. They arrive from the browser like any other input.
 
@@ -211,7 +213,10 @@ Needs the owner:
 Can be built any time:
 
 - Reminders (web push), repeating bookings, Norwegian.
-- A second review round (security and experience) of everything under Flat. The first round only covered booking and cleaning.
+- An experience review of everything under Flat. A security and correctness review was done 2026-11-16 and its findings fixed, except these three:
+  - An expense does not record who entered it, so someone can log an expense as paid by a roommate and then not be able to remove it. Needs a `createdBy` column.
+  - A dish added from the ideas is stored with no suggester, and the browser says which dishes those are. Needs a `fromHelper` column beside `suggestedBy`.
+  - Deleting a user account would cascade away the expenses they paid and unbalance the books. No screen deletes accounts yet: change those foreign keys to `restrict` before adding one.
 - Dinners: a different time per fixed day (the table allows it, the form sets one time for all), removing a single ingredient, and a note on a dinner ("bring a friend").
 - Expenses: uneven splits, and editing an expense instead of removing and adding it again.
 - Happenings and dinners in one calendar view.

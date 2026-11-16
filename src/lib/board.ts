@@ -1,4 +1,4 @@
-import { and, count, desc, eq, gte, isNull, or } from "drizzle-orm";
+import { and, count, desc, eq, gte, isNull, lt, or } from "drizzle-orm";
 import { db } from "@/db";
 import { membership, note } from "@/db/schema";
 
@@ -33,6 +33,9 @@ export async function addNote(
   authorId: string,
   input: { body: string; isTask: boolean; assigneeId: string | null },
 ): Promise<"ok" | "full" | "not-a-member"> {
+  // To-dos ticked off more than a week ago are no longer shown anywhere, so they go.
+  // Otherwise they would fill the board with notes nobody can see or take down.
+  await db.delete(note).where(and(eq(note.householdId, householdId), lt(note.doneAt, new Date(Date.now() - 7 * 86_400_000))));
   const [existing] = await db.select({ notes: count() }).from(note).where(eq(note.householdId, householdId));
   if (existing.notes >= MAX_NOTES) return "full";
   // A to-do can only be given to someone who lives here.

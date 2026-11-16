@@ -57,7 +57,7 @@ export async function saveRulesAction(_previous: DinnerState, form: FormData): P
 
 /** Plan a dinner on one day, then go to it. */
 export async function addDinnerAction(_previous: DinnerState, form: FormData): Promise<DinnerState> {
-  const { household } = await requireExtra("dinner");
+  const { user, household } = await requireExtra("dinner");
   const values = { day: String(form.get("day") ?? ""), time: String(form.get("time") ?? "") };
   const time = minutesOf(values.time);
   if (!isDay(values.day)) return { error: "Pick a day.", values };
@@ -67,7 +67,7 @@ export async function addDinnerAction(_previous: DinnerState, form: FormData): P
   if (ahead < 0) return { error: "That day has passed. Pick today or later.", values };
   if (ahead > 90) return { error: `Pick a day before ${addDays(today, 91)}.`, values };
 
-  const result = await addDinner(household.id, values.day, time);
+  const result = await addDinner(household.id, user.id, values.day, time);
   if (result === "taken") return { error: "There is already a dinner that day. Open it from the list above.", values };
   refresh();
   redirect(`/dinner/${result.id}`);
@@ -137,11 +137,14 @@ export type IdeasState = { ideas?: DishIdea[]; source?: "claude" | "cookbook"; e
 
 /** A few dishes that fit who is coming. From Claude when a key is set, otherwise from the cookbook. */
 export async function ideasAction(dinnerId: string): Promise<IdeasState> {
-  const { household } = await requireExtra("dinner");
+  const { user, household } = await requireExtra("dinner");
   if (!isId(dinnerId)) return { error: "That dinner is gone." };
-  if (!(await allowAttempt(`dinner-ideas:${household.id}`, 40, 86_400))) {
-    return { error: "That is a lot of ideas for one day. Try again tomorrow, or type one in." };
-  }
+  // Each answer costs money, so asking is capped per person, per household and for the whole app.
+  const allowed =
+    (await allowAttempt(`dinner-ideas:user:${user.id}`, 20, 86_400)) &&
+    (await allowAttempt(`dinner-ideas:${household.id}`, 40, 86_400)) &&
+    (await allowAttempt("dinner-ideas:everyone", 300, 86_400));
+  if (!allowed) return { error: "That is a lot of ideas for one day. Try again tomorrow, or type one in." };
   const found = await getDinner(household.id, dinnerId);
   if (!found) return { error: "That dinner is gone." };
   const [coming, recent] = await Promise.all([

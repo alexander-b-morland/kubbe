@@ -1,4 +1,4 @@
-import { and, asc, eq, gte, inArray } from "drizzle-orm";
+import { and, asc, count, eq, gte, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import { happening, happeningReply } from "@/db/schema";
 
@@ -6,6 +6,8 @@ import { happening, happeningReply } from "@/db/schema";
 // who is asking and which household they are in (see requireExtra).
 
 export type HappeningInput = { title: string; startsAt: Date; place: string; details: string };
+
+export const MAX_UPCOMING = 50;
 
 /** What is coming up, soonest first. Something that started in the last three hours still counts. */
 export async function listUpcoming(householdId: string, now: Date) {
@@ -28,7 +30,12 @@ export async function listUpcoming(householdId: string, now: Date) {
 }
 
 /** Suggest something. Whoever suggests it is in. */
-export async function addHappening(householdId: string, userId: string, input: HappeningInput) {
+export async function addHappening(householdId: string, userId: string, input: HappeningInput): Promise<"ok" | "full"> {
+  const [ahead] = await db
+    .select({ happenings: count() })
+    .from(happening)
+    .where(and(eq(happening.householdId, householdId), gte(happening.startsAt, new Date())));
+  if (ahead.happenings >= MAX_UPCOMING) return "full";
   await db.transaction(async (tx) => {
     const [created] = await tx
       .insert(happening)
@@ -36,6 +43,7 @@ export async function addHappening(householdId: string, userId: string, input: H
       .returning({ id: happening.id });
     await tx.insert(happeningReply).values({ happeningId: created.id, userId, going: true });
   });
+  return "ok";
 }
 
 /** Say whether you are in. */

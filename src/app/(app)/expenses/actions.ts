@@ -32,6 +32,7 @@ export async function addExpenseAction(_previous: ExpenseState, form: FormData):
   const paidBy = personSchema.safeParse(form.get("paidBy") ?? user.id);
   const result = await addExpense(household.id, { paidBy: paidBy.success ? paidBy.data : user.id, amount, description, sharedBy });
   if (result === "nobody") return { error: "Some of those people don't live here any more. Reload and try again.", values };
+  if (result === "full") return { error: "The expense list is full. Remove old ones you no longer need.", values };
   refresh();
   return { saved: true };
 }
@@ -47,10 +48,9 @@ export async function settleAction(from: string, to: string, amount: number): Pr
   if (user.id !== from && user.id !== to && membership.role !== "admin") {
     return { error: "Only the two people involved, or an admin, can mark this as paid." };
   }
-  if ((await addSettlement(household.id, from, to, amount)) === "nobody") {
-    return { error: "One of them doesn't live here any more." };
-  }
+  const result = await addSettlement(household.id, from, to, amount);
   refresh();
+  if (result === "settled") return { error: "That is already paid, or the amounts have changed. What is left is shown here now." };
   return { saved: true };
 }
 

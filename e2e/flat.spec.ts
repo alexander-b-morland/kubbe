@@ -160,6 +160,14 @@ test("shopping leads to expenses, and expenses to being square", async ({ browse
   await settle.getByRole("button", { name: "Mark 50 kr as paid?" }).click();
   await expect(headline(ida)).toHaveText("All square");
 
+  // --- Knut still has the debt on his screen. Marking it paid again records nothing. ---
+  await expect(headline(knut)).toHaveText("You're owed 50 kr");
+  await knut.getByTestId("settle").getByRole("button", { name: "Paid", exact: true }).click();
+  await knut.getByRole("button", { name: "Mark 50 kr as paid?" }).click();
+  await expect(headline(knut)).toHaveText("All square");
+  await ida.reload();
+  await expect(headline(ida)).toHaveText("All square");
+
   // --- An expense that never was on the list ---
   await ida.getByText("Add an expense").click();
   await ida.getByLabel("What was it for").fill("Toilet paper");

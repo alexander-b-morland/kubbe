@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireExtra } from "@/lib/extras-guard";
 import type { FormState } from "@/lib/form-state";
-import { addHappening, removeHappening, setReply } from "@/lib/happenings";
+import { addHappening, MAX_UPCOMING, removeHappening, setReply } from "@/lib/happenings";
 import { instantInZone, isDay } from "@/lib/time";
 
 export type HappeningState = (FormState & { saved?: boolean }) | undefined;
@@ -36,7 +36,8 @@ export async function addHappeningAction(_previous: HappeningState, form: FormDa
   if (startsAt.getTime() < now - 3_600_000) return { error: "That time has passed. Pick a later one.", values };
   if (startsAt.getTime() > now + 366 * 86_400_000) return { error: "That is more than a year away. Pick something sooner.", values };
 
-  await addHappening(household.id, user.id, { title: values.title, startsAt, place: values.place, details: values.details });
+  const result = await addHappening(household.id, user.id, { title: values.title, startsAt, place: values.place, details: values.details });
+  if (result === "full") return { error: `There are already ${MAX_UPCOMING} things planned. Call some off first.`, values };
   refresh();
   return { saved: true };
 }

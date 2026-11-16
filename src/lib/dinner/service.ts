@@ -203,7 +203,8 @@ async function syncShopping(tx: Transaction, householdId: string, userId: string
   const wanted = (row: (typeof rows)[number]) => !current.cancelled && row.dishId === current.chosenDishId && !row.atHome;
 
   const drop = rows.filter((row) => row.itemId && !row.boughtAt && !wanted(row)).map((row) => row.itemId!);
-  if (drop.length > 0) await tx.delete(shoppingItem).where(inArray(shoppingItem.id, drop));
+  // Someone may have ticked one off since it was read: what is bought is never dropped.
+  if (drop.length > 0) await tx.delete(shoppingItem).where(and(inArray(shoppingItem.id, drop), isNull(shoppingItem.boughtAt)));
   const add = rows.filter((row) => !row.itemId && wanted(row));
   if (add.length > 0) {
     await tx.insert(shoppingItem).values(add.map((row) => ({ householdId, name: row.name, addedBy: userId, ingredientId: row.id })));
@@ -220,15 +221,20 @@ async function detachBought(tx: Transaction, ingredientIds: readonly string[]) {
 }
 
 /** Plan a dinner on a day. A day has one dinner; one that was called off comes back. */
-export async function addDinner(householdId: string, day: string, time: number): Promise<{ id: string } | "taken"> {
-  const [created] = await db.insert(dinner).values({ householdId, day, time }).onConflictDoNothing().returning({ id: dinner.id });
-  if (created) return created;
-  const [revived] = await db
-    .update(dinner)
-    .set({ cancelled: false, time })
-    .where(and(eq(dinner.householdId, householdId), eq(dinner.day, day), eq(dinner.cancelled, true)))
-    .returning({ id: dinner.id });
-  return revived ?? "taken";
+export async function addDinner(householdId: string, userId: string, day: string, time: number): Promise<{ id: string } | "taken"> {
+  return db.transaction(async (tx) => {
+    const [created] = await tx.insert(dinner).values({ householdId, day, time }).onConflictDoNothing().returning({ id: dinner.id });
+    if (created) return created;
+    const [revived] = await tx
+      .update(dinner)
+      .set({ cancelled: false, time })
+      .where(and(eq(dinner.householdId, householdId), eq(dinner.day, day), eq(dinner.cancelled, true)))
+      .returning({ id: dinner.id });
+    if (!revived) return "taken";
+    // It comes back with its dish, so what that dish needs goes back on the list.
+    await syncShopping(tx, householdId, userId, revived.id);
+    return revived;
+  });
 }
 
 /** Call a dinner off, or bring it back. A called-off dinner stays, so a fixed day does not make it again. */
@@ -362,6 +368,14 @@ export async function setAtHome(householdId: string, userId: string, ingredientI
     if (!found) return;
     await tx.update(dishIngredient).set({ atHome }).where(eq(dishIngredient.id, ingredientId));
     await syncShopping(tx, householdId, userId, found.dinner.id);
+  });
+}
+
+/** Make the shopping list match the dinner an ingredient belongs to. For changes made from the list itself. */
+export async function resyncIngredient(householdId: string, userId: string, ingredientId: string) {
+  await db.transaction(async (tx) => {
+    const found = await lockDinnerOfIngredient(tx, householdId, ingredientId);
+    if (found) await syncShopping(tx, householdId, userId, found.dinner.id);
   });
 }
 
