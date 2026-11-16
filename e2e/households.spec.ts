@@ -61,7 +61,7 @@ test("create a household, invite a roommate by link, sign back in", async ({ bro
   await expect(knut).toHaveURL(/\/home$/);
   await expect(knut.getByText("2 people live here")).toBeVisible();
   await expect(knut.getByText("Knut (you)")).toBeVisible();
-  await knut.screenshot({ path: "test-results/shots/5-home-two.png", fullPage: true, caret: "initial" });
+  await knut.screenshot({ path: "test-results/shots/5-home-two.png", fullPage: true, caret: "initial", animations: "disabled" });
 
   // Ida sees Knut after a reload, and only Ida is admin.
   await ida.reload();
