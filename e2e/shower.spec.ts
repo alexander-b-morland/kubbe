@@ -17,9 +17,15 @@ async function signUp(page: Page, name: string, who: string) {
   await page.getByRole("button", { name: "Create account" }).click();
 }
 
-const slot = (page: Page, time: string) => page.getByTestId(`slot-${time}`);
+// Next.js keeps the previous screen in the page, hidden, so only look at what is visible.
+const slot = (page: Page, time: string) => page.getByTestId(`slot-${time}`).filter({ visible: true });
 const state = async (page: Page, time: string) => (await slot(page, time).getAttribute("data-state")) ?? "";
-const tomorrow = (page: Page) => page.getByRole("navigation", { name: "Day" }).getByRole("link").nth(1);
+/** Switch to tomorrow, and wait until the screen really shows it before going on. */
+async function tomorrow(page: Page) {
+  const link = page.getByRole("navigation", { name: "Day" }).filter({ visible: true }).getByRole("link").nth(1);
+  await link.click();
+  await expect(link).toHaveAttribute("aria-current", "date");
+}
 
 /** Book a slot and wait until the server has confirmed it (the Cancel button only shows then). */
 async function book(page: Page, time: string) {
@@ -43,11 +49,11 @@ test("book the shower, with the rules holding between two roommates", async ({ b
   await expect(ida).toHaveURL(/\/home$/);
   const code = (await ida.getByTestId("join-code").innerText()).replace(/\s/g, "");
 
-  await ida.getByRole("link", { name: "Shower" }).click();
+  await ida.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Shower" }).click();
   await expect(ida).toHaveURL(/\/shower$/);
   await expect(ida.getByTestId("headline")).toBeVisible();
   // Tomorrow, so the test does not depend on what time it runs.
-  await tomorrow(ida).click();
+  await tomorrow(ida);
   await expect(ida).toHaveURL(/\/shower\?day=\d{4}-\d{2}-\d{2}$/);
   await expect(slot(ida, "07:00")).toHaveAttribute("data-state", "free");
   await ida.screenshot(shot("s1-shower-empty"));
