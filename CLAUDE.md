@@ -50,6 +50,7 @@ Package manager is npm. Keep this list current as scripts are added.
 - Build: `npm run build`
 - Lint: `npm run lint`
 - Typecheck: `npm run typecheck`
+- Regenerate the logo: `node design/logo/generate.mjs` (add `--preview` for PNGs; needs `npm i --no-save sharp`)
 - Unit tests: _not set up yet_
 - End-to-end tests: _not set up yet_
 - Database migrate: _not set up yet_
@@ -92,11 +93,15 @@ On `fjord` and `spruce` use `paper` for text and lines; on `ochre` use `ink`.
 
 **Logo.** The house mascot: a carved wooden hand holding a trout. It must read clearly as a wooden hand and feel real and three-dimensional, not stiff or flat. Two earlier attempts built from simple geometric blocks were rejected for exactly that.
 
-- Current draft (awaiting approval) is in `design/logo-draft/`. It is an ink line drawing with overlapping forms, hatching on shadow faces, fingernails, wood tones on the hand and fjord tones on the fish. It draws itself stroke by stroke, then the colour fades in.
+- Approved 2026-11-15. It is an ink line drawing with overlapping forms, hatching on shadow faces, fingernails, wood tones on the hand and fjord tones on the fish. It draws itself stroke by stroke, then the colour fades in.
+- Source of truth is `design/logo/generate.mjs`. It writes the SVGs in `design/logo/` and the data file `src/components/logo/logo-data.ts`. Never edit the data file by hand. Use the `KubbeLogo` component in the app.
+- Every detail line (hatching, grain, fin rays, spots) is clipped to the shape it belongs to, and hatching also to the single face it shades. Lines that spill over an edge or into a neighbouring face were the one thing rejected in the approved draft; keep it that way when adding detail.
 - Proportions were traced by eye from a photo of the real carving. The photo itself stays out of this repo.
 - A simplified cut is still needed for sizes under about 64 px.
 
-**Check drawings by looking at them.** Never present an illustration without rendering it and viewing the result first. Render SVG to PNG (for example with `sharp`) and capture animation frames with a headless browser.
+**Check drawings by looking at them.** Never present an illustration or a screen without rendering it and viewing the result first. Render SVG to PNG (for example with `sharp`), and screenshot real pages and animation frames with headless Edge: `msedge --headless=new --window-size=500,900 --virtual-time-budget=<ms> --screenshot=<file> <url>` (Edge will not go narrower than about 500 px).
+
+**No CSS Modules.** The Tailwind rule in `next.config.ts` treats every `.css` file as global, so `*.module.css` imports come back empty and the styles silently do not apply. Use Tailwind utilities, or a plain `.css` file with prefixed class names (see `src/components/logo/kubbe-logo.css`).
 
 **Stroke-drawing gotcha.** A path with round caps that is fully dashed out still shows a dot at its start. Keep each stroke invisible (`stroke-opacity: 0`) until its own animation begins.
 
