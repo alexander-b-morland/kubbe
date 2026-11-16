@@ -28,27 +28,31 @@ Kubbe is a mobile-first web app for roommates to share bathroom and laundry time
 
 ## Stack
 
-> Status: **proposed, awaiting approval.** Update this section once the stack is confirmed.
+Approved 2026-11-15. Items marked "not installed yet" are agreed but have not been added.
 
-- Next.js (App Router) with TypeScript, deployed on Vercel
-- Neon Postgres, connected through the Vercel Marketplace integration
-- Drizzle ORM and SQL migrations
-- Better Auth, storing users and sessions in the same Postgres database
-- Tailwind CSS, with Motion for animation
-- Zod for input validation
-- Vitest for unit tests, Playwright for end-to-end tests
+- Next.js 16 (App Router, Turbopack) with TypeScript, deployed on Vercel
+- Tailwind CSS 4
+- Neon Postgres, connected through the Vercel Marketplace integration (not installed yet)
+- Drizzle ORM and SQL migrations (not installed yet)
+- Better Auth, storing users and sessions in the same Postgres database (not installed yet)
+- Motion for animation (not installed yet)
+- Zod for input validation (not installed yet)
+- Vitest for unit tests, Playwright for end-to-end tests (not installed yet)
+
+Next.js 16 differs from older versions. Follow @AGENTS.md: read the matching guide in `node_modules/next/dist/docs/` before writing Next.js code.
 
 ## Commands
 
-> Nothing is scaffolded yet. Fill these in as they come to exist, and keep them current.
+Package manager is npm. Keep this list current as scripts are added.
 
-- Install: _tbd_
-- Dev server: _tbd_
-- Build: _tbd_
-- Lint and typecheck: _tbd_
-- Unit tests: _tbd_
-- End-to-end tests: _tbd_
-- Database migrate: _tbd_
+- Install: `npm install`
+- Dev server: `npm run dev` (http://localhost:3000)
+- Build: `npm run build`
+- Lint: `npm run lint`
+- Typecheck: `npm run typecheck`
+- Unit tests: _not set up yet_
+- End-to-end tests: _not set up yet_
+- Database migrate: _not set up yet_
 
 ## Rules that must hold
 
@@ -62,7 +66,15 @@ Kubbe is a mobile-first web app for roommates to share bathroom and laundry time
 
 Mobile first: design every screen for a phone, then widen.
 
-> Status: **direction proposed, awaiting approval.** Record the approved tokens here.
+> Status: **second direction proposed, awaiting approval.** Record the approved tokens here.
+
+Feedback so far (2026-11-15):
+
+- Bright, saturated, neon-like colours read as AI-made. Use muted, grounded colours that feel authentic.
+- Drawing must be clearly visible: hand-drawn line illustrations that draw themselves, not only a thin outline effect.
+- The logo is a carved wooden hand holding a fish (a trout), as a line drawing that draws itself. Draw it fresh; do not use the photo from the old project.
+
+Standing brief:
 
 - Bold, modern, simple. It must not look like a template.
 - Line-drawing animation (SVG strokes that draw themselves) is the signature. Use it in the logo, empty states, and confirmations only. Motion elsewhere stays minimal.
