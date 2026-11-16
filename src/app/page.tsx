@@ -1,11 +1,27 @@
-// Placeholder until the design direction is approved and the real screens exist.
+// Placeholder until the real screens exist. It also shows the design tokens in use.
+const rooms = [
+  { name: "Shower", className: "bg-fjord text-paper" },
+  { name: "Laundry", className: "bg-ochre text-ink" },
+  { name: "Cleaning", className: "bg-spruce text-paper" },
+];
+
 export default function Home() {
   return (
-    <main className="mx-auto flex min-h-dvh max-w-md flex-col justify-center gap-3 p-6">
-      <h1 className="text-5xl font-extrabold tracking-tight">kubbe</h1>
+    <main className="mx-auto flex min-h-dvh max-w-md flex-col justify-center gap-6 p-6">
+      <h1 className="type-display text-7xl">kubbe</h1>
       <p className="text-lg">
         Shower, laundry and cleaning for people who share a home. Coming soon.
       </p>
+      <ul className="flex flex-col gap-2">
+        {rooms.map((room) => (
+          <li
+            key={room.name}
+            className={`type-display rounded-xl px-4 py-3 text-3xl ${room.className}`}
+          >
+            {room.name}
+          </li>
+        ))}
+      </ul>
     </main>
   );
 }

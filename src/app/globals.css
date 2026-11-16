@@ -1,1 +1,37 @@
 @import "tailwindcss";
+
+/*
+ * Design tokens. Colour means room: fjord is the shower, ochre is laundry,
+ * spruce is cleaning. Barn red marks what is happening right now.
+ * Lines and text are ink on paper.
+ */
+@theme {
+  --color-paper: #f5f4ef;
+  --color-ink: #1e2a44;
+  --color-ink-soft: #6b7385;
+  --color-fjord: #2e5270;
+  --color-ochre: #d2a24c;
+  --color-spruce: #476b52;
+  --color-barn: #a6402f;
+}
+
+@theme inline {
+  --font-sans: var(--font-schibsted), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-archivo), ui-sans-serif, system-ui, sans-serif;
+}
+
+/* Times and headlines: Archivo, condensed and heavy. */
+@utility type-display {
+  font-family: var(--font-display);
+  font-stretch: 62%;
+  font-weight: 800;
+  line-height: 1;
+}
+
+@layer base {
+  body {
+    background-color: var(--color-paper);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+  }
+}
