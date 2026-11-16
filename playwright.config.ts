@@ -8,7 +8,9 @@ export default defineConfig({
   fullyParallel: false,
   workers: 1,
   reporter: [["list"]],
-  timeout: 60_000,
+  timeout: 120_000,
+  // The database is far from a developer machine, so a save can take a few seconds locally.
+  expect: { timeout: 15_000 },
   use: {
     baseURL: "http://localhost:3000",
     channel: "msedge",
