@@ -171,7 +171,7 @@ Standing brief:
 
 The owner asked for these after the MVP. Tick each off here as it ships; the answers below are his.
 
-- [ ] **Several showers, washers and dryers.** An admin adds and removes them; booking screens get a switcher.
+- [x] **Several showers, washers and dryers.** An admin adds and removes them; booking screens get a switcher.
 - [ ] **Navigation.** Tabs become Home, Shower, Laundry, Cleaning, Flat. "Flat" is a hub for everything else (dinner, happenings, shopping, expenses, noticeboard, people and settings).
 - [ ] **Noticeboard**, "like a virtual whiteboard": anyone writes a note. A note can also be a to-do, assigned to a person or to nobody, and ticked off.
 - [ ] **Shopping list** for the flat. Dinner ingredients that need buying land here.

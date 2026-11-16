@@ -100,6 +100,27 @@ test("an admin sets the rules, then washes and dries", async ({ browser }) => {
   await shower.getByRole("button", { name: "Save", exact: true }).click();
   await expect(shower.getByTestId("form-error")).toHaveText("Closing time must be after opening time.");
 
+  // --- A second shower: add it, book it, remove it again ---
+  await ida.getByTestId("add-resource").getByRole("button", { name: "Add a shower" }).click();
+  const second = ida.locator('[data-testid="resource-shower"][data-name="Shower 2"]');
+  await expect(second).toBeVisible();
+  await tab(ida, "Shower").click();
+  const which = ida.getByRole("navigation", { name: "Which shower" }).filter({ visible: true });
+  await expect(which.getByRole("link")).toHaveText(["Shower", "Shower 2"]);
+  await which.getByRole("link", { name: "Shower 2" }).click();
+  await expect(which.getByRole("link", { name: "Shower 2" })).toHaveAttribute("aria-current", "page");
+  await tomorrow(ida);
+  // The second shower has its own, default rules: 20-minute slots.
+  await ida.getByRole("button", { name: "Book 06:20" }).click();
+  await expect(ida.getByRole("button", { name: "Cancel 06:20" })).toBeVisible();
+  await tab(ida, "Household").click();
+  await second.locator("summary").click();
+  await second.getByRole("button", { name: "Remove Shower 2", exact: true }).click();
+  await second.getByRole("button", { name: "Remove Shower 2 and its bookings?" }).click();
+  await expect(ida.getByTestId("resource-shower")).toHaveCount(1);
+  // The only one left of a kind cannot be removed, only switched off.
+  await expect(shower.getByRole("button", { name: /^Remove/ })).toHaveCount(0);
+
   await tab(ida, "Shower").click();
   await tomorrow(ida);
   await expect(slot(ida, "06:30")).toBeVisible();

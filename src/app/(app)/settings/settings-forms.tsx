@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
+import { ActionButton } from "@/components/ui/action-button";
 import { Field, selectLook } from "@/components/ui/form";
 import { SavableForm } from "@/components/ui/savable-form";
 import { clockLabel, describeSlotLength } from "@/lib/booking/status";
@@ -36,10 +37,13 @@ export function ResourceForm({
   resource,
   slotLengths,
   action,
+  remove,
 }: {
   resource: ResourceFormValues;
   slotLengths: readonly number[];
   action: Action;
+  /** Present only when there is another of the same kind, so this one may go. */
+  remove?: () => Promise<SettingsState>;
 }) {
   const [state, formAction] = useActionState(action, undefined);
   const summary = resource.enabled
@@ -47,7 +51,7 @@ export function ResourceForm({
     : "Switched off";
 
   return (
-    <details className="group border-b-2 border-ink/15" data-testid={`resource-${resource.kind}`}>
+    <details className="group border-b-2 border-ink/15" data-testid={`resource-${resource.kind}`} data-name={resource.name}>
       <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-lg py-4 outline-none focus-visible:ring-4 focus-visible:ring-fjord [&::-webkit-details-marker]:hidden">
         <span className="flex flex-col">
           <span className="type-display text-3xl">{resource.name}</span>
@@ -117,6 +121,18 @@ export function ResourceForm({
             Allow two slots in a row
           </label>
         </SavableForm>
+        {remove ? (
+          <div className="pt-4">
+            <ActionButton
+              align="start"
+              label={`Remove ${resource.name}`}
+              confirm={`Remove ${resource.name} and its bookings?`}
+              action={remove}
+            >
+              Remove
+            </ActionButton>
+          </div>
+        ) : null}
       </div>
     </details>
   );

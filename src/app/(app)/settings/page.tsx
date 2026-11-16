@@ -10,7 +10,9 @@ import { requireHousehold } from "@/lib/session";
 import { SLOT_LENGTHS } from "@/lib/settings";
 import { ShareCode } from "../home/share-code";
 import {
+  addResourceAction,
   removeMemberAction,
+  removeResourceAction,
   renameHouseholdAction,
   replaceJoinCodeAction,
   setRoleAction,
@@ -128,8 +130,28 @@ export default async function SettingsPage() {
                   resource={resource}
                   slotLengths={SLOT_LENGTHS}
                   action={updateResourceAction.bind(null, resource.id)}
+                  // The last one of a kind stays: it can be switched off, not removed.
+                  remove={
+                    resources.filter((other) => other.kind === resource.kind).length > 1
+                      ? removeResourceAction.bind(null, resource.id)
+                      : undefined
+                  }
                 />
               ))}
+            </div>
+            <div className="flex flex-col gap-2 pt-2" data-testid="add-resource">
+              <p className="font-semibold">Have more than one?</p>
+              <div className="flex flex-wrap gap-2">
+                <ActionButton align="start" action={addResourceAction.bind(null, "shower")}>
+                  Add a shower
+                </ActionButton>
+                <ActionButton align="start" action={addResourceAction.bind(null, "washer")}>
+                  Add a washing machine
+                </ActionButton>
+                <ActionButton align="start" action={addResourceAction.bind(null, "dryer")}>
+                  Add a dryer
+                </ActionButton>
+              </div>
             </div>
           </>
         ) : (

@@ -54,3 +54,17 @@ export function describeSlotLength(minutes: number): string {
 export function clockLabel(minutes: number): string {
   return `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
 }
+
+/**
+ * One line for several of the same thing, such as two showers. With one, it is that
+ * one's own line. With more, it says how many are free right now.
+ */
+export function describeNowAcross(lines: readonly string[]): string {
+  if (lines.length === 0) return "Switched off";
+  if (lines.length === 1) return lines[0];
+  const free = lines.filter((line) => line.startsWith("Free")).length;
+  if (free > 0) return `${free} of ${lines.length} free`;
+  // All closed, or all not open yet: they share one line.
+  if (lines.every((line) => line === lines[0])) return lines[0];
+  return "All taken right now";
+}

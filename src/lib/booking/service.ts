@@ -30,6 +30,12 @@ export async function findResource(householdId: string, kind: Resource["kind"]) 
   return found ?? null;
 }
 
+/** The household's switched-on resources of these kinds, in a stable order. */
+export async function listEnabled(householdId: string, kinds: Resource["kind"][]) {
+  const all = await listResources(householdId);
+  return all.filter((candidate) => candidate.enabled && kinds.includes(candidate.kind));
+}
+
 /** One resource by id, only if it belongs to this household and is switched on. */
 export async function findResourceById(householdId: string, resourceId: string) {
   const [found] = await db

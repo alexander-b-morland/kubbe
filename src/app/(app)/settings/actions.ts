@@ -8,7 +8,10 @@ import { auth } from "@/lib/auth";
 import type { FormState } from "@/lib/form-state";
 import { requireHousehold } from "@/lib/session";
 import {
+  addResource,
+  MAX_PER_KIND,
   removeMember,
+  removeResource,
   renameHousehold,
   replaceJoinCode,
   setMemberColour,
@@ -71,6 +74,27 @@ export async function updateResourceAction(resourceId: string, _previous: Settin
   if (!z.uuid().safeParse(resourceId).success || !(await updateResource(household.id, resourceId, parsed.data))) {
     return { error: "That no longer exists. Reload and try again." };
   }
+  refreshAll();
+  return { saved: true };
+}
+
+export async function addResourceAction(kind: "shower" | "washer" | "dryer"): Promise<SettingsState> {
+  const { household, membership } = await requireHousehold();
+  if (membership.role !== "admin") return { error: adminsOnly };
+  const parsed = z.enum(["shower", "washer", "dryer"]).safeParse(kind);
+  if (!parsed.success) return { error: "Pick a shower, a washing machine or a dryer." };
+  if ((await addResource(household.id, parsed.data)) === "full") {
+    return { error: `A household can have ${MAX_PER_KIND} of each. Remove one to add another.` };
+  }
+  refreshAll();
+  return { saved: true };
+}
+
+export async function removeResourceAction(resourceId: string): Promise<SettingsState> {
+  const { household, membership } = await requireHousehold();
+  if (membership.role !== "admin") return { error: adminsOnly };
+  const result = z.uuid().safeParse(resourceId).success ? await removeResource(household.id, resourceId) : "gone";
+  if (result === "last") return { error: "This is the only one of its kind. Switch it off instead." };
   refreshAll();
   return { saved: true };
 }

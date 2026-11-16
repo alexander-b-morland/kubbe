@@ -1,6 +1,7 @@
 import { and, count, eq, ne } from "drizzle-orm";
 import { db, type Transaction } from "@/db";
 import { booking, household, membership, resource } from "@/db/schema";
+import { DEFAULT_RESOURCES } from "@/lib/booking/defaults";
 import { pinCurrentTurns } from "@/lib/cleaning/service";
 import { generateJoinCode } from "@/lib/join-code";
 import { MEMBER_COLOURS } from "@/lib/member-colours";
@@ -29,6 +30,58 @@ export async function updateResource(householdId: string, resourceId: string, se
     .where(and(eq(resource.id, resourceId), eq(resource.householdId, householdId)))
     .returning({ id: resource.id });
   return updated.length === 1;
+}
+
+export const MAX_PER_KIND = 6;
+
+type Kind = (typeof DEFAULT_RESOURCES)[number]["kind"];
+
+/** Add another shower, washing machine or dryer, with the usual settings for its kind. */
+export async function addResource(householdId: string, kind: Kind): Promise<"ok" | "full"> {
+  return db.transaction(async (tx) => {
+    await lockHousehold(tx, householdId);
+    const existing = await tx
+      .select({ name: resource.name })
+      .from(resource)
+      .where(and(eq(resource.householdId, householdId), eq(resource.kind, kind)));
+    if (existing.length >= MAX_PER_KIND) return "full";
+
+    const defaults = DEFAULT_RESOURCES.find((candidate) => candidate.kind === kind)!;
+    // "Shower 2", "Shower 3": the first number no other one is using.
+    let number = existing.length + 1;
+    while (existing.some((other) => other.name === `${defaults.name} ${number}`)) number++;
+    await tx.insert(resource).values({
+      ...defaults,
+      householdId,
+      name: existing.length === 0 ? defaults.name : `${defaults.name} ${number}`,
+      enabled: true,
+      allowBackToBack: false,
+      bookAheadDays: 7,
+    });
+    return "ok";
+  });
+}
+
+/**
+ * Remove a shower, washing machine or dryer, and its bookings with it. The last one
+ * of a kind stays, so there is always something to switch on or off.
+ */
+export async function removeResource(householdId: string, resourceId: string): Promise<"ok" | "last" | "gone"> {
+  return db.transaction(async (tx) => {
+    await lockHousehold(tx, householdId);
+    const [found] = await tx
+      .select({ kind: resource.kind })
+      .from(resource)
+      .where(and(eq(resource.id, resourceId), eq(resource.householdId, householdId)));
+    if (!found) return "gone";
+    const [same] = await tx
+      .select({ total: count() })
+      .from(resource)
+      .where(and(eq(resource.householdId, householdId), eq(resource.kind, found.kind)));
+    if (same.total <= 1) return "last";
+    await tx.delete(resource).where(and(eq(resource.id, resourceId), eq(resource.householdId, householdId)));
+    return "ok";
+  });
 }
 
 export async function renameHousehold(householdId: string, name: string) {
