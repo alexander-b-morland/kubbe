@@ -1,0 +1,92 @@
+/*
+ * Plain global CSS with prefixed class names. CSS Modules are not available here:
+ * the Tailwind rule in next.config.ts handles every .css file as global CSS.
+ */
+
+.kubbe-logo {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.kubbe-logo__shape {
+  fill: var(--f);
+  stroke: var(--color-ink);
+}
+
+.kubbe-logo__line {
+  fill: none;
+  stroke: var(--color-ink);
+}
+
+.kubbe-logo__ink {
+  fill: var(--color-ink);
+}
+
+/*
+ * Drawing animation. Each stroke stays invisible until its own turn, because a
+ * fully dashed-out path with round caps would otherwise show a dot at its start.
+ * Shapes keep an opaque fill the whole time so they hide what is behind them;
+ * the fill starts as the background colour and turns into the real tone last.
+ */
+.kubbe-logo--animate .kubbe-logo__shape,
+.kubbe-logo--animate .kubbe-logo__line {
+  stroke-opacity: 0;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: kubbe-logo-draw var(--u) cubic-bezier(0.6, 0, 0.3, 1) var(--t) forwards;
+}
+
+.kubbe-logo--animate .kubbe-logo__shape {
+  fill: var(--logo-bg, var(--color-paper));
+  animation:
+    kubbe-logo-draw var(--u) cubic-bezier(0.6, 0, 0.3, 1) var(--t) forwards,
+    kubbe-logo-colour 0.7s ease 3.05s forwards;
+}
+
+.kubbe-logo--animate .kubbe-logo__tint,
+.kubbe-logo--animate .kubbe-logo__ink {
+  opacity: 0;
+  animation: kubbe-logo-fade var(--u) ease var(--t) forwards;
+}
+
+@keyframes kubbe-logo-draw {
+  from {
+    stroke-opacity: 1;
+  }
+  to {
+    stroke-opacity: 1;
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes kubbe-logo-colour {
+  to {
+    fill: var(--f);
+  }
+}
+
+@keyframes kubbe-logo-fade {
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .kubbe-logo--animate .kubbe-logo__shape,
+  .kubbe-logo--animate .kubbe-logo__line {
+    animation: none;
+    stroke-opacity: 1;
+    stroke-dashoffset: 0;
+  }
+
+  .kubbe-logo--animate .kubbe-logo__shape {
+    fill: var(--f);
+  }
+
+  .kubbe-logo--animate .kubbe-logo__tint,
+  .kubbe-logo--animate .kubbe-logo__ink {
+    animation: none;
+    opacity: 1;
+  }
+}
