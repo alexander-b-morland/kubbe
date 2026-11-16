@@ -103,6 +103,8 @@ On `fjord` and `spruce` use `paper` for text and lines; on `ochre` use `ink`.
 
 **Drawing.** Illustrations are hand-drawn line art with round caps and slightly uneven strokes, one per room (shower head, washing machine, broom), and they draw themselves once when they appear.
 
+The three room drawings are the `RoomArt` component (`src/components/illustrations/room-art.tsx`). Lines use the current text colour.
+
 **Booking a slot** looks like signing a paper sheet: tapping a free slot draws a pen circle around the time, then a squiggle under your name. Cancelling runs it backwards.
 
 **Free slots must look tappable.** A free slot shows a filled `ink` "Book" button. That is enough: no dotted or dashed outline around the time before booking (tried and rejected). The pen circle appears only when the slot is booked. Never rely on the word "Free" alone.
@@ -136,3 +138,14 @@ Standing brief:
 - Small commits with clear messages, one concern each.
 - Plan first for anything bigger than a small change, and get approval before writing app code.
 - Sentence case in the UI. Write errors as what happened and what to do next.
+
+## Open items
+
+Agreed but not done yet. Remove each when it ships.
+
+- Booking engine and the shower, laundry and cleaning screens (the rest of the MVP).
+- Google sign-in. The user wants to be walked through the Google Cloud setup step by step. Do it after booking works and before real roommates are invited.
+- A domain, then email sending: password reset and verified addresses depend on it.
+- A separate Neon branch for local work and tests.
+- A simplified logo for small sizes, and the app icon.
+- Live site: https://kubbe-zeta.vercel.app
