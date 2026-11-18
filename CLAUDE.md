@@ -36,7 +36,7 @@ Approved 2026-11-15.
 - Drizzle ORM. Schema in `src/db/schema.ts`, SQL migrations in `drizzle/`.
 - Better Auth (email and password for now), storing users and sessions in the same database. Config in `src/lib/auth.ts`.
 - Zod for input validation
-- Anthropic SDK (`@anthropic-ai/sdk`) for dinner ideas from Claude. Optional: without `ANTHROPIC_API_KEY` the ideas come from a built-in cookbook.
+- Anthropic SDK (`@anthropic-ai/sdk`) for dinner help from Claude: ideas for a dinner, and what a dish needs. The model is Claude Sonnet 5.5 (`claude-sonnet-5-5`), the owner's choice. Optional: without `ANTHROPIC_API_KEY` the answers come from a built-in cookbook.
 - Vitest for unit tests (`src/**/*.test.ts`), Playwright for end-to-end tests (`e2e/`), driving the Edge that ships with Windows
 - Animation is plain CSS so far. Motion is agreed for later if CSS is not enough; it is not installed.
 
@@ -68,7 +68,7 @@ Package manager is npm. Keep this list current as scripts are added.
 
 ## Where things live
 
-- `src/app`: screens. `(auth)` is sign in and sign up, `onboarding` is create or join, `join/[code]` is the invite link. `(app)` holds the signed-in screens, which share the tab bar: `home` (dashboard), `shower`, `laundry`, `cleaning`, and `flat`, the hub for the extras (`dinner`, `dinner/[id]`, `shopping`, `expenses`, `happenings`, `board`), `profile`, `people/[id]` and `settings` (shown to people as "Household").
+- `src/app`: screens. `(auth)` is sign in and sign up, `onboarding` is create or join, `join/[code]` is the invite link. `(app)` holds the signed-in screens, which share the navigation. Its four tabs are `home` (the dashboard), `calendar`, `settings` (shown as "Household", with `settings/rules` for the booking rules and `people/[id]` for a roommate) and `profile` (shown as "You"). The eight areas open from tiles on Home: `shower`, `laundry`, `cleaning`, `dinner` (and `dinner/[id]`), `shopping`, `expenses`, `happenings`, `board`.
 - `src/lib/session.ts`: `requireUser()` and `requireHousehold()`. Every screen and action that touches household data starts with `requireHousehold()` and uses the household id it returns. It re-reads the membership from the database on every request.
 - `src/lib/households.ts`, `src/lib/settings.ts`: creating, joining, listing, and what the Household screen changes. Database rules live here, not in the screens.
 - `src/lib/booking`: `rules.ts` (pure rules), `service.ts` (database), `actions.ts` (server actions), `status.ts` ("Free until 07:30"), `defaults.ts`.
@@ -79,7 +79,11 @@ Package manager is npm. Keep this list current as scripts are added.
 - `src/lib/dinner`: `plan.ts` (pure rules), `service.ts` (database), `ideas.ts` (Claude, falling back to `cookbook.ts`).
 - `src/lib/shopping.ts` (list and expenses), `src/lib/money.ts` (pure: split, balances, settle up), `src/lib/board.ts`, `src/lib/happenings.ts`, `src/lib/profile.ts`.
 - `src/lib/dashboard.ts`: `buildToDos`, the pure function behind "Yours to do" on Home. A new part of the app that gives people something to do adds its lines there.
-- `src/components/extras/extra-header.tsx`: the top of every extras screen. `src/components/avatar`: the drawn avatars.
+- `src/lib/areas.ts`: the eight areas, each with its name, address, drawing and colour. Anything that lists or colours areas reads from here.
+- `src/components/area/area-header.tsx`: `AreaPage` and `AreaHeader`, the coloured band at the top of every area's screen, and `BackLink`, the way back that every screen below a tab starts with.
+- `src/components/app-nav.tsx`: the navigation, a bar at the bottom on a phone and a column on the left from `lg` up.
+- `src/lib/calendar.ts` (pure: what each day holds, month sheets), `src/lib/calendar-service.ts` (loads a stretch of days), `src/components/calendar/agenda.tsx` (`AgendaItem`, and `AnswerButtons` for "I'm in" and "Can't").
+- `src/components/avatar`: the drawn avatars, and `Person` and `Faces` for showing who something belongs to. `src/components/board/sticky.tsx`: a note on the whiteboard. `src/components/ui/strike.tsx`: `Struck`, the pen line through something done.
 - `design/logo/generate.mjs`: source of the logo, the logo data file and the app icons.
 
 ## Rules that must hold
@@ -97,6 +101,7 @@ Package manager is npm. Keep this list current as scripts are added.
 - **Redirects after signing in go through `safeNextPath`,** which accepts only an invite link. Never redirect to a path taken from the URL any other way.
 - **There is no public auth route.** All sign-in and sign-up goes through server actions, which validate and rate limit. Google sign-in will need `/api/auth` back: when adding it, also add name validation in the auth library's database hooks and database-backed rate limiting there.
 - **The shopping list follows the dinner.** Every change to a dinner, its dishes or ingredients ends with `syncShopping` in the same transaction. Do not insert or delete a dinner's shopping items anywhere else.
+- **Nobody is in for a dinner until they say so.** Whoever plans one chooses whether they are in themselves; everyone else answers (`dinner_reply`). Cooking or cleaning up makes you in; saying no releases both.
 - **Dinner ideas never send names.** `ideas.ts` gets a head count, the "I don't eat" texts and dish names. What comes back is cut to size and shown; it is stored only when someone puts it to the vote. Asking is rate limited per person, per household and for the whole app, and `max_tokens` is kept low, because each answer costs money.
 - **Paying back applies to what was on screen.** `addSettlement` locks the household, works the balances out again and records the payment only while that much is still owed between those two. Do not add a way to record a repayment that skips it.
 - **Ticks and claims belong to whoever made them.** `setBought` and `setClaim` never overwrite another person's tick or claim.
@@ -107,9 +112,9 @@ Package manager is npm. Keep this list current as scripts are added.
 
 Mobile first: design every screen for a phone, then widen.
 
-Approved 2026-11-15, except the logo, which is still being drawn. Tokens live in `src/app/globals.css`.
+Approved 2026-11-15, except the logo, which is still being drawn. Reworked 2026-11-18 after the owner found the app bland and hard to find his way in: every area has a colour now, and Home holds everything. Tokens live in `src/app/globals.css`.
 
-**Colour means room.** Muted colours taken from Norwegian house paint. Bright, saturated or neon colours were rejected as AI-looking; do not drift back to them.
+**Colour means area.** Muted colours taken from painted wooden houses. Bright, saturated or neon colours were rejected as AI-looking; do not drift back to them. But colourless is wrong too: the owner asked for more colour, and for the extras to have colours and drawings like the rooms.
 
 | Token | Hex | Use |
 |---|---|---|
@@ -120,8 +125,23 @@ Approved 2026-11-15, except the logo, which is still being drawn. Tokens live in
 | `ochre` | `#D2A24C` | Laundry |
 | `spruce` | `#476B52` | Cleaning |
 | `barn` | `#A6402F` | Happening right now, warnings |
+| `salmon` | `#E3A583` | Dinner |
+| `sage` | `#A9C4A2` | Shopping |
+| `heather` | `#B8A9D4` | Expenses |
+| `blush` | `#E2A5B8` | Happenings, and a to-do on the whiteboard |
+| `sky` | `#A3C6DA` | Noticeboard |
+| `note` | `#F1DF9A` | A note on the whiteboard |
 
-On `fjord` and `spruce` use `paper` for text and lines; on `ochre` use `ink`.
+On `fjord` and `spruce` use `paper` for text and lines; on every other area colour use `ink`. Inside an area, panels use a wash of its colour (`bg-salmon/30`). The classes for each area come from `src/lib/areas.ts`.
+
+**Finding your way.** Decided 2026-11-18, replacing the five tabs the owner said made no sense.
+
+- Four tabs: Home, Calendar, Household, You. Shower, laundry and cleaning are not tabs: they are areas like dinner and shopping, and all eight are tiles on Home.
+- Every screen below a tab starts with `BackLink`, top left, saying where it leads. The owner got stuck on screens without one.
+- Home is the one dashboard: what is yours to do (with the answer buttons for invitations right there), money both ways, a tile per area saying what matters now, the week ahead, and the notes on the board.
+- What an admin can change is reachable from where it is used: "Change the rules" on the shower and laundry screens.
+- From `lg` up the navigation is a column on the left, Home and Calendar use two columns, and other screens widen to `max-w-3xl`.
+- People show as their drawn avatar on their colour wherever something is theirs: who is in, who cooks, who is buying, whose note.
 
 **Type.** Times and headlines use the `type-display` utility (Archivo, condensed, weight 800). Everything else is Schibsted Grotesk.
 
@@ -155,7 +175,7 @@ The three room drawings are the `RoomArt` component (`src/components/illustratio
 
 **Screenshots.** The browser tests save phone-sized screenshots of every screen to `test-shots/` (ignored by git). Look at them after changing a screen.
 
-**People have their own colours.** `MEMBER_COLOURS` never contains a room colour or `barn`, so a dot beside a name never reads as a room. Every one of them carries paper-coloured text at readable contrast; a unit test checks both.
+**People have their own colours.** `MEMBER_COLOURS` never contains an area colour or `barn`, so a dot beside a name never reads as an area. People's colours are deep, the newer area colours are light. Every one of them carries paper-coloured text at readable contrast; a unit test checks both.
 
 **Contrast and focus.** Secondary text is `ink-soft` (#586072), chosen to pass 4.5:1 on paper and on the tinted rows. Focus rings are solid `ring-fjord` (or `ring-ink` on a coloured band), never a faint tint.
 
@@ -197,7 +217,28 @@ The owner asked for these after the MVP. Tick each off here as it ships; the ans
 
 Already true: several admins are possible ("Make admin" under Household).
 
-Design for all of it: simple, animated, drawn. New areas get a drawing of their own and reuse the pen strokes (tick, strike, circle). No new bright colours: the new areas live on paper with ink, not on a fourth and fifth room colour.
+Design for all of it: simple, animated, drawn. New areas get a drawing of their own and reuse the pen strokes (tick, strike, circle). They were first built on paper with ink only; the owner found that bland, and each has its own colour since 2026-11-18.
+
+## Third round (the owner's feedback of 2026-11-18)
+
+He tested the second round and sent one long message. Tick each off as it ships.
+
+- [x] **Colour everywhere**, with the drawings, for the extras too.
+- [x] **Navigation that makes sense**, and a way back from every screen.
+- [x] **One dashboard** with everything: to-dos, invitations to answer, the board's notes, money owed both ways.
+- [x] **A shared calendar** with people and their colours and who is in charge, as in the older project.
+- [x] **Dinner:** only whoever plans it is in, with a toggle. Suggestions for what a dish needs as it is typed. Clear about whether a dish is decided. Avatars on it.
+- [x] **Shopping:** who is buying each thing, shown with their avatar; the pen line through all of what was bought.
+- [x] **Expenses:** uneven splits, and changing an expense.
+- [x] **Noticeboard as a whiteboard,** with its notes on Home.
+- [x] **Profiles that are fun to read.**
+- [x] **Booking rules:** easy to find, a new shower or machine copies the settings of the one there is.
+- [x] **Cleaning:** pick the day a rota starts.
+- [x] **Wide screens** use the space.
+- [x] **Claude Sonnet 5.5** as the model. His limits stand: 20 a day per person, 40 per household, 300 for the app.
+- [ ] **Ten test roommates** in two flats of five, as sub-agents on Claude Opus 5.5, using the app and reporting through their two admins. Then fix everything they find.
+- [ ] **Norwegian:** one switch for the whole app, and Claude's ideas in Norwegian too.
+- [ ] **Reminders.** He asked how; web push needs no domain. Not built yet.
 
 ## Open items
 
@@ -205,7 +246,7 @@ Agreed or suggested, not done yet. Remove each when it ships.
 
 Needs the owner:
 
-- `ANTHROPIC_API_KEY` in Vercel, to turn on dinner ideas from Claude. The Claude path is written against the SDK's types but has not been run against the live API yet: check it once the key is in.
+- `ANTHROPIC_API_KEY` is in Vercel for Production since 2026-11-18. It is not set for Development, so locally the cookbook answers; check Claude on the live site.
 - Google sign-in. He wants to be walked through the Google Cloud setup step by step. Before turning it on, check how the auth library links a Google login to an existing password account whose email was never verified.
 - A domain, then email sending. Password reset and verified addresses depend on it. Until then a forgotten password cannot be recovered, and sign-up tells you whether an email already has an account.
 - A separate Neon branch for local work and tests. The browser tests run against the live database. The database is in US East while the users are in Norway; an EU region would also make local work much faster.
@@ -213,13 +254,11 @@ Needs the owner:
 Can be built any time:
 
 - Reminders (web push), repeating bookings, Norwegian.
-- An experience review of everything under Flat. A security and correctness review was done 2026-11-16 and its findings fixed, except these three:
-  - An expense does not record who entered it, so someone can log an expense as paid by a roommate and then not be able to remove it. Needs a `createdBy` column.
-  - A dish added from the ideas is stored with no suggester, and the browser says which dishes those are. Needs a `fromHelper` column beside `suggestedBy`.
+- A security and correctness review of the extras was done 2026-11-16 and its findings fixed, except one:
   - Deleting a user account would cascade away the expenses they paid and unbalance the books. No screen deletes accounts yet: change those foreign keys to `restrict` before adding one.
 - Dinners: a different time per fixed day (the table allows it, the form sets one time for all), removing a single ingredient, and a note on a dinner ("bring a friend").
-- Expenses: uneven splits, and editing an expense instead of removing and adding it again.
-- Happenings and dinners in one calendar view.
+- The `dinner_absence` table is no longer used; drop it in a later migration.
+- "I'll buy everything left" on a dinner, for whoever does the whole shop.
 - An admin cancelling someone else's booking, for the roommate who booked and left town.
 - Telling a removed person why they landed on the start screen (leaving on your own already says so).
 - A squiggle under "You" on a booked slot, from the first design sketch.

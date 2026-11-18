@@ -17,7 +17,14 @@ async function signUp(page: Page, name: string, who: string) {
   await page.getByRole("button", { name: "Create account" }).click();
 }
 
-const tab = (page: Page, name: string) => page.getByRole("navigation", { name: "Main" }).getByRole("link", { name });
+// The way around: four tabs, and every area as a tile on Home.
+const nav = (page: Page, name: string) => page.getByRole("navigation", { name: "Main" }).getByRole("link", { name, exact: true });
+/** Open an area the way a person does: Home, then its tile. */
+async function openArea(page: Page, key: string) {
+  await nav(page, "Home").click();
+  await page.getByTestId(`band-${key}`).filter({ visible: true }).click();
+  await expect(page).toHaveURL(new RegExp(`/${key}(\\?|$)`));
+}
 const turn = (page: Page, room: string) => page.getByTestId(`turn-${room}`).filter({ visible: true });
 const headline = (page: Page) => page.getByTestId("headline").filter({ visible: true });
 
@@ -46,7 +53,7 @@ test("rooms go round between roommates, and turns can be done or taken over", as
   const code = (await ida.getByTestId("join-code").innerText()).replace(/\s/g, "");
 
   // --- An admin adds the rooms ---
-  await tab(ida, "Cleaning").click();
+  await openArea(ida, "cleaning");
   await expect(headline(ida)).toHaveText("No turns yet");
   await ida.screenshot(shot("c1-empty"));
   await ida.getByRole("button", { name: "Bathroom", exact: true }).click();
@@ -66,7 +73,7 @@ test("rooms go round between roommates, and turns can be done or taken over", as
   await signUp(knut, "Knut", "knut");
   await knut.getByRole("button", { name: "Join Kollektivet" }).click();
   await expect(knut).toHaveURL(/\/home$/);
-  await tab(knut, "Cleaning").click();
+  await openArea(knut, "cleaning");
   await expect(headline(knut)).toHaveText("Nothing for you now");
   await expect(knut.getByRole("heading", { name: "Rooms and chores" })).toHaveCount(0);
   await ida.reload();

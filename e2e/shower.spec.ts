@@ -58,7 +58,13 @@ test("book the shower, with the rules holding between two roommates", async ({ b
   await expect(ida).toHaveURL(/\/home$/);
   const code = (await ida.getByTestId("join-code").innerText()).replace(/\s/g, "");
 
-  await ida.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Shower" }).click();
+  await ida.getByTestId("band-shower").click();
+  await expect(ida).toHaveURL(/\/shower$/);
+  // An admin gets from the shower straight to its rules, and back again.
+  await ida.getByTestId("manage").filter({ visible: true }).click();
+  await expect(ida).toHaveURL(/\/settings\/rules\?from=shower/);
+  await expect(ida.locator('details[data-testid="resource-shower"]').filter({ visible: true })).toHaveAttribute("open", "");
+  await ida.getByTestId("back").filter({ visible: true }).click();
   await expect(ida).toHaveURL(/\/shower$/);
   await expect(ida.getByTestId("headline")).toBeVisible();
   // Tomorrow, so the test does not depend on what time it runs.
@@ -123,8 +129,10 @@ test("book the shower, with the rules holding between two roommates", async ({ b
   await expect(slot(ida, "18:00")).toContainText("You've booked your 3 for this day");
 
   // --- Home tells Knut about his next slot ---
-  await knut.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Home" }).click();
+  await knut.getByTestId("back").filter({ visible: true }).click();
+  await expect(knut).toHaveURL(/\/home$/);
   await expect(knut.getByTestId("band-shower")).toContainText("Your slot: 07:20 tomorrow");
+  await expect(knut.getByTestId("week").filter({ visible: true })).toContainText("Shower");
   await knut.screenshot({ ...shot("s5-home"), animations: "disabled" });
   await knut.goBack();
 

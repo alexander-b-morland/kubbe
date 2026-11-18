@@ -31,19 +31,23 @@ The server enforces all of it. If two people press Book on the same slot at the 
 
 **Cleaning.** The admin adds rooms and chores (the bathroom, but also emptying the dishwasher or taking out the trash), how often each is due and roughly how long it takes. Turns rotate between roommates in the order they joined, and each room starts one person further along so nobody gets everything in the same week. You mark your turn done, take over someone else's, or hand one back. When someone moves in or out, the turns already under way stay with whoever has them, and the new rotation starts with the next round. A tally shows who has done how many turns in the last eight weeks, and an admin can deal the turns out again.
 
-**Home.** Your own dashboard. "Yours to do" gathers everything with your name on it: cleaning turns, dinners you cook or clean up after, what you said you would buy, to-dos given to you, plans you have not answered and money you owe. Below it, the house right now: whether a shower is free and when your next slot is.
+**Home.** The one dashboard. "Yours to do" gathers everything with your name on it: cleaning turns, dinners you cook or clean up after, what you said you would buy, to-dos given to you, and invitations you have not answered, with "I'm in" and "Can't" right there. Beside it: who you owe and who owes you, the week ahead, and the notes on the board. And a coloured tile for each of the eight areas, saying what matters there right now.
 
-**Flat.** The fifth tab holds the rest. A household switches each part on or off.
+**Calendar.** One month for the whole household: everyone's bookings, cleaning turns, dinners and happenings, each in its area's colour, with the faces of who is in or in charge. Pick a day to see it in full, or a person to see only theirs.
 
-- **Dinner.** Plan a dinner on a day, or pick fixed dinner days. Everyone is in unless they say they are out. Anyone suggests dishes with their ingredients and votes for what they would eat. Someone volunteers to cook, someone to clean up. Going with a dish puts what needs buying on the shopping list, and each ingredient is either "we have it" or taken by someone who will buy it.
-- **Dinner ideas.** "Out of ideas?" suggests three dishes that fit who is coming and what they do not eat, and avoids what was cooked lately. With an Anthropic API key the ideas come from Claude; without one they come from a built-in cookbook, so nothing depends on the key.
+**The other areas.** A household switches each on or off.
+
+- **Dinner.** Plan a dinner on a day, or pick fixed dinner days. Whoever plans one says whether they are in; everyone else answers for themselves. Anyone suggests dishes and votes for what they would eat, someone volunteers to cook and someone to clean up, and then you decide. The top of the screen always says where the dinner stands. Deciding puts what needs buying on the shopping list, and each ingredient is either "we have it" or taken by someone who will buy it.
+- **Help from Claude.** Type the name of a dish and the form offers what it needs. "Out of ideas?" suggests three dishes that fit who is in and what they do not eat, and avoids what was cooked lately. With an Anthropic API key the answers come from Claude; without one they come from a built-in cookbook, so nothing depends on the key.
 - **Shopping.** One list for the flat. Say "I'll buy it", tick things off in the shop, then enter what you paid: it becomes an expense split between the people you choose.
-- **Expenses.** Who paid for what, who owes whom, and a short list of payments that makes everyone square.
+- **Expenses.** Who paid for what, split evenly or as an amount each, and corrected afterwards if it was wrong. Who owes whom, and a short list of payments that makes everyone square.
 - **Happenings.** Suggest something to do together with a time and place. Roommates answer "I'm in" or "Can't make it".
-- **Noticeboard.** A shared whiteboard. A note can be a to-do, for one person or for anyone, and is ticked off when done.
-- **Profiles.** A drawn avatar, a bio, a few questions, and what you do not eat.
+- **Noticeboard.** A whiteboard with sticky notes: yellow for something to know, pink for something to do, for one person or for anyone.
+- **Profiles.** A drawn avatar on your colour, a line about you, "this or that" picks, a few blanks to fill in, and what you do not eat.
 
-**Household.** Admins rename the household, set its time zone, add and remove showers and machines, replace the join code, make others admin and remove people who moved out (which also replaces the code, since they knew it). Everyone can change their name and colour, or leave. Anything that removes something asks first, and a household always keeps at least one admin.
+**Household.** Who lives here, the invite link, and for admins the rest: renaming, the time zone, which areas the household uses, making others admin and removing people who moved out (which also replaces the join code, since they knew it). The booking rules have a screen of their own, reached from here or straight from the shower and laundry screens; a second shower or machine starts with the rules of the first. Anything that removes something asks first, and a household always keeps at least one admin.
+
+**Finding your way.** Four tabs: Home, Calendar, Household, You. Every other screen opens from Home and has a way back at the top. On a wide screen the tabs sit down the left and the screens use the room.
 
 ## How it is built
 
@@ -55,7 +59,7 @@ The server enforces all of it. If two people press Book on the same slot at the 
 | Data access | [Drizzle ORM](https://orm.drizzle.team), SQL migrations in `drizzle/` |
 | Accounts | [Better Auth](https://better-auth.com), email and password |
 | Validation | Zod |
-| Dinner ideas | [Claude](https://www.anthropic.com/claude) through the Anthropic SDK, optional |
+| Dinner help | [Claude](https://www.anthropic.com/claude) Sonnet 5.5 through the Anthropic SDK, optional |
 | Tests | Vitest (rules, rota, money, dinners), Playwright (whole flows in a phone-sized browser) |
 | Hosting | Vercel |
 
@@ -68,7 +72,8 @@ A few decisions worth knowing about:
 - **Times are stored in UTC and shown in the household's time zone.**
 - **Guessing is slowed down.** Sign-in attempts, sign-ups and join-code tries are counted in the database and refused past a limit. After signing in, the only place the app will send you on to is an invite link.
 - **The shopping list follows the dinner.** Every change to a dinner ends by making the list match it: what the chosen dish needs and nobody has at home is on the list, and nothing else from that dinner is. What is already bought stays.
-- **Dinner ideas send as little as possible.** Claude is told how many are eating, what they wrote under "I don't eat" and the names of recent dishes. No names of people. Whatever comes back is cut to size and only becomes a dish when someone puts it to the vote.
+- **Claude is sent as little as possible.** How many are eating, what they wrote under "I don't eat", and the names of dishes. No names of people. Whatever comes back is cut to size and only stored when someone uses it. Asking is capped per person, per household and for the whole app.
+- **One list of areas.** `src/lib/areas.ts` gives each of the eight areas its name, address, drawing and colour, and the tiles, headers and calendar all read from it.
 - **Money is whole numbers.** Amounts are stored in the smallest unit and split so the parts always add up.
 - **Changes to who lives where are atomic.** They lock the household first, so two people acting at once cannot, for example, both be the last admin to leave.
 
@@ -81,18 +86,19 @@ src/
     onboarding/      create or join a household
     join/[code]/     the invite link
     (app)/           signed-in screens, with the tab bar
-      home/          dashboard
+      home/          the dashboard
+      calendar/      the household's month
       shower/        booking
       laundry/       booking, washer and dryer
       cleaning/      rota
-      flat/          hub for everything below
       dinner/        dinners, and dinner/[id] for one dinner
       shopping/      the shopping list
       expenses/      who owes whom
       happenings/    things to do together
       board/         the noticeboard
-      profile/       your own profile; people/[id] shows a roommate's
-      settings/      the Household screen
+      settings/      the Household screen, and settings/rules for booking rules
+      people/[id]/   a roommate's profile
+      profile/       "You": your profile and account
   components/
     booking/         the booking screen and slot list shared by shower and laundry
     illustrations/   the room drawings
@@ -103,6 +109,8 @@ src/
     booking/         rules, service, server actions
     cleaning/        rota, service
     dinner/          plan (pure rules), service, ideas (Claude), cookbook (fallback)
+    areas.ts         the eight areas: name, address, drawing, colour
+    calendar.ts      what each day holds (pure); calendar-service.ts loads it
     dashboard.ts     what goes in "Yours to do"
     money.ts         splitting, balances, settling up
     session.ts       who is asking, and which household they are in
@@ -170,14 +178,15 @@ To run the browser tests against a deployed site instead of your machine, set `E
 ## How it was checked
 
 - **Unit tests** cover the booking rules (the slot grid, the daily cap, two in a row, the booking horizon, both clock-change days), the cleaning rota, the status lines, splitting money and settling up, dinner days and the cookbook, the "Yours to do" list, join codes, colours and the redirect guard.
-- **Browser tests** run whole stories at phone size with two or three people at once: signing up and joining by invite link, two roommates pressing Book on the same slot at the same moment, an admin changing the rules, washing then drying, the cleaning rota, removing someone, leaving, the noticeboard, shopping that turns into expenses, a happening, and a dinner from first idea to shopping list.
+- **Browser tests** run whole stories at phone size with two or three people at once: signing up and joining by invite link, two roommates pressing Book on the same slot at the same moment, an admin changing the rules, washing then drying, the cleaning rota, removing someone, leaving, the noticeboard, shopping that turns into expenses (split evenly and unevenly, and corrected), a happening answered from Home and found on the calendar, and a dinner from first idea to shopping list. One more walks through a lived-in flat and screenshots every screen on a phone and on a wide screen.
 - **Two independent reviews**, one for security and correctness and one for the experience of using it, were done on the first version (booking and cleaning). Neither found a way for one household to see or change another's data. Most of what they did find is fixed; what is left is listed under "Not done yet".
 
 ## Design
 
 The look is deliberate, and recorded in [CLAUDE.md](CLAUDE.md):
 
-- **Colour means room.** Fjord blue is the shower, ochre is laundry, spruce green is cleaning. The colours are muted and taken from Norwegian house paint. Everything under Flat lives on paper with ink, each part with a drawing of its own.
+- **Colour means area.** Fjord blue is the shower, ochre is laundry, spruce green is cleaning, salmon is dinner, sage is shopping, heather is expenses, blush is happenings and sky is the noticeboard. The colours are muted, taken from painted wooden houses, and each area has a drawing of its own.
+- **People are faces.** Everyone picks a drawn avatar and a colour, and that face shows wherever something is theirs: who is in, who cooks, who is buying, whose note.
 - **Drawing is the signature.** The logo, the room illustrations, the circle around a booked time and the line through a finished chore are all pen strokes that draw themselves. People who prefer reduced motion see the finished drawing instead.
 - **The logo** is the mascot of the flat this app was first made for: a carved wooden hand holding a trout. It is generated from `design/logo/generate.mjs`.
 - **Type.** Times and headlines are set in Archivo, condensed and heavy. Everything else is Schibsted Grotesk.

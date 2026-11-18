@@ -50,7 +50,8 @@ test("create a household, invite a roommate by link, sign back in", async ({ bro
   await ida.getByLabel("Household name").fill("Kollektivet");
   await ida.getByRole("button", { name: "Create household" }).click();
   await expect(ida).toHaveURL(/\/home$/);
-  await expect(ida.getByRole("heading", { level: 1 })).toHaveText("Kollektivet");
+  await expect(ida.getByRole("heading", { level: 1 })).toHaveText("Hi Ida");
+  await expect(ida.getByText("Kollektivet", { exact: true })).toBeVisible();
   const code = (await ida.getByTestId("join-code").innerText()).replace(/\s/g, "");
   expect(code).toMatch(/^[A-HJ-NP-Z2-9]{6}$/);
 
@@ -76,24 +77,29 @@ test("create a household, invite a roommate by link, sign back in", async ({ bro
   await knut.screenshot({ path: "test-shots/4-join.png", fullPage: true, caret: "initial", animations: "disabled" });
   await knut.getByRole("button", { name: "Join Kollektivet" }).click();
   await expect(knut).toHaveURL(/\/home$/);
-  await expect(knut.getByText("You and Ida live here")).toBeVisible();
+  await expect(knut.getByRole("heading", { level: 1 })).toHaveText("Hi Knut");
   // Once there are two of you, the invite card makes way for what is going on.
   await expect(knut.getByTestId("join-code")).toHaveCount(0);
-  await expect(knut.getByTestId("band-shower")).toBeVisible();
-  await knut.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Flat" }).click();
-  await expect(knut.getByRole("heading", { level: 1 })).toHaveText("The flat");
-  await knut.screenshot({ path: "test-shots/6-flat.png", fullPage: true, caret: "initial", animations: "disabled" });
-  await knut.getByRole("navigation", { name: "Settings" }).getByRole("link", { name: /Household/ }).click();
-  await expect(knut.getByText("Knut (you)")).toBeVisible();
+  // Every area has a tile, and an old link to the hub that used to hold them lands on Home.
+  for (const area of ["shower", "laundry", "cleaning", "dinner", "shopping", "expenses", "happenings", "board"]) {
+    await expect(knut.getByTestId(`band-${area}`)).toBeVisible();
+  }
   await knut.screenshot({ path: "test-shots/5-home-two.png", fullPage: true, caret: "initial", animations: "disabled" });
+  await knut.goto("/flat");
+  await expect(knut).toHaveURL(/\/home$/);
+  const main = knut.getByRole("navigation", { name: "Main" });
+  await main.getByRole("link", { name: "Household", exact: true }).click();
+  await expect(knut.getByText("Knut (you)")).toBeVisible();
+  await knut.screenshot({ path: "test-shots/6-household.png", fullPage: true, caret: "initial", animations: "disabled" });
 
   // Ida sees Knut after a reload, and only Ida is admin.
-  await ida.reload();
-  await expect(ida.getByText("You and Knut live here")).toBeVisible();
   await ida.goto("/settings");
+  await expect(ida.getByTestId("member-Knut")).toBeVisible();
   await expect(ida.getByText("Admin", { exact: true })).toHaveCount(1);
 
   // --- Knut signs out and back in ---
+  await main.getByRole("link", { name: "You", exact: true }).click();
+  await expect(knut.getByRole("heading", { level: 1 })).toHaveText("You");
   await knut.getByRole("button", { name: "Sign out" }).click();
   await expect(knut).toHaveURL(/\/$/);
   await knut.goto("/home");
