@@ -49,6 +49,12 @@ export function instantInZone(day: string, minutesAfterMidnight: number, timeZon
   return instant;
 }
 
+/** How many minutes after midnight the zone's clock shows at this instant. */
+export function minutesInZone(instant: Date, timeZone: string): number {
+  const wall = wallClock(instant, timeZone);
+  return wall.hour * 60 + wall.minute;
+}
+
 /** Move a calendar date by whole days. */
 export function addDays(day: string, amount: number): string {
   const [year, month, date] = day.split("-").map(Number);

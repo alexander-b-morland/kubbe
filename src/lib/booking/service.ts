@@ -93,6 +93,17 @@ export async function listMyUpcoming(householdId: string, userId: string, now: D
     .limit(20);
 }
 
+/** Everyone's bookings that start in a stretch of time, for the calendar. */
+export async function listBookingsBetween(householdId: string, from: Date, to: Date) {
+  return db
+    .select({ id: booking.id, userId: booking.userId, kind: resource.kind, name: resource.name, startsAt: booking.startsAt, endsAt: booking.endsAt })
+    .from(booking)
+    .innerJoin(resource, eq(booking.resourceId, resource.id))
+    .where(and(eq(booking.householdId, householdId), gte(booking.startsAt, from), lt(booking.startsAt, to), eq(resource.enabled, true)))
+    .orderBy(asc(booking.startsAt))
+    .limit(600);
+}
+
 export type BookResult = { ok: true } | { ok: false; reason: Refusal | "not-found" };
 
 /**

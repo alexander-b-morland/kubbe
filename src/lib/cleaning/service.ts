@@ -93,6 +93,53 @@ export async function getRota(householdId: string, today: string): Promise<RotaR
 }
 
 /**
+ * Whose turn each room and chore is, for every turn that ends in a stretch of days.
+ * Turns ahead follow the rotation as it stands; they move if someone moves in or out.
+ */
+export async function listTurnsBetween(householdId: string, fromDay: string, toDay: string) {
+  const [areas, people] = await Promise.all([
+    listAreas(householdId),
+    db
+      .select({ userId: membership.userId })
+      .from(membership)
+      .where(eq(membership.householdId, householdId))
+      .orderBy(asc(membership.joinedAt), asc(membership.userId)),
+  ]);
+  if (areas.length === 0) return [];
+  const areaIds = areas.map((area) => area.id);
+  const [doneRows, takeovers] = await Promise.all([
+    db.select({ areaId: cleaningDone.areaId, period: cleaningDone.period }).from(cleaningDone).where(inArray(cleaningDone.areaId, areaIds)),
+    db.select().from(cleaningTakeover).where(inArray(cleaningTakeover.areaId, areaIds)),
+  ]);
+  const memberIds = people.map((person) => person.userId);
+
+  const turns: { areaId: string; name: string; from: string; day: string; assigneeId: string | null; done: boolean; routine: boolean }[] = [];
+  areas.forEach((area, areaIndex) => {
+    // A daily chore over two months is the most there can be for one row.
+    for (let period = periodOn(area, fromDay), guard = 0; guard < 70; period++, guard++) {
+      const days = periodDays(area, period);
+      if (days.to > toDay) break;
+      if (days.to < fromDay) continue;
+      turns.push({
+        areaId: area.id,
+        name: area.name,
+        from: days.from,
+        day: days.to,
+        assigneeId: assigneeFor({
+          period,
+          areaIndex,
+          memberIds,
+          takenBy: takeovers.find((held) => held.areaId === area.id && held.period === period)?.userId,
+        }),
+        done: doneRows.some((done) => done.areaId === area.id && done.period === period),
+        routine: area.intervalDays <= 2,
+      });
+    }
+  });
+  return turns;
+}
+
+/**
  * Freeze the turns that are under way. Whose turn it is depends on who lives there and
  * on the order of the rooms, so call this, inside the same transaction, just before
  * someone moves in or out or a room is removed. Without it, a turn somebody has been
@@ -128,13 +175,14 @@ export async function pinCurrentTurns(tx: Transaction, householdId: string, toda
   if (pins.length > 0) await tx.insert(cleaningTakeover).values(pins).onConflictDoNothing();
 }
 
-export async function createArea(householdId: string, input: AreaInput, today: string) {
+export async function createArea(householdId: string, input: AreaInput, startDay: string) {
   return db.transaction(async (tx) => {
     // Lock the household so two requests cannot both pass the count.
     await tx.select({ id: household.id }).from(household).where(eq(household.id, householdId)).for("update");
     const [existing] = await tx.select({ areas: count() }).from(cleaningArea).where(eq(cleaningArea.householdId, householdId));
     if (existing.areas >= MAX_AREAS) return false;
-    await tx.insert(cleaningArea).values({ householdId, ...input, startDay: startDayFor(today, input.intervalDays) });
+    // The first turn starts on the day the admin picked. A weekly rhythm then turns over on that weekday.
+    await tx.insert(cleaningArea).values({ householdId, ...input, startDay });
     return true;
   });
 }

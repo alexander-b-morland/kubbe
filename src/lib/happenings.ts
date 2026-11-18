@@ -1,4 +1,4 @@
-import { and, asc, count, eq, gte, inArray } from "drizzle-orm";
+import { and, asc, count, eq, gte, inArray, lt } from "drizzle-orm";
 import { db } from "@/db";
 import { happening, happeningReply } from "@/db/schema";
 
@@ -11,12 +11,17 @@ export const MAX_UPCOMING = 50;
 
 /** What is coming up, soonest first. Something that started in the last three hours still counts. */
 export async function listUpcoming(householdId: string, now: Date) {
-  const since = new Date(now.getTime() - 3 * 3_600_000);
+  return listBetween(householdId, new Date(now.getTime() - 3 * 3_600_000), null);
+}
+
+/** Happenings that start in a stretch of time, soonest first, with who answered what. */
+export async function listBetween(householdId: string, from: Date, to: Date | null) {
   const rows = await db
     .select()
     .from(happening)
-    .where(and(eq(happening.householdId, householdId), gte(happening.startsAt, since)))
-    .orderBy(asc(happening.startsAt));
+    .where(and(eq(happening.householdId, householdId), gte(happening.startsAt, from), to ? lt(happening.startsAt, to) : undefined))
+    .orderBy(asc(happening.startsAt))
+    .limit(300);
   if (rows.length === 0) return [];
   const replies = await db
     .select()
