@@ -18,6 +18,11 @@ const nextConfig: NextConfig = {
       },
     ];
   },
+  // "Flat" used to be a hub for dinner, shopping and the rest. Each of those is a tile on
+  // Home now, so an old link or bookmark lands there.
+  async redirects() {
+    return [{ source: "/flat", destination: "/home", permanent: false }];
+  },
   cacheComponents: true,
   partialPrefetching: true,
   turbopack: {

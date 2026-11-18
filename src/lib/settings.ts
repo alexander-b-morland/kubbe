@@ -37,15 +37,21 @@ export const MAX_PER_KIND = 6;
 
 type Kind = (typeof DEFAULT_RESOURCES)[number]["kind"];
 
-/** Add another shower, washing machine or dryer, with the usual settings for its kind. */
+/**
+ * Add another shower, washing machine or dryer. It starts with the same rules as the
+ * one the household already has of that kind, since those were set on purpose.
+ */
 export async function addResource(householdId: string, kind: Kind): Promise<"ok" | "full"> {
   return db.transaction(async (tx) => {
     await lockHousehold(tx, householdId);
     const existing = await tx
-      .select({ name: resource.name })
+      .select()
       .from(resource)
-      .where(and(eq(resource.householdId, householdId), eq(resource.kind, kind)));
+      .where(and(eq(resource.householdId, householdId), eq(resource.kind, kind)))
+      .orderBy(resource.createdAt);
     if (existing.length >= MAX_PER_KIND) return "full";
+    // Prefer one that is switched on: a switched-off one may never have been set up.
+    const like = existing.find((other) => other.enabled) ?? existing[0];
 
     const defaults = DEFAULT_RESOURCES.find((candidate) => candidate.kind === kind)!;
     // "Shower 2", "Shower 3": the first number no other one is using.
@@ -58,6 +64,16 @@ export async function addResource(householdId: string, kind: Kind): Promise<"ok"
       enabled: true,
       allowBackToBack: false,
       bookAheadDays: 7,
+      ...(like
+        ? {
+            slotMinutes: like.slotMinutes,
+            opensAt: like.opensAt,
+            closesAt: like.closesAt,
+            maxPerDay: like.maxPerDay,
+            allowBackToBack: like.allowBackToBack,
+            bookAheadDays: like.bookAheadDays,
+          }
+        : {}),
     });
     return "ok";
   });

@@ -38,12 +38,15 @@ export function ResourceForm({
   slotLengths,
   action,
   remove,
+  open = false,
 }: {
   resource: ResourceFormValues;
   slotLengths: readonly number[];
   action: Action;
   /** Present only when there is another of the same kind, so this one may go. */
   remove?: () => Promise<SettingsState>;
+  /** Start unfolded, for the one someone came here to change. */
+  open?: boolean;
 }) {
   const [state, formAction] = useActionState(action, undefined);
   const summary = resource.enabled
@@ -51,7 +54,7 @@ export function ResourceForm({
     : "Switched off";
 
   return (
-    <details className="group border-b-2 border-ink/15" data-testid={`resource-${resource.kind}`} data-name={resource.name}>
+    <details id={resource.id} open={open} className="group scroll-mt-6 border-b-2 border-ink/15" data-testid={`resource-${resource.kind}`} data-name={resource.name}>
       <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-lg py-4 outline-none focus-visible:ring-4 focus-visible:ring-fjord [&::-webkit-details-marker]:hidden">
         <span className="flex flex-col">
           <span className="type-display text-3xl">{resource.name}</span>

@@ -62,11 +62,14 @@ export function AddAreaForm({
   intervals,
   estimates,
   existing,
+  today,
   action,
 }: {
   intervals: readonly number[];
   estimates: readonly number[];
   existing: string[];
+  /** Today in the household's zone: the day a new rota starts unless another is picked. */
+  today: string;
   action: Action;
 }) {
   const [state, formAction] = useActionState(action, undefined);
@@ -103,6 +106,13 @@ export function AddAreaForm({
         </div>
       ) : null}
       <RhythmFields intervals={intervals} estimates={estimates} intervalDays={7} estimateMinutes={30} />
+      <Field
+        label="First turn starts"
+        hint="Turns change hands on this day. Weekly from a Friday means every Friday."
+        name="startDay"
+        type="date"
+        defaultValue={today}
+      />
       <FormError message={state?.error} />
       <SubmitButton pendingLabel="Adding…">Add</SubmitButton>
     </form>

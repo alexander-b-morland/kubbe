@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
+import { AreaHeader } from "@/components/area/area-header";
 import { AutoRefresh } from "@/components/booking/auto-refresh";
-import { RoomArt } from "@/components/illustrations/room-art";
 import { ActionButton } from "@/components/ui/action-button";
 import { describeDue, describeInterval } from "@/lib/cleaning/rota";
 import { ESTIMATES, getRota, INTERVALS, listAreas, tally } from "@/lib/cleaning/service";
@@ -50,18 +50,12 @@ export default async function CleaningPage() {
   }
 
   return (
-    <main className="mx-auto flex max-w-md flex-col">
+    <main className="mx-auto flex w-full max-w-md flex-col lg:max-w-3xl lg:pt-6">
       {/* A phone can keep this screen open for days. Keep it showing the turn that is running. */}
       <AutoRefresh everySeconds={120} />
-      <header className="flex flex-col gap-3 bg-spruce p-6 pt-8 text-paper">
-        <div className="flex items-start justify-between">
-          <p className="pt-2 font-semibold">Cleaning</p>
-          <RoomArt room="cleaning" animate className="size-24" />
-        </div>
-        <h1 className="type-display text-6xl break-words" data-testid="headline">
-          {headline}
-        </h1>
-      </header>
+      <AreaHeader area="cleaning" eyebrow="Cleaning">
+        {headline}
+      </AreaHeader>
 
       <div className="flex flex-col gap-10 p-6">
         {rota.length === 0 ? (
@@ -209,7 +203,7 @@ export default async function CleaningPage() {
               </div>
             ) : null}
             <h3 className="pt-2 text-lg font-bold">Add a room or chore</h3>
-            <AddAreaForm intervals={INTERVALS} estimates={ESTIMATES} existing={areas.map((area) => area.name)} action={addAreaAction} />
+            <AddAreaForm intervals={INTERVALS} estimates={ESTIMATES} existing={areas.map((area) => area.name)} today={today} action={addAreaAction} />
           </section>
         ) : null}
       </div>

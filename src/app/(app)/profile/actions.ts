@@ -6,7 +6,7 @@ import { z } from "zod";
 import { AVATAR_NAMES } from "@/components/avatar/avatars";
 import { auth } from "@/lib/auth";
 import type { FormState } from "@/lib/form-state";
-import { QUESTIONS, saveProfile } from "@/lib/profile";
+import { pickKey, PICKS, QUESTIONS, saveProfile } from "@/lib/profile";
 import { requireHousehold } from "@/lib/session";
 import { setMemberColour } from "@/lib/settings";
 
@@ -16,8 +16,8 @@ const schema = z.object({
   name: z.string().trim().min(1, "Enter your name.").max(60, "Keep your name under 60 characters."),
   avatar: z.enum(AVATAR_NAMES as [string, ...string[]], "Pick one of the avatars shown."),
   colour: z.string(),
-  bio: z.string().trim().max(160, "Keep your bio under 160 characters."),
-  avoids: z.string().trim().max(120, "Keep what you don't eat under 120 characters."),
+  bio: z.string().trim().transform((text) => text.replace(/\s+/g, " ")).pipe(z.string().max(160, "Keep your bio under 160 characters.")),
+  avoids: z.string().trim().transform((text) => text.replace(/\s+/g, " ")).pipe(z.string().max(120, "Keep what you don't eat under 120 characters.")),
 });
 
 export async function saveProfileAction(_previous: ProfileState, form: FormData): Promise<ProfileState> {
@@ -36,6 +36,10 @@ export async function saveProfileAction(_previous: ProfileState, form: FormData)
     const answer = String(form.get(`answer-${question.key}`) ?? "").trim();
     if (answer.length > 80) return { error: "Keep each answer under 80 characters." };
     answers[question.key] = answer;
+  }
+  for (const pick of PICKS) {
+    const side = String(form.get(pickKey(pick.key)) ?? "");
+    if (side === "a" || side === "b") answers[pickKey(pick.key)] = side;
   }
 
   // The name goes through the auth library, so the copy of the session kept in the cookie is refreshed too.

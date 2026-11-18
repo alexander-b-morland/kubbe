@@ -17,7 +17,7 @@ import {
 } from "@/lib/cleaning/service";
 import type { FormState } from "@/lib/form-state";
 import { requireHousehold } from "@/lib/session";
-import { dayInZone } from "@/lib/time";
+import { dayInZone, daysBetween, isDay } from "@/lib/time";
 
 export type CleaningState = (FormState & { saved?: boolean }) | undefined;
 
@@ -49,7 +49,15 @@ export async function addAreaAction(_previous: CleaningState, form: FormData): P
   if (membership.role !== "admin") return { error: adminsOnly };
   const parsed = areaSchema.safeParse(Object.fromEntries(form));
   if (!parsed.success) return { error: parsed.error.issues[0].message, values: { name: String(form.get("name") ?? "") } };
-  if (!(await createArea(household.id, parsed.data, today))) {
+  // Starting today unless another day is picked: up to two weeks back, so a rota already
+  // running on paper can carry on, and up to two months ahead.
+  const picked = String(form.get("startDay") ?? "");
+  const startDay = picked === "" ? today : picked;
+  const offset = isDay(startDay) ? daysBetween(today, startDay) : Number.NaN;
+  if (!(offset >= -14 && offset <= 62)) {
+    return { error: "Pick a start day between two weeks ago and two months from now.", values: { name: String(form.get("name") ?? "") } };
+  }
+  if (!(await createArea(household.id, parsed.data, startDay))) {
     return { error: `A household can have ${MAX_AREAS} rooms and chores. Remove one to add another.` };
   }
   refresh();

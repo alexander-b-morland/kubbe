@@ -33,7 +33,8 @@ export default async function LaundryPage({ searchParams }: PageProps<"/laundry"
       query={active === machines[0] ? {} : { machine: active.id }}
       room="laundry"
       label={active.name}
-      theme={{ header: "bg-ochre text-ink", mine: "bg-ochre/30", pen: "var(--color-ink)" }}
+      theme={{ mine: "bg-ochre/30", pen: "var(--color-ink)" }}
+      manageHref={membership.role === "admin" ? `/settings/rules?from=laundry&open=${active.id}#${active.id}` : undefined}
       resource={active}
       household={household}
       userId={user.id}
@@ -52,8 +53,8 @@ export default async function LaundryPage({ searchParams }: PageProps<"/laundry"
         ) : active.kind === "washer" && membership.role === "admin" ? (
           <p className="px-3 pb-1 text-sm text-ink-soft">
             Have a dryer too?{" "}
-            <Link href="/settings" className="font-bold underline underline-offset-4">
-              Switch it on under Household
+            <Link href="/settings/rules?from=laundry" className="font-bold underline underline-offset-4">
+              Switch it on in the rules
             </Link>
             .
           </p>

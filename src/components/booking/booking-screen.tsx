@@ -1,8 +1,9 @@
 import Link from "next/link";
 import type { CSSProperties, ReactNode } from "react";
+import { AreaHeader } from "@/components/area/area-header";
 import { AutoRefresh } from "@/components/booking/auto-refresh";
 import { SlotList, type SlotRow } from "@/components/booking/slot-list";
-import { RoomArt, type Room } from "@/components/illustrations/room-art";
+import type { Room } from "@/components/illustrations/room-art";
 import type { Resource } from "@/db/schema";
 import { bookResource, cancelResourceBooking } from "@/lib/booking/actions";
 import { refusalFor, slotsForDay } from "@/lib/booking/rules";
@@ -11,8 +12,6 @@ import { clockLabel, describeNow, describeSlotLength } from "@/lib/booking/statu
 import { addDays, clockTime, dayInZone, describeDay, isDay } from "@/lib/time";
 
 export type BookingTheme = {
-  /** Classes for the coloured header band. */
-  header: string;
   /** Class for the row of a slot you have. */
   mine: string;
   /** Colour of the pen circle. */
@@ -32,6 +31,8 @@ type Props = {
   household: { id: string; name: string; timeZone: string };
   userId: string;
   requestedDay: unknown;
+  /** Where an admin changes this thing's rules. Left out for everyone else. */
+  manageHref?: string;
   /** Shown in the header under the headline, for example a machine switcher. */
   headerExtra?: ReactNode;
   /** Shown above the slots, and given the chosen day. */
@@ -111,21 +112,12 @@ export async function BookingScreen(props: Props) {
   const canBookTomorrow = resource.bookAheadDays > 0;
 
   return (
-    <main className="mx-auto flex max-w-md flex-col" style={{ "--pen": theme.pen } as CSSProperties}>
+    <main className="mx-auto flex w-full max-w-md flex-col lg:max-w-3xl lg:pt-6" style={{ "--pen": theme.pen } as CSSProperties}>
       <AutoRefresh />
 
-      <header className={`flex flex-col gap-3 p-6 pt-8 ${theme.header}`}>
-        <div className="flex items-start justify-between">
-          <p className="pt-2 font-semibold">
-            {label}, {isToday ? "today" : `${describe.dayOfMonth} ${describe.monthShort}`}
-          </p>
-          <RoomArt room={room} animate className="size-24" />
-        </div>
-        <h1 className="type-display text-6xl" data-testid="headline">
-          {headline}
-        </h1>
-        {props.headerExtra}
-      </header>
+      <AreaHeader area={room} eyebrow={`${label}, ${isToday ? "today" : `${describe.dayOfMonth} ${describe.monthShort}`}`} extra={props.headerExtra}>
+        {headline}
+      </AreaHeader>
 
       <nav aria-label="Day" className="flex gap-2 overflow-x-auto px-4 py-4">
         {days.map((option) => {
@@ -147,7 +139,14 @@ export async function BookingScreen(props: Props) {
 
       <section className="flex flex-col gap-2 px-3 pb-10">
         {props.children?.({ day, now })}
-        <p className="px-3 text-sm text-ink-soft">{rules.charAt(0).toUpperCase() + rules.slice(1)}.</p>
+        <p className="flex flex-wrap items-center gap-x-3 px-3 text-sm text-ink-soft">
+          {rules.charAt(0).toUpperCase() + rules.slice(1)}.
+          {props.manageHref ? (
+            <Link href={props.manageHref} data-testid="manage" className={`flex min-h-11 items-center rounded font-bold text-ink underline underline-offset-4 ${focusRing}`}>
+              Change the rules
+            </Link>
+          ) : null}
+        </p>
         {rows.length > 0 ? (
           <SlotList
             key={`${resource.id}-${day}`}

@@ -1,75 +1,42 @@
 import type { Metadata } from "next";
-import { signOut } from "@/app/(auth)/actions";
 import Link from "next/link";
 import { Avatar } from "@/components/avatar/avatar";
+import { RoomArt } from "@/components/illustrations/room-art";
 import { ActionButton } from "@/components/ui/action-button";
-import { listResources } from "@/lib/booking/service";
-import { clockLabel, describeSlotLength } from "@/lib/booking/status";
+import { EXTRAS } from "@/lib/extras";
 import { listMembers } from "@/lib/households";
 import { formatJoinCode } from "@/lib/join-code";
-import { EXTRAS } from "@/lib/extras";
 import { requireHousehold } from "@/lib/session";
-import { SLOT_LENGTHS } from "@/lib/settings";
 import { ShareCode } from "../home/share-code";
-import {
-  addResourceAction,
-  removeMemberAction,
-  removeResourceAction,
-  renameHouseholdAction,
-  replaceJoinCodeAction,
-  setExtrasAction,
-  setRoleAction,
-  setTimeZoneAction,
-  updateResourceAction,
-} from "./actions";
-import { ExtrasForm, RenameForm, ResourceForm, TimeZoneForm } from "./settings-forms";
+import { removeMemberAction, renameHouseholdAction, replaceJoinCodeAction, setExtrasAction, setRoleAction, setTimeZoneAction } from "./actions";
+import { ExtrasForm, RenameForm, TimeZoneForm } from "./settings-forms";
 
 // This screen depends on who is signed in, so it is rendered per request.
 export const instant = false;
 
 export const metadata: Metadata = { title: "Household" };
 
-export default async function SettingsPage() {
+export default async function HouseholdPage() {
   const { user, household, membership } = await requireHousehold();
-  const [members, resources] = await Promise.all([listMembers(household.id), listResources(household.id)]);
+  const members = await listMembers(household.id);
   const admin = membership.role === "admin";
   const alone = members.length === 1;
   // The zones this server knows, plus the household's own in case it is not among them.
   const zones = [...new Set([household.timeZone, ...Intl.supportedValuesOf("timeZone")])].sort();
 
   return (
-    <main className="mx-auto flex max-w-md flex-col gap-10 p-6 pt-10">
-      <header className="flex flex-col gap-1">
-        <p className="font-semibold text-ink-soft break-words">{household.name}</p>
-        <h1 className="type-display text-6xl">Household</h1>
+    <main className="mx-auto flex w-full max-w-md flex-col gap-10 p-6 pt-10 lg:max-w-3xl">
+      <header className="flex items-start justify-between gap-3">
+        <div className="flex min-w-0 flex-col gap-1">
+          <p className="font-semibold text-ink-soft">Household</p>
+          <h1 className="type-display text-6xl break-words">{household.name}</h1>
+        </div>
+        <RoomArt room="people" animate className="size-20 shrink-0" />
       </header>
-
-      <section aria-labelledby="invite-heading" className="flex flex-col gap-3 rounded-2xl border-2 border-ink p-5">
-        <h2 id="invite-heading" className="font-semibold">
-          Invite code
-        </h2>
-        <p className="type-display text-6xl tracking-widest" data-testid="join-code">
-          {formatJoinCode(household.joinCode)}
-        </p>
-        <ShareCode code={household.joinCode} />
-        {admin ? (
-          <div data-testid="replace-code">
-            <ActionButton
-              look="link"
-              align="start"
-              confirm="Replace the code? Old links stop working."
-              doneLabel="New code ready."
-              action={replaceJoinCodeAction}
-            >
-              Replace with a new code
-            </ActionButton>
-          </div>
-        ) : null}
-      </section>
 
       <section aria-labelledby="people-heading" className="flex flex-col gap-2">
         <h2 id="people-heading" className="type-display text-4xl">
-          People
+          Who lives here
         </h2>
         <ul className="flex flex-col">
           {members.map((member) => {
@@ -77,9 +44,9 @@ export default async function SettingsPage() {
             return (
               <li key={member.userId} className="flex flex-col gap-2 border-b-2 border-ink/15 py-3" data-testid={`member-${member.name}`}>
                 <div className="flex items-center gap-3">
-                  <Avatar avatar={member.avatar} colour={member.colour} />
+                  <Avatar avatar={member.avatar} colour={member.colour} className="size-12" />
                   <Link
-                    href={`/people/${member.userId}`}
+                    href={self ? "/profile" : `/people/${member.userId}`}
                     className="min-w-0 rounded text-lg font-semibold break-words underline-offset-4 outline-none hover:underline focus-visible:ring-4 focus-visible:ring-fjord"
                   >
                     {member.name}
@@ -115,71 +82,51 @@ export default async function SettingsPage() {
         ) : null}
       </section>
 
-      <section aria-labelledby="rules-heading" className="flex flex-col gap-2">
+      <section aria-labelledby="invite-heading" className="flex flex-col gap-3 rounded-2xl border-2 border-ink p-5">
+        <h2 id="invite-heading" className="type-display text-3xl">
+          Invite a roommate
+        </h2>
+        <p className="text-ink-soft">Send the link, or have them type this code after signing up.</p>
+        <p className="type-display text-4xl tracking-widest" data-testid="join-code">
+          {formatJoinCode(household.joinCode)}
+        </p>
+        <ShareCode code={household.joinCode} />
+        {admin ? (
+          <div data-testid="replace-code">
+            <ActionButton look="link" align="start" confirm="Replace the code? Old links stop working." doneLabel="New code ready." action={replaceJoinCodeAction}>
+              Replace with a new code
+            </ActionButton>
+          </div>
+        ) : null}
+      </section>
+
+      <section aria-labelledby="rules-heading" className="flex flex-col gap-3">
         <h2 id="rules-heading" className="type-display text-4xl">
           Booking rules
         </h2>
-        {admin ? (
-          <>
-            <p className="text-ink-soft">Changes apply to new bookings. Slots already booked stay as they are.</p>
-            <div className="flex flex-col">
-              {resources.map((resource) => (
-                <ResourceForm
-                  key={resource.id}
-                  resource={resource}
-                  slotLengths={SLOT_LENGTHS}
-                  action={updateResourceAction.bind(null, resource.id)}
-                  // The last one of a kind stays: it can be switched off, not removed.
-                  remove={
-                    resources.filter((other) => other.kind === resource.kind).length > 1
-                      ? removeResourceAction.bind(null, resource.id)
-                      : undefined
-                  }
-                />
-              ))}
-            </div>
-            <div className="flex flex-col gap-2 pt-2" data-testid="add-resource">
-              <p className="font-semibold">Have more than one?</p>
-              <div className="flex flex-wrap gap-2">
-                <ActionButton align="start" action={addResourceAction.bind(null, "shower")}>
-                  Add a shower
-                </ActionButton>
-                <ActionButton align="start" action={addResourceAction.bind(null, "washer")}>
-                  Add a washing machine
-                </ActionButton>
-                <ActionButton align="start" action={addResourceAction.bind(null, "dryer")}>
-                  Add a dryer
-                </ActionButton>
-              </div>
-            </div>
-          </>
-        ) : (
-          <>
-            <ul className="flex flex-col">
-              {resources
-                .filter((resource) => resource.enabled)
-                .map((resource) => (
-                  <li key={resource.id} className="flex flex-col border-b-2 border-ink/15 py-3">
-                    <span className="text-lg font-semibold">{resource.name}</span>
-                    <span className="text-ink-soft">
-                      {describeSlotLength(resource.slotMinutes)} slots from {clockLabel(resource.opensAt)} to{" "}
-                      {clockLabel(resource.closesAt)}, up to {resource.maxPerDay} a day
-                      {resource.allowBackToBack ? "" : ", not two in a row"}.
-                    </span>
-                  </li>
-                ))}
-            </ul>
-            <p className="text-sm text-ink-soft">Only an admin can change these.</p>
-          </>
-        )}
+        <p className="text-ink-soft">
+          {admin
+            ? "Slot length, opening hours and limits for each shower and machine. Add a second shower or a dryer here too."
+            : "Slot length, opening hours and limits for each shower and machine. An admin sets them."}
+        </p>
+        <Link
+          href="/settings/rules"
+          data-testid="open-rules"
+          className="flex min-h-14 items-center justify-between gap-3 rounded-2xl border-2 border-ink px-5 py-3 text-lg font-bold outline-none focus-visible:ring-4 focus-visible:ring-fjord"
+        >
+          {admin ? "Change showers and machines" : "See the rules"}
+          <svg viewBox="0 0 24 24" aria-hidden="true" className="size-6 shrink-0">
+            <path d="M4 12C9 11.500 15 11.500 20 12M14 6C16 8 18 10 20 12C18 14 16 16 14 18" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </Link>
       </section>
 
       {admin ? (
         <section aria-labelledby="extras-heading" className="flex flex-col gap-4">
           <h2 id="extras-heading" className="type-display text-4xl">
-            Extras
+            What you use
           </h2>
-          <p className="text-ink-soft">What shows up under Flat. Switching one off hides it; nothing is deleted.</p>
+          <p className="text-ink-soft">Each of these has a tile on Home. Switching one off hides it for everyone; nothing is deleted.</p>
           <ExtrasForm extras={EXTRAS} enabled={household.extras} action={setExtrasAction} />
         </section>
       ) : null}
@@ -198,37 +145,6 @@ export default async function SettingsPage() {
             {household.name}. Times are shown in {household.timeZone.replaceAll("_", " ")} time.
           </p>
         )}
-      </section>
-
-      <section aria-labelledby="you-heading" className="flex flex-col gap-4">
-        <h2 id="you-heading" className="type-display text-4xl">
-          You
-        </h2>
-        <Link
-          href="/profile"
-          className="flex min-h-11 w-fit items-center rounded font-bold underline underline-offset-4 outline-none focus-visible:ring-4 focus-visible:ring-fjord"
-        >
-          Edit your profile
-        </Link>
-        <p className="text-ink-soft break-words">Signed in as {user.email}</p>
-        <form action={signOut}>
-          <button
-            type="submit"
-            className="flex min-h-11 items-center rounded font-bold underline underline-offset-4 outline-none focus-visible:ring-4 focus-visible:ring-fjord"
-          >
-            Sign out
-          </button>
-        </form>
-        <div data-testid="leave">
-          <ActionButton
-            look="link"
-            align="start"
-            confirm={alone ? `Leave and delete ${household.name} for good?` : "Leave and cancel your bookings?"}
-            action={removeMemberAction.bind(null, user.id)}
-          >
-            Leave household
-          </ActionButton>
-        </div>
       </section>
     </main>
   );

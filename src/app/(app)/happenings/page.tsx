@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
-import { Avatar } from "@/components/avatar/avatar";
-import { ExtraHeader } from "@/components/extras/extra-header";
+import { AreaPage } from "@/components/area/area-header";
+import { Faces, Person, type PersonLike } from "@/components/avatar/person";
 import { ActionButton } from "@/components/ui/action-button";
+import { describeWhen } from "@/lib/booking/status";
 import { requireExtra } from "@/lib/extras-guard";
 import { listUpcoming } from "@/lib/happenings";
 import { listMembers } from "@/lib/households";
-import { describeWhen } from "@/lib/booking/status";
 import { listNames } from "@/lib/names";
 import { clockTime, dayInZone, describeDay } from "@/lib/time";
 import { removeHappeningAction, replyAction } from "./actions";
@@ -21,15 +21,12 @@ export default async function HappeningsPage() {
   const now = new Date();
   const timeZone = household.timeZone;
   const [upcoming, members] = await Promise.all([listUpcoming(household.id, now), listMembers(household.id)]);
-  const person = new Map(members.map((member) => [member.userId, member]));
+  const person = new Map<string, PersonLike>(members.map((member) => [member.userId, member]));
+  const nameOf = (userId: string) => person.get(userId)?.name ?? "Someone";
   const next = upcoming[0];
 
   return (
-    <main className="mx-auto flex max-w-md flex-col gap-8 p-6 pt-10">
-      <ExtraHeader art="happening" eyebrow={next ? `Next up, ${describeWhen(next.startsAt, now, timeZone)}` : "Happenings"}>
-        {next ? next.title : "Nothing planned"}
-      </ExtraHeader>
-
+    <AreaPage area="happenings" eyebrow={next ? `Next up, ${describeWhen(next.startsAt, now, timeZone)}` : "Happenings"} title={next ? next.title : "Nothing planned"}>
       {upcoming.length > 0 ? (
         <ul className="flex flex-col gap-4">
           {upcoming.map((item) => {
@@ -45,19 +42,18 @@ export default async function HappeningsPage() {
                     {item.place ? `, ${item.place}` : ""}
                   </p>
                   <h2 className="type-display text-4xl break-words">{item.title}</h2>
+                  <p className="flex flex-wrap items-center gap-x-2 text-ink-soft">
+                    <Person person={person.get(item.createdBy)} me={user.id} size="size-6" className="font-semibold text-ink" /> suggested it
+                  </p>
                 </div>
                 {item.details ? <p className="break-words whitespace-pre-line">{item.details}</p> : null}
 
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="flex -space-x-2">
-                    {going.map((member) => (
-                      <Avatar key={member.userId} avatar={member.avatar} colour={member.colour} className="size-8 border-2 border-paper" />
-                    ))}
-                  </span>
+                  <Faces people={going} />
                   <span className="font-semibold">
                     {going.length === 0
                       ? "Nobody is in yet"
-                      : `${listNames(going.map((member) => member.userId), user.id, (id) => person.get(id)?.name ?? "Someone")} ${going.length === 1 && going[0].userId !== user.id ? "is" : "are"} in`}
+                      : `${listNames(going.map((member) => member.userId), user.id, nameOf)} ${going.length === 1 && going[0].userId !== user.id ? "is" : "are"} in`}
                   </span>
                 </div>
 
@@ -87,15 +83,15 @@ export default async function HappeningsPage() {
           })}
         </ul>
       ) : (
-        <p className="text-lg text-ink-soft">Film night, a hike, a party. Suggest something and see who is in.</p>
+        <p className="text-lg">Film night, a hike, a party. Suggest something and see who is in.</p>
       )}
 
-      <section aria-labelledby="suggest-heading" className="flex flex-col gap-4">
+      <section aria-labelledby="suggest-heading" className="flex flex-col gap-4 rounded-3xl bg-blush/30 p-5">
         <h2 id="suggest-heading" className="type-display text-3xl">
           Suggest something
         </h2>
         <HappeningForm count={upcoming.length} today={dayInZone(now, timeZone)} />
       </section>
-    </main>
+    </AreaPage>
   );
 }

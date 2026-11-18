@@ -6,12 +6,16 @@ import { addNoteAction } from "./actions";
 
 /** Write on the board. A note can be made a to-do, for one person or for anyone. */
 export function NoteForm({ people, count }: { people: { userId: string; name: string }[]; count: number }) {
+  // Built again after each note, so the box starts empty and unticked.
+  return <NoteFields key={count} people={people} />;
+}
+
+function NoteFields({ people }: { people: { userId: string; name: string }[] }) {
   const [state, formAction] = useActionState(addNoteAction, undefined);
   const [isTask, setIsTask] = useState(false);
 
   return (
-    // Built again after each note, so the box starts empty.
-    <form key={count} action={formAction} noValidate className="flex flex-col gap-3">
+    <form action={formAction} noValidate className="flex flex-col gap-3">
       <label className="flex flex-col gap-1.5">
         <span className="text-sm font-semibold">Write on the board</span>
         <textarea

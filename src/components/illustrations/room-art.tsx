@@ -3,7 +3,7 @@ import "./room-art.css";
 
 export type Room = "shower" | "laundry" | "cleaning";
 /** Rooms, plus the drawings for navigation and for the other areas of the app. */
-export type Art = Room | "home" | "people" | "flat" | "dinner" | "happening" | "shopping" | "money" | "board";
+export type Art = Room | "home" | "people" | "flat" | "dinner" | "happening" | "shopping" | "money" | "board" | "calendar" | "you";
 
 // Hand-drawn strokes in a 120 x 120 space, in the order a pen would make them.
 const strokes: Record<Art, { d: string; w: number }[]> = {
@@ -44,6 +44,17 @@ const strokes: Record<Art, { d: string; w: number }[]> = {
     { d: "M26 30C50 26 74 26 96 28C98 50 98 74 96 98C80 100 60 100 44 100L24 80C24 62 24 46 26 30Z", w: 6 },
     { d: "M44 100C46 92 44 86 24 80", w: 5 },
     { d: "M40 50L80 50M40 64L70 64", w: 4 },
+  ],
+  calendar: [
+    { d: "M22 28C46 26 74 26 98 28C100 52 100 80 98 104C74 106 46 106 22 104C20 80 20 52 22 28Z", w: 6 },
+    { d: "M22 48C46 47 74 47 98 48", w: 5 },
+    { d: "M42 16L42 36M78 16L78 36", w: 5 },
+    { d: "M40 66h.01M60 66h.01M80 66h.01M40 86h.01M60 86h.01", w: 8 },
+    { d: "M90 86a10 10 0 1 1-20 0a10 10 0 1 1 20 0", w: 4 },
+  ],
+  you: [
+    { d: "M74 42a14 14 0 1 1-28 0a14 14 0 1 1 28 0", w: 6 },
+    { d: "M26 104C27 80 42 68 60 68C78 68 93 80 94 104", w: 6 },
   ],
   home: [
     { d: "M16 58C30 46 46 32 60 18C74 32 90 46 104 58", w: 6 },

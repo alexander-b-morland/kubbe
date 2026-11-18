@@ -11,7 +11,7 @@ export const instant = false;
 export const metadata: Metadata = { title: "Shower" };
 
 export default async function ShowerPage({ searchParams }: PageProps<"/shower">) {
-  const { user, household } = await requireHousehold();
+  const { user, household, membership } = await requireHousehold();
   const params = await searchParams;
   const showers = await listEnabled(household.id, ["shower"]);
   if (showers.length === 0) return <NothingToBook what="shower" />;
@@ -26,7 +26,8 @@ export default async function ShowerPage({ searchParams }: PageProps<"/shower">)
       query={active === showers[0] ? {} : { shower: active.id }}
       room="shower"
       label={active.name}
-      theme={{ header: "bg-fjord text-paper", mine: "bg-fjord/15", pen: "var(--color-fjord)" }}
+      theme={{ mine: "bg-fjord/15", pen: "var(--color-fjord)" }}
+      manageHref={membership.role === "admin" ? `/settings/rules?from=shower&open=${active.id}#${active.id}` : undefined}
       resource={active}
       household={household}
       userId={user.id}

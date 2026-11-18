@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { AREA_COLOURS } from "./areas";
 import { MEMBER_COLOUR_NAMES, MEMBER_COLOURS, nextMemberColour } from "./member-colours";
 
 const luminance = (hex: string) => {
@@ -34,7 +35,15 @@ describe("member colours", () => {
     for (const colour of MEMBER_COLOURS) expect(contrast(colour, "#F5F4EF")).toBeGreaterThanOrEqual(4.5);
   });
 
-  it("never reuses a room colour or the warning colour", () => {
-    for (const room of ["#2E5270", "#D2A24C", "#476B52", "#A6402F"]) expect(MEMBER_COLOURS).not.toContain(room);
+  it("never reuses an area colour or the warning colour", () => {
+    for (const taken of [...AREA_COLOURS, "#A6402F"]) expect(MEMBER_COLOURS).not.toContain(taken);
+  });
+
+  it("keeps every area colour readable under its own text", () => {
+    // Paper on the two deep colours, ink on the rest: see the bands in areas.ts.
+    const paperOn = ["#2E5270", "#476B52"];
+    for (const colour of AREA_COLOURS) {
+      expect(contrast(colour, paperOn.includes(colour) ? "#F5F4EF" : "#1E2A44")).toBeGreaterThanOrEqual(4.5);
+    }
   });
 });
