@@ -1,8 +1,8 @@
-import { and, asc, count, desc, eq, gte, inArray, isNotNull, isNull } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, inArray, isNotNull, isNull, or } from "drizzle-orm";
 import { db, type Transaction } from "@/db";
 import { dishIngredient, expense, expenseShare, membership, shoppingItem } from "@/db/schema";
 import { resyncIngredient } from "@/lib/dinner/service";
-import { balances, settleUp, splitEvenly } from "@/lib/money";
+import { balances, settleUp, sharesFor, splitEvenly, type Split } from "@/lib/money";
 import { lockHousehold } from "@/lib/settings";
 
 // The shopping list and what was paid for it. Callers have already established who is
@@ -115,24 +115,41 @@ async function membersAmong(householdId: string, userIds: readonly string[]) {
   return rows.map((row) => row.userId);
 }
 
-export type ExpenseInput = { paidBy: string; amount: number; description: string; sharedBy: readonly string[] };
+export type ExpenseInput = { paidBy: string; amount: number; description: string; split: Split };
+
+/** Who paid and each person's part, once everyone named is known to live here and the parts add up. */
+async function checkExpense(householdId: string, input: ExpenseInput) {
+  const named = input.split.kind === "even" ? input.split.userIds : input.split.parts.map((part) => part.userId);
+  const [payers, sharers] = await Promise.all([membersAmong(householdId, [input.paidBy]), membersAmong(householdId, named)]);
+  if (payers.length === 0) return "nobody" as const;
+  // Only people who live here share a cost, in the order they joined, so the odd unit lands the same way each time.
+  const split: Split =
+    input.split.kind === "even"
+      ? { kind: "even", userIds: sharers }
+      : { kind: "amounts", parts: input.split.parts.filter((part) => sharers.includes(part.userId)) };
+  if (input.split.kind === "amounts" && split.kind === "amounts" && split.parts.length !== input.split.parts.length) return "nobody" as const;
+  const shares = sharesFor(input.amount, split);
+  if (shares === "empty") return "nobody" as const;
+  if (shares === "mismatch") return "mismatch" as const;
+  return { payer: payers[0], shares };
+}
 
 /**
- * Record that someone paid for something, shared evenly between some of the household.
- * Returns "nobody" when none of the people named live there.
+ * Record that someone paid for something, shared between some of the household.
+ * Returns "nobody" when the people named do not live there, "mismatch" when the parts
+ * do not add up to the amount.
  */
-export async function addExpense(householdId: string, input: ExpenseInput): Promise<"ok" | "nobody" | "full"> {
-  const [payer] = await membersAmong(householdId, [input.paidBy]);
-  const sharers = await membersAmong(householdId, input.sharedBy);
-  if (!payer || sharers.length === 0) return "nobody";
+export async function addExpense(householdId: string, createdBy: string, input: ExpenseInput): Promise<"ok" | "nobody" | "mismatch" | "full"> {
+  const checked = await checkExpense(householdId, input);
+  if (typeof checked === "string") return checked;
   const [existing] = await db.select({ expenses: count() }).from(expense).where(eq(expense.householdId, householdId));
   if (existing.expenses >= MAX_EXPENSES) return "full";
   await db.transaction(async (tx) => {
     const [created] = await tx
       .insert(expense)
-      .values({ householdId, paidBy: payer, amount: input.amount, description: input.description })
+      .values({ householdId, paidBy: checked.payer, createdBy, amount: input.amount, description: input.description })
       .returning({ id: expense.id });
-    await tx.insert(expenseShare).values(splitEvenly(input.amount, sharers).map((share) => ({ expenseId: created.id, ...share })));
+    await tx.insert(expenseShare).values(checked.shares.map((share) => ({ expenseId: created.id, ...share })));
   });
   return "ok";
 }
@@ -174,7 +191,7 @@ export async function payForBought(
     const description = `Shopping: ${names.length > 140 ? `${names.slice(0, 137)}…` : names}`;
     const [created] = await tx
       .insert(expense)
-      .values({ householdId, paidBy: userId, amount, description })
+      .values({ householdId, paidBy: userId, createdBy: userId, amount, description })
       .returning({ id: expense.id });
     await tx.insert(expenseShare).values(splitEvenly(amount, sharers).map((share) => ({ expenseId: created.id, ...share })));
     await tx
@@ -192,14 +209,14 @@ export async function payForBought(
  * say that much is owed between those two. So two people pressing "Paid" on the same
  * line record it once, and a debt with someone who has moved out can still be closed.
  */
-export async function addSettlement(householdId: string, from: string, to: string, amount: number): Promise<"ok" | "settled"> {
+export async function addSettlement(householdId: string, actorId: string, from: string, to: string, amount: number): Promise<"ok" | "settled"> {
   return db.transaction(async (tx) => {
     await lockHousehold(tx, householdId);
     const owed = settleUp(balances(await readExpenses(tx, householdId)));
     if (!owed.some((transfer) => transfer.from === from && transfer.to === to && transfer.amount >= amount)) return "settled";
     const [created] = await tx
       .insert(expense)
-      .values({ householdId, paidBy: from, amount, description: "Paid back", isSettlement: true })
+      .values({ householdId, paidBy: from, createdBy: actorId, amount, description: "Paid back", isSettlement: true })
       .returning({ id: expense.id });
     await tx.insert(expenseShare).values({ expenseId: created.id, userId: to, amount });
     return "ok";
@@ -224,8 +241,36 @@ async function readExpenses(executor: typeof db | Transaction, householdId: stri
   }));
 }
 
-/** Take an expense back. Whoever paid can, and so can an admin. Its shopping items return to "bought". */
+/** This expense, if this person may change it: whoever paid, whoever entered it, or an admin. */
+const changeable = (householdId: string, userId: string, expenseId: string, isAdmin: boolean) => {
+  const found = and(eq(expense.id, expenseId), eq(expense.householdId, householdId));
+  return isAdmin ? found : and(found, or(eq(expense.paidBy, userId), eq(expense.createdBy, userId)));
+};
+
+/** Take an expense back. Its shopping items return to "bought". */
 export async function removeExpense(householdId: string, userId: string, expenseId: string, isAdmin: boolean) {
-  const mine = and(eq(expense.id, expenseId), eq(expense.householdId, householdId));
-  await db.delete(expense).where(isAdmin ? mine : and(mine, eq(expense.paidBy, userId)));
+  await db.delete(expense).where(changeable(householdId, userId, expenseId, isAdmin));
+}
+
+/** Correct an expense: what it was for, the amount, who paid and how it is shared. Not for repayments. */
+export async function updateExpense(
+  householdId: string,
+  userId: string,
+  expenseId: string,
+  isAdmin: boolean,
+  input: ExpenseInput,
+): Promise<"ok" | "nobody" | "mismatch" | "gone"> {
+  const checked = await checkExpense(householdId, input);
+  if (typeof checked === "string") return checked;
+  return db.transaction(async (tx) => {
+    const [changed] = await tx
+      .update(expense)
+      .set({ paidBy: checked.payer, amount: input.amount, description: input.description })
+      .where(and(changeable(householdId, userId, expenseId, isAdmin), eq(expense.isSettlement, false)))
+      .returning({ id: expense.id });
+    if (!changed) return "gone";
+    await tx.delete(expenseShare).where(eq(expenseShare.expenseId, expenseId));
+    await tx.insert(expenseShare).values(checked.shares.map((share) => ({ expenseId, ...share })));
+    return "ok";
+  });
 }

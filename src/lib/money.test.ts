@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { balances, formatAmount, parseAmount, settleUp, splitEvenly } from "./money";
+import { balances, formatAmount, mySettlements, parseAmount, settleUp, sharesFor, splitEvenly } from "./money";
 
 describe("reading an amount", () => {
   it("accepts whole numbers, and a comma or a dot for the decimals", () => {
@@ -86,5 +86,39 @@ describe("who owes whom", () => {
       { from: "c", to: "b", amount: 100 },
       { from: "d", to: "b", amount: 200 },
     ]);
+  });
+});
+
+describe("sharesFor", () => {
+  it("splits evenly between the people ticked", () => {
+    expect(sharesFor(100, { kind: "even", userIds: ["a", "b", "c"] })).toEqual([
+      { userId: "a", amount: 34 },
+      { userId: "b", amount: 33 },
+      { userId: "c", amount: 33 },
+    ]);
+  });
+
+  it("takes an amount each when they add up, leaving out anyone with nothing", () => {
+    expect(sharesFor(10000, { kind: "amounts", parts: [{ userId: "a", amount: 7000 }, { userId: "b", amount: 3000 }, { userId: "c", amount: 0 }] })).toEqual([
+      { userId: "a", amount: 7000 },
+      { userId: "b", amount: 3000 },
+    ]);
+  });
+
+  it("refuses parts that do not add up, and a cost nobody shares", () => {
+    expect(sharesFor(10000, { kind: "amounts", parts: [{ userId: "a", amount: 7000 }] })).toBe("mismatch");
+    expect(sharesFor(10000, { kind: "amounts", parts: [] })).toBe("empty");
+    expect(sharesFor(10000, { kind: "even", userIds: [] })).toBe("empty");
+  });
+});
+
+describe("mySettlements", () => {
+  it("separates what you owe from what you are owed", () => {
+    const transfers = [
+      { from: "me", to: "ida", amount: 50 },
+      { from: "knut", to: "me", amount: 20 },
+      { from: "knut", to: "ida", amount: 10 },
+    ];
+    expect(mySettlements(transfers, "me")).toEqual({ owe: [transfers[0]], owed: [transfers[1]] });
   });
 });

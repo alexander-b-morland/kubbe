@@ -26,6 +26,25 @@ export function splitEvenly(amount: number, userIds: readonly string[]): { userI
   return userIds.map((userId, index) => ({ userId, amount: base + (index < extra ? 1 : 0) }));
 }
 
+/** How a cost is shared: evenly between some people, or as an amount each. */
+export type Split = { kind: "even"; userIds: readonly string[] } | { kind: "amounts"; parts: readonly { userId: string; amount: number }[] };
+
+/**
+ * Each person's part of a cost. "empty" when nobody shares it, "mismatch" when the
+ * amounts typed in do not add up to the whole.
+ */
+export function sharesFor(amount: number, split: Split): { userId: string; amount: number }[] | "empty" | "mismatch" {
+  if (split.kind === "even") return split.userIds.length === 0 ? "empty" : splitEvenly(amount, split.userIds);
+  const parts = split.parts.filter((part) => part.amount > 0);
+  if (parts.length === 0) return "empty";
+  return parts.reduce((sum, part) => sum + part.amount, 0) === amount ? parts.map(({ userId, amount: part }) => ({ userId, amount: part })) : "mismatch";
+}
+
+/** What one person owes and is owed, out of the payments that make everyone square. */
+export function mySettlements(transfers: readonly Transfer[], me: string): { owe: Transfer[]; owed: Transfer[] } {
+  return { owe: transfers.filter((transfer) => transfer.from === me), owed: transfers.filter((transfer) => transfer.to === me) };
+}
+
 type Entry = { paidBy: string; amount: number; shares: readonly { userId: string; amount: number }[] };
 
 /**
