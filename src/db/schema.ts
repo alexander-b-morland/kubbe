@@ -266,6 +266,8 @@ export const profile = pgTable("profile", {
   avoids: text("avoids").notNull().default(""),
   /** Answers to the fun questions, by question key. */
   answers: jsonb("answers").$type<Record<string, string>>().notNull().default({}),
+  /** The language this person reads the app in: "en" or "nb". */
+  locale: text("locale").notNull().default("en"),
 });
 
 // ---------------------------------------------------------------------------
@@ -313,6 +315,8 @@ export const expense = pgTable(
     amount: integer("amount").notNull(),
     description: text("description").notNull(),
     isSettlement: boolean("is_settlement").notNull().default(false),
+    /** Who entered it. They can change or remove it, as can whoever paid and an admin. */
+    createdBy: text("created_by").references(() => user.id, { onDelete: "set null" }),
     createdAt: createdAt(),
   },
   (table) => [index("expense_household_idx").on(table.householdId, table.createdAt)],
@@ -410,7 +414,25 @@ export const dinner = pgTable(
   (table) => [uniqueIndex("dinner_one_per_day").on(table.householdId, table.day)],
 );
 
-/** Someone who said they are not coming. Everyone else in the household is in. */
+/**
+ * Whether someone is coming to a dinner. Nobody is in until they say so: whoever plans
+ * a dinner chooses whether they are in themselves, and the others answer.
+ */
+export const dinnerReply = pgTable(
+  "dinner_reply",
+  {
+    dinnerId: uuid("dinner_id")
+      .notNull()
+      .references(() => dinner.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    going: boolean("going").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.dinnerId, table.userId] })],
+);
+
+/** No longer used: dinners were once opt-out. Kept until its table is dropped in a later migration. */
 export const dinnerAbsence = pgTable(
   "dinner_absence",
   {
@@ -432,8 +454,10 @@ export const dish = pgTable(
       .notNull()
       .references(() => dinner.id, { onDelete: "cascade" }),
     title: text("title").notNull(),
-    /** Null when the idea came from the suggestion helper, not a person. */
+    /** Who put it up for the vote. */
     suggestedBy: text("suggested_by").references(() => user.id, { onDelete: "set null" }),
+    /** The idea came from the suggestions (Claude or the cookbook), and that person picked it. */
+    fromHelper: boolean("from_helper").notNull().default(false),
     createdAt: createdAt(),
   },
   (table) => [index("dish_dinner_idx").on(table.dinnerId)],
