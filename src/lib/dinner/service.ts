@@ -1,6 +1,6 @@
-import { and, asc, count, desc, eq, gte, inArray, isNotNull, isNull, lt } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, inArray, isNotNull, isNull, lt, lte } from "drizzle-orm";
 import { db, type Transaction } from "@/db";
-import { dinner, dinnerAbsence, dinnerRule, dish, dishIngredient, dishVote, membership, profile, shoppingItem } from "@/db/schema";
+import { dinner, dinnerReply, dinnerRule, dish, dishIngredient, dishVote, membership, profile, shoppingItem } from "@/db/schema";
 import { MAX_DISHES, MAX_INGREDIENTS, missingDinnerDays, weekdayOf, type DinnerRule } from "./plan";
 
 // Dinners in the database. Callers have already established who is asking and which
@@ -63,13 +63,24 @@ export async function listUpcomingDinners(householdId: string, today: string) {
     await db.insert(dinner).values(missing.map((slot) => ({ householdId, ...slot }))).onConflictDoNothing();
     rows = await db.select().from(dinner).where(upcoming);
   }
+  return describeDinners(rows);
+}
+
+/** Dinners on a stretch of days, as they are: nothing is made from the fixed days here. */
+export async function listDinnersBetween(householdId: string, fromDay: string, toDay: string) {
+  if (fromDay > toDay) return [];
+  return describeDinners(await db.select().from(dinner).where(and(eq(dinner.householdId, householdId), gte(dinner.day, fromDay), lte(dinner.day, toDay))));
+}
+
+/** What the lists need to say about each dinner: its ideas, who answered, who voted. */
+async function describeDinners(rows: Dinner[]) {
   rows.sort((a, b) => a.day.localeCompare(b.day));
   if (rows.length === 0) return [];
 
   const ids = rows.map((row) => row.id);
-  const [dishes, absences, votes] = await Promise.all([
+  const [dishes, replies, votes] = await Promise.all([
     db.select({ id: dish.id, dinnerId: dish.dinnerId, title: dish.title }).from(dish).where(inArray(dish.dinnerId, ids)),
-    db.select().from(dinnerAbsence).where(inArray(dinnerAbsence.dinnerId, ids)),
+    db.select().from(dinnerReply).where(inArray(dinnerReply.dinnerId, ids)),
     db
       .selectDistinct({ dinnerId: dish.dinnerId, userId: dishVote.userId })
       .from(dishVote)
@@ -82,7 +93,9 @@ export async function listUpcomingDinners(householdId: string, today: string) {
       ...row,
       ideas: ideas.length,
       chosenTitle: ideas.find((idea) => idea.id === row.chosenDishId)?.title ?? null,
-      absent: absences.filter((absence) => absence.dinnerId === row.id).map((absence) => absence.userId),
+      /** Who said they are in, and who said they are not. Everyone else has not answered. */
+      going: replies.filter((reply) => reply.dinnerId === row.id && reply.going).map((reply) => reply.userId),
+      notGoing: replies.filter((reply) => reply.dinnerId === row.id && !reply.going).map((reply) => reply.userId),
       /** Everyone who has voted for at least one idea. */
       voters: votes.filter((vote) => vote.dinnerId === row.id).map((vote) => vote.userId),
     };
@@ -95,9 +108,9 @@ export type UpcomingDinner = Awaited<ReturnType<typeof listUpcomingDinners>>[num
 export async function getDinner(householdId: string, dinnerId: string) {
   const [found] = await db.select().from(dinner).where(and(eq(dinner.id, dinnerId), eq(dinner.householdId, householdId)));
   if (!found) return null;
-  const [dishes, absences] = await Promise.all([
+  const [dishes, replies] = await Promise.all([
     db.select().from(dish).where(eq(dish.dinnerId, dinnerId)).orderBy(asc(dish.createdAt)),
-    db.select({ userId: dinnerAbsence.userId }).from(dinnerAbsence).where(eq(dinnerAbsence.dinnerId, dinnerId)),
+    db.select({ userId: dinnerReply.userId, going: dinnerReply.going }).from(dinnerReply).where(eq(dinnerReply.dinnerId, dinnerId)),
   ]);
   const dishIds = dishes.map((row) => row.id);
   const [votes, ingredients] =
@@ -123,7 +136,8 @@ export async function getDinner(householdId: string, dinnerId: string) {
         ]);
   return {
     ...found,
-    absent: absences.map((absence) => absence.userId),
+    going: replies.filter((reply) => reply.going).map((reply) => reply.userId),
+    notGoing: replies.filter((reply) => !reply.going).map((reply) => reply.userId),
     dishes: dishes.map((row) => ({
       ...row,
       votes: votes.filter((vote) => vote.dishId === row.id).map((vote) => vote.userId),
@@ -147,13 +161,13 @@ export async function recentDishTitles(householdId: string, today: string, limit
 }
 
 /** What the people coming to a dinner wrote under "I don't eat". No names attached. */
-export async function avoidsOfThoseComing(householdId: string, absent: readonly string[]): Promise<{ people: number; avoids: string[] }> {
+export async function avoidsOfThoseComing(householdId: string, going: readonly string[]): Promise<{ people: number; avoids: string[] }> {
   const rows = await db
     .select({ userId: membership.userId, avoids: profile.avoids })
     .from(membership)
     .leftJoin(profile, eq(profile.userId, membership.userId))
     .where(eq(membership.householdId, householdId));
-  const coming = rows.filter((row) => !absent.includes(row.userId));
+  const coming = rows.filter((row) => going.includes(row.userId));
   return { people: coming.length, avoids: coming.map((row) => (row.avoids ?? "").trim()).filter(Boolean) };
 }
 
@@ -221,16 +235,34 @@ async function detachBought(tx: Transaction, ingredientIds: readonly string[]) {
 }
 
 /** Plan a dinner on a day. A day has one dinner; one that was called off comes back. */
-export async function addDinner(householdId: string, userId: string, day: string, time: number): Promise<{ id: string } | "taken"> {
+export async function addDinner(
+  householdId: string,
+  userId: string,
+  day: string,
+  time: number,
+  /** Whether whoever plans it is coming. Nobody else is in until they say so. */
+  plannerIsIn: boolean,
+): Promise<{ id: string } | "taken"> {
   return db.transaction(async (tx) => {
+    const answer = async (dinnerId: string) => {
+      if (!plannerIsIn) return;
+      await tx
+        .insert(dinnerReply)
+        .values({ dinnerId, userId, going: true })
+        .onConflictDoUpdate({ target: [dinnerReply.dinnerId, dinnerReply.userId], set: { going: true } });
+    };
     const [created] = await tx.insert(dinner).values({ householdId, day, time }).onConflictDoNothing().returning({ id: dinner.id });
-    if (created) return created;
+    if (created) {
+      await answer(created.id);
+      return created;
+    }
     const [revived] = await tx
       .update(dinner)
       .set({ cancelled: false, time })
       .where(and(eq(dinner.householdId, householdId), eq(dinner.day, day), eq(dinner.cancelled, true)))
       .returning({ id: dinner.id });
     if (!revived) return "taken";
+    await answer(revived.id);
     // It comes back with its dish, so what that dish needs goes back on the list.
     await syncShopping(tx, householdId, userId, revived.id);
     return revived;
@@ -246,16 +278,16 @@ export async function setCancelled(householdId: string, userId: string, dinnerId
   });
 }
 
-/** "I'm out", or "I'm in after all". Someone who is out neither cooks nor cleans up. */
-export async function setAbsent(householdId: string, userId: string, dinnerId: string, absent: boolean) {
+/** "I'm in", or "Not this time". Someone who is not coming neither cooks nor cleans up. */
+export async function setGoing(householdId: string, userId: string, dinnerId: string, going: boolean) {
   await db.transaction(async (tx) => {
     const found = await lockDinner(tx, householdId, dinnerId);
     if (!found) return;
-    if (!absent) {
-      await tx.delete(dinnerAbsence).where(and(eq(dinnerAbsence.dinnerId, dinnerId), eq(dinnerAbsence.userId, userId)));
-      return;
-    }
-    await tx.insert(dinnerAbsence).values({ dinnerId, userId }).onConflictDoNothing();
+    await tx
+      .insert(dinnerReply)
+      .values({ dinnerId, userId, going })
+      .onConflictDoUpdate({ target: [dinnerReply.dinnerId, dinnerReply.userId], set: { going } });
+    if (going) return;
     await tx
       .update(dinner)
       .set({ cookId: found.cookId === userId ? null : found.cookId, cleanerId: found.cleanerId === userId ? null : found.cleanerId })
@@ -278,7 +310,12 @@ export async function setDuty(householdId: string, userId: string, dinnerId: str
       .set(duty === "cook" ? { cookId: take ? userId : null } : { cleanerId: take ? userId : null })
       .where(eq(dinner.id, dinnerId));
     // Whoever cooks or cleans up is coming.
-    if (take) await tx.delete(dinnerAbsence).where(and(eq(dinnerAbsence.dinnerId, dinnerId), eq(dinnerAbsence.userId, userId)));
+    if (take) {
+      await tx
+        .insert(dinnerReply)
+        .values({ dinnerId, userId, going: true })
+        .onConflictDoUpdate({ target: [dinnerReply.dinnerId, dinnerReply.userId], set: { going: true } });
+    }
     return "ok";
   });
 }
@@ -299,7 +336,7 @@ export async function addDish(
     if (existing.dishes >= MAX_DISHES) return "full";
     const [created] = await tx
       .insert(dish)
-      .values({ dinnerId, title: input.title, suggestedBy: input.fromHelper ? null : userId })
+      .values({ dinnerId, title: input.title, suggestedBy: userId, fromHelper: input.fromHelper })
       .returning({ id: dish.id });
     await tx.insert(dishVote).values({ dishId: created.id, userId });
     const names = input.ingredients.slice(0, MAX_INGREDIENTS);
@@ -308,7 +345,7 @@ export async function addDish(
   });
 }
 
-/** Take an idea down. Whoever suggested it can, anyone can for a helper's idea, and so can an admin. */
+/** Take an idea down. Whoever put it up can, and so can an admin. An idea whose author moved out is anyone's to remove. */
 export async function removeDish(householdId: string, userId: string, dishId: string, isAdmin: boolean) {
   await db.transaction(async (tx) => {
     const found = await lockDinnerOfDish(tx, householdId, dishId);

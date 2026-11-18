@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import type { DishIdea } from "@/lib/dinner/cookbook";
-import { suggestDishes } from "@/lib/dinner/ideas";
+import { suggestDishes, suggestNeeds } from "@/lib/dinner/ideas";
 import { INGREDIENT_LENGTH, MAX_DISHES, MAX_INGREDIENTS, minutesOf, parseIngredients, TITLE_LENGTH } from "@/lib/dinner/plan";
 import {
   addDinner,
@@ -16,7 +16,7 @@ import {
   recentDishTitles,
   removeDish,
   saveRules,
-  setAbsent,
+  setGoing,
   setAtHome,
   setCancelled,
   setDuty,
@@ -67,7 +67,7 @@ export async function addDinnerAction(_previous: DinnerState, form: FormData): P
   if (ahead < 0) return { error: "That day has passed. Pick today or later.", values };
   if (ahead > 90) return { error: `Pick a day before ${addDays(today, 91)}.`, values };
 
-  const result = await addDinner(household.id, user.id, values.day, time);
+  const result = await addDinner(household.id, user.id, values.day, time, form.get("in") === "on");
   if (result === "taken") return { error: "There is already a dinner that day. Open it from the list above.", values };
   refresh();
   redirect(`/dinner/${result.id}`);
@@ -80,9 +80,9 @@ export async function cancelDinnerAction(dinnerId: string, cancelled: boolean): 
   return { saved: true };
 }
 
-export async function absentAction(dinnerId: string, absent: boolean): Promise<DinnerState> {
+export async function goingAction(dinnerId: string, going: boolean): Promise<DinnerState> {
   const { user, household } = await requireExtra("dinner");
-  if (isId(dinnerId)) await setAbsent(household.id, user.id, dinnerId, absent === true);
+  if (isId(dinnerId)) await setGoing(household.id, user.id, dinnerId, going === true);
   refresh();
   return { saved: true };
 }
@@ -148,7 +148,7 @@ export async function ideasAction(dinnerId: string): Promise<IdeasState> {
   const found = await getDinner(household.id, dinnerId);
   if (!found) return { error: "That dinner is gone." };
   const [coming, recent] = await Promise.all([
-    avoidsOfThoseComing(household.id, found.absent),
+    avoidsOfThoseComing(household.id, found.going),
     recentDishTitles(household.id, dayInZone(new Date(), household.timeZone)),
   ]);
   const { ideas, source } = await suggestDishes({
@@ -156,9 +156,31 @@ export async function ideasAction(dinnerId: string): Promise<IdeasState> {
     avoids: coming.avoids,
     recent,
     already: found.dishes.map((dish) => dish.title),
+    language: "en",
   });
   if (ideas.length === 0) return { error: "No ideas this time. Type one in instead." };
   return { ideas, source };
+}
+
+export type NeedsState = { ingredients?: string[]; source?: "claude" | "cookbook" } | undefined;
+
+/**
+ * What a dish needs, for the name being typed in the "Suggest a dish" form. Nothing is
+ * stored: the answer fills the form, and the person decides whether to use it.
+ */
+export async function needsAction(dinnerId: string, title: string): Promise<NeedsState> {
+  const { user, household } = await requireExtra("dinner");
+  if (!isId(dinnerId) || typeof title !== "string" || title.trim().length < 3 || title.length > TITLE_LENGTH) return undefined;
+  const allowed =
+    (await allowAttempt(`dinner-needs:user:${user.id}`, 60, 86_400)) &&
+    (await allowAttempt(`dinner-needs:${household.id}`, 150, 86_400)) &&
+    (await allowAttempt("dinner-needs:everyone", 600, 86_400));
+  if (!allowed) return undefined;
+  const found = await getDinner(household.id, dinnerId);
+  if (!found) return undefined;
+  const coming = await avoidsOfThoseComing(household.id, found.going);
+  const needs = await suggestNeeds({ title, avoids: coming.avoids, language: "en" });
+  return needs ?? undefined;
 }
 
 export async function removeDishAction(dishId: string): Promise<DinnerState> {

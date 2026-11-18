@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { z } from "zod";
+import { AreaPage } from "@/components/area/area-header";
 import { Avatar } from "@/components/avatar/avatar";
-import { ExtraHeader } from "@/components/extras/extra-header";
+import { Faces, Person, type PersonLike } from "@/components/avatar/person";
 import { ActionButton } from "@/components/ui/action-button";
+import { isFresh, Struck } from "@/components/ui/strike";
 import { clockLabel } from "@/lib/booking/status";
 import { describeDinnerDay, rankDishes } from "@/lib/dinner/plan";
 import { getDinner, type DinnerDetail } from "@/lib/dinner/service";
@@ -13,12 +14,12 @@ import { listMembers } from "@/lib/households";
 import { listNames } from "@/lib/names";
 import { dayInZone } from "@/lib/time";
 import {
-  absentAction,
   atHomeAction,
   cancelDinnerAction,
   chooseAction,
   claimIngredientAction,
   dutyAction,
+  goingAction,
   gotIngredientAction,
   removeDishAction,
   voteAction,
@@ -33,8 +34,7 @@ export const maxDuration = 60;
 
 export const metadata: Metadata = { title: "Dinner" };
 
-const link =
-  "flex min-h-11 w-fit items-center rounded font-bold underline underline-offset-4 outline-none focus-visible:ring-4 focus-visible:ring-fjord";
+const BACK = { href: "/dinner", label: "Dinner" };
 
 type Ingredient = DinnerDetail["dishes"][number]["ingredients"][number];
 
@@ -43,6 +43,25 @@ function Tick() {
     <svg viewBox="0 0 24 24" className="tick-draw size-5 shrink-0" aria-hidden="true">
       <path d="M4 13C7 15 9 17 10 19C13 13 17 8 21 5" pathLength={1} />
     </svg>
+  );
+}
+
+/** One line of "where this dinner stands": a drawn tick when it is sorted, an empty ring when not. */
+function Step({ done, children }: { done: boolean; children: React.ReactNode }) {
+  return (
+    <li data-done={done ? "yes" : "no"} className="flex items-start gap-3 py-1.5">
+      <span className={`mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full border-2 border-ink ${done ? "bg-ink text-paper" : ""}`}>
+        {done ? (
+          <svg viewBox="0 0 24 24" className="size-4" aria-hidden="true">
+            <path d="M4 13C7 15 9 17 10 19C13 13 17 8 21 5" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        ) : null}
+      </span>
+      <span className={done ? "font-semibold" : ""}>
+        <span className="sr-only">{done ? "Sorted: " : "Still open: "}</span>
+        {children}
+      </span>
+    </li>
   );
 }
 
@@ -55,35 +74,33 @@ export default async function DinnerPage({ params }: PageProps<"/dinner/[id]">) 
     : [null, []];
   if (!dinner) notFound();
 
-  const today = dayInZone(new Date(), household.timeZone);
+  const now = new Date();
+  const today = dayInZone(now, household.timeZone);
   const when = `${describeDinnerDay(dinner.day, today)}, ${clockLabel(dinner.time)}`;
-  const person = new Map(members.map((member) => [member.userId, member]));
+  const person = new Map<string, PersonLike>(members.map((member) => [member.userId, member]));
   const nameOf = (userId: string | null) => (userId ? person.get(userId)?.name : undefined) ?? "Someone";
   const who = (userId: string | null) => (userId === user.id ? "You" : nameOf(userId));
 
-  const coming = members.filter((member) => !dinner.absent.includes(member.userId));
-  const out = members.filter((member) => dinner.absent.includes(member.userId));
-  const meOut = dinner.absent.includes(user.id);
-  const chosen = dinner.dishes.find((dish) => dish.id === dinner.chosenDishId);
-  const ideas = rankDishes(dinner.dishes);
-  const admin = membership.role === "admin";
-
   if (dinner.cancelled) {
     return (
-      <main className="mx-auto flex max-w-md flex-col gap-6 p-6 pt-10">
-        <Link href="/dinner" className={link}>
-          All dinners
-        </Link>
-        <ExtraHeader art="dinner" eyebrow={when}>
-          Called off
-        </ExtraHeader>
-        <p className="text-lg text-ink-soft">Nobody is cooking this one. What was on it is kept, in case it is back on.</p>
+      <AreaPage area="dinner" eyebrow={when} back={BACK} title="Called off">
+        <p className="text-lg">Nobody is cooking this one. What was on it is kept, in case it is back on.</p>
         <ActionButton look="filled" align="start" action={cancelDinnerAction.bind(null, dinner.id, false)}>
           Bring it back
         </ActionButton>
-      </main>
+      </AreaPage>
     );
   }
+
+  const going = members.filter((member) => dinner.going.includes(member.userId));
+  const out = members.filter((member) => dinner.notGoing.includes(member.userId));
+  const waiting = members.filter((member) => !dinner.going.includes(member.userId) && !dinner.notGoing.includes(member.userId));
+  const mine = dinner.going.includes(user.id) ? "in" : dinner.notGoing.includes(user.id) ? "out" : "unanswered";
+  const chosen = dinner.dishes.find((dish) => dish.id === dinner.chosenDishId);
+  const ideas = rankDishes(dinner.dishes);
+  const admin = membership.role === "admin";
+  const toBuy = chosen ? chosen.ingredients.filter((ingredient) => !ingredient.atHome && !ingredient.boughtAt) : [];
+  const untaken = toBuy.filter((ingredient) => !ingredient.claimedBy).length;
 
   const duties = [
     { duty: "cook" as const, title: "Cooking", holder: dinner.cookId, take: "I'll cook", takeLabel: "I'll cook this dinner" },
@@ -91,44 +108,62 @@ export default async function DinnerPage({ params }: PageProps<"/dinner/[id]">) 
   ];
 
   return (
-    <main className="mx-auto flex max-w-md flex-col gap-8 p-6 pt-10">
-      <Link href="/dinner" className={link}>
-        All dinners
-      </Link>
-      <ExtraHeader art="dinner" eyebrow={when}>
-        {chosen ? chosen.title : "What's for dinner?"}
-      </ExtraHeader>
+    <AreaPage area="dinner" eyebrow={when} back={BACK} title={chosen ? chosen.title : "What's for dinner?"}>
+      <section aria-labelledby="stands-heading" className="flex flex-col gap-1 rounded-3xl bg-salmon/30 p-5" data-testid="stands">
+        <h2 id="stands-heading" className="type-display text-2xl">
+          Where this dinner stands
+        </h2>
+        <ul className="flex flex-col">
+          <Step done={going.length > 0}>{going.length === 0 ? "Nobody is in yet" : going.length === 1 ? "1 is in" : `${going.length} are in`}</Step>
+          <Step done={Boolean(chosen)}>
+            {chosen ? `Decided: ${chosen.title}` : ideas.length === 0 ? "Nothing suggested yet" : `${ideas.length === 1 ? "1 idea" : `${ideas.length} ideas`}, not decided`}
+          </Step>
+          <Step done={Boolean(dinner.cookId)}>{dinner.cookId ? `${who(dinner.cookId)} ${dinner.cookId === user.id ? "cook" : "cooks"}` : "Nobody cooks yet"}</Step>
+          <Step done={Boolean(dinner.cleanerId)}>
+            {dinner.cleanerId ? `${who(dinner.cleanerId)} ${dinner.cleanerId === user.id ? "clean" : "cleans"} up` : "Nobody cleans up yet"}
+          </Step>
+          {chosen ? (
+            <Step done={toBuy.length === 0}>
+              {toBuy.length === 0 ? "Everything is in the house" : `${toBuy.length === 1 ? "1 thing" : `${toBuy.length} things`} left to buy${untaken > 0 ? `, ${untaken} not taken` : ""}`}
+            </Step>
+          ) : null}
+        </ul>
+      </section>
 
-      <section aria-labelledby="in-heading" className="flex flex-col gap-3" data-testid="whos-in" data-me={meOut ? "out" : "in"}>
+      <section aria-labelledby="in-heading" className="flex flex-col gap-3" data-testid="whos-in" data-me={mine}>
         <h2 id="in-heading" className="type-display text-3xl">
           Who&apos;s in
         </h2>
         <div className="flex flex-wrap items-center gap-2">
-          <span className="flex -space-x-2">
-            {coming.map((member) => (
-              <Avatar key={member.userId} avatar={member.avatar} colour={member.colour} className="size-9 border-2 border-paper" />
-            ))}
-          </span>
-          <span className="font-semibold">
-            {coming.length === 0
-              ? "Nobody is in."
-              : `${listNames(coming.map((member) => member.userId), user.id, nameOf)} ${coming.length === 1 && coming[0].userId !== user.id ? "is" : "are"} in.`}
+          <Faces people={going} size="size-10" />
+          <span className="text-lg font-semibold">
+            {going.length === 0
+              ? "Nobody yet."
+              : `${listNames(going.map((member) => member.userId), user.id, nameOf)} ${going.length === 1 && going[0].userId !== user.id ? "is" : "are"} in.`}
           </span>
         </div>
         {out.length > 0 ? (
           <p className="text-ink-soft">
-            {listNames(out.map((member) => member.userId), user.id, nameOf)} {out.length === 1 && out[0].userId !== user.id ? "is" : "are"} out.
+            {listNames(out.map((member) => member.userId), user.id, nameOf)} can&apos;t make it.
           </p>
         ) : null}
-        {meOut ? (
-          <ActionButton look="filled" align="start" label="I'm in for this dinner after all" action={absentAction.bind(null, dinner.id, false)}>
-            I&apos;m in after all
-          </ActionButton>
-        ) : (
-          <ActionButton align="start" label="I'm out of this dinner" action={absentAction.bind(null, dinner.id, true)}>
-            I&apos;m out
-          </ActionButton>
-        )}
+        {waiting.filter((member) => member.userId !== user.id).length > 0 ? (
+          <p className="text-ink-soft">
+            No answer yet from {listNames(waiting.filter((member) => member.userId !== user.id).map((member) => member.userId), user.id, nameOf)}.
+          </p>
+        ) : null}
+        <div className="flex flex-wrap gap-2">
+          {mine !== "in" ? (
+            <ActionButton look="filled" align="start" label="I'm in for this dinner" action={goingAction.bind(null, dinner.id, true)}>
+              {mine === "out" ? "I'm in after all" : "I'm in"}
+            </ActionButton>
+          ) : null}
+          {mine !== "out" ? (
+            <ActionButton align="start" label="I'm not coming to this dinner" action={goingAction.bind(null, dinner.id, false)}>
+              {mine === "in" ? "Can't after all" : "Not this time"}
+            </ActionButton>
+          ) : null}
+        </div>
       </section>
 
       <section aria-labelledby="duties-heading" className="flex flex-col gap-1" data-testid="duties">
@@ -138,18 +173,9 @@ export default async function DinnerPage({ params }: PageProps<"/dinner/[id]">) 
         <ul className="flex flex-col">
           {duties.map(({ duty, title, holder, take, takeLabel }) => (
             <li key={duty} data-testid={`duty-${duty}`} className="flex flex-wrap items-center justify-between gap-3 border-b-2 border-ink/15 py-3">
-              <span className="flex flex-col">
+              <span className="flex flex-col gap-1">
                 <span className="text-sm font-semibold text-ink-soft">{title}</span>
-                <span className="flex items-center gap-2 text-xl font-semibold">
-                  {holder ? (
-                    <>
-                      <Avatar avatar={person.get(holder)?.avatar} colour={person.get(holder)?.colour ?? "var(--color-ink-soft)"} className="size-7" />
-                      {who(holder)}
-                    </>
-                  ) : (
-                    "Nobody yet"
-                  )}
-                </span>
+                {holder ? <Person person={person.get(holder)} me={user.id} size="size-8" className="text-xl font-semibold" /> : <span className="text-xl font-semibold">Nobody yet</span>}
               </span>
               {!holder ? (
                 <ActionButton look="filled" label={takeLabel} action={dutyAction.bind(null, dinner.id, duty, true)}>
@@ -176,7 +202,7 @@ export default async function DinnerPage({ params }: PageProps<"/dinner/[id]">) 
           {chosen.ingredients.length > 0 ? (
             <ul className="flex flex-col">
               {chosen.ingredients.map((ingredient) => (
-                <IngredientRow key={ingredient.id} ingredient={ingredient} me={user.id} who={who} />
+                <IngredientRow key={ingredient.id} ingredient={ingredient} me={user.id} person={person} now={now} />
               ))}
             </ul>
           ) : null}
@@ -189,37 +215,40 @@ export default async function DinnerPage({ params }: PageProps<"/dinner/[id]">) 
         <section aria-labelledby="ideas-heading" className="flex flex-col gap-4">
           <div className="flex flex-col gap-1">
             <h2 id="ideas-heading" className="type-display text-3xl">
-              {ideas.length === 0 ? "No ideas yet" : ideas.length === 1 ? "1 idea" : `${ideas.length} ideas`}
+              {ideas.length === 0 ? "What should we eat?" : ideas.length === 1 ? "1 idea" : `${ideas.length} ideas`}
             </h2>
-            <p className="text-ink-soft">Vote for everything you would eat. When you agree, go with one.</p>
+            <p className="text-ink-soft">
+              {ideas.length === 0
+                ? "Suggest a dish below, or get a few ideas. Everyone can vote."
+                : "Vote for everything you would eat. When you agree, press Decide on the one you are having."}
+            </p>
           </div>
           {ideas.length > 0 ? (
             <ul className="flex flex-col gap-3">
-              {ideas.map((dish) => {
+              {ideas.map((dish, index) => {
                 const voted = dish.votes.includes(user.id);
                 const voters = dish.votes.map((userId) => person.get(userId)).filter((member) => member !== undefined);
                 const mayRemove = admin || dish.suggestedBy === null || dish.suggestedBy === user.id;
+                const leads = index === 0 && voters.length > 0 && (ideas.length === 1 || voters.length > ideas[1].votes.length);
                 return (
                   <li key={dish.id} data-testid="dish" data-voted={voted ? "yes" : "no"} className="flex flex-col gap-3 rounded-2xl border-2 border-ink p-5">
                     <div className="flex flex-col gap-1">
                       <h3 className="type-display text-3xl break-words">{dish.title}</h3>
-                      <p className="text-ink-soft">
-                        {dish.suggestedBy === null ? "From the ideas" : dish.suggestedBy === user.id ? "Your idea" : `${nameOf(dish.suggestedBy)}'s idea`}
+                      <p className="flex flex-wrap items-center gap-x-2 text-ink-soft">
+                        {dish.suggestedBy ? <Person person={person.get(dish.suggestedBy)} me={user.id} size="size-6" className="font-semibold text-ink" /> : "Someone who moved out"}
+                        {dish.fromHelper ? "picked this from the ideas" : dish.suggestedBy === user.id ? "suggested this" : "suggested this"}
                       </p>
                     </div>
                     {dish.ingredients.length > 0 ? (
                       <p className="break-words">{dish.ingredients.map((ingredient) => ingredient.name).join(", ")}</p>
                     ) : null}
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="flex -space-x-2">
-                        {voters.map((member) => (
-                          <Avatar key={member.userId} avatar={member.avatar} colour={member.colour} className="size-7 border-2 border-paper" />
-                        ))}
-                      </span>
+                      <Faces people={voters} size="size-7" />
                       <span className="flex items-center gap-1 font-semibold">
                         {voters.length === 0 ? "No votes" : voters.length === 1 ? "1 vote" : `${voters.length} votes`}
                         {voted ? <Tick /> : null}
                       </span>
+                      {leads ? <span className="rounded-full bg-salmon px-3 py-0.5 text-sm font-bold">In the lead</span> : null}
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
                       {voted ? (
@@ -231,8 +260,8 @@ export default async function DinnerPage({ params }: PageProps<"/dinner/[id]">) 
                           Vote
                         </ActionButton>
                       )}
-                      <ActionButton align="start" label={`Go with ${dish.title}`} action={chooseAction.bind(null, dinner.id, dish.id)}>
-                        Go with this
+                      <ActionButton align="start" label={`Decide on ${dish.title}`} action={chooseAction.bind(null, dinner.id, dish.id)}>
+                        Decide on this
                       </ActionButton>
                       {mayRemove ? (
                         <span className="ml-auto">
@@ -255,7 +284,7 @@ export default async function DinnerPage({ params }: PageProps<"/dinner/[id]">) 
       <ActionButton look="link" align="start" confirm="Call off this dinner?" action={cancelDinnerAction.bind(null, dinner.id, true)}>
         Call off this dinner
       </ActionButton>
-    </main>
+    </AreaPage>
   );
 }
 
@@ -268,22 +297,19 @@ function describeNeeds(ingredients: readonly Ingredient[]): string {
   return unclaimed === 0 ? `${buying}, all taken.` : `${buying}, ${unclaimed} that nobody has taken.`;
 }
 
-function IngredientRow({ ingredient, me, who }: { ingredient: Ingredient; me: string; who: (userId: string | null) => string }) {
+function IngredientRow({ ingredient, me, person, now }: { ingredient: Ingredient; me: string; person: Map<string, PersonLike>; now: Date }) {
   const { id, name, itemId } = ingredient;
   const state = ingredient.atHome ? "home" : ingredient.boughtAt ? "bought" : ingredient.claimedBy ? "claimed" : "open";
   const settled = state === "home" || state === "bought";
   const mine = ingredient.claimedBy === me;
+  const holder = state === "bought" ? ingredient.boughtBy : state === "claimed" ? ingredient.claimedBy : null;
+  const face = holder ? person.get(holder) : undefined;
 
   return (
     <li data-testid="ingredient" data-state={state} className="flex flex-col gap-1 border-b-2 border-ink/15 py-3">
       <div className="flex items-center justify-between gap-3">
-        <span className={`relative min-w-0 text-xl font-semibold break-words ${settled ? "text-ink-soft" : ""}`}>
-          {name}
-          {state === "bought" ? (
-            <svg className="strike" viewBox="0 0 100 20" preserveAspectRatio="none" aria-hidden="true">
-              <path pathLength={1} d="M1 12C20 7 42 15 60 10C76 6 90 13 99 9" />
-            </svg>
-          ) : null}
+        <span className={`min-w-0 text-xl font-semibold break-words ${settled ? "text-ink-soft" : ""}`}>
+          {state === "bought" ? <Struck draw={isFresh(ingredient.boughtAt, now)}>{name}</Struck> : name}
         </span>
         {state === "open" && itemId ? (
           <ActionButton look="filled" label={`I'll buy ${name}`} action={claimIngredientAction.bind(null, itemId, true)}>
@@ -296,15 +322,16 @@ function IngredientRow({ ingredient, me, who }: { ingredient: Ingredient; me: st
         ) : null}
       </div>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-        <span className="flex items-center gap-1 text-ink-soft">
+        <span className="flex items-center gap-2 text-ink-soft">
+          {face ? <Avatar avatar={face.avatar} colour={face.colour} className="size-6" /> : null}
           {state === "home" ? (
             <>
               We have it <Tick />
             </>
           ) : state === "bought" ? (
-            `${who(ingredient.boughtBy)} got it.`
+            `${holder === me ? "You" : (face?.name ?? "Someone")} got it.`
           ) : state === "claimed" ? (
-            mine ? "You'll buy it." : `${who(ingredient.claimedBy)} will buy it.`
+            mine ? "You'll buy it." : `${face?.name ?? "Someone"} will buy it.`
           ) : (
             "Nobody is buying it yet."
           )}

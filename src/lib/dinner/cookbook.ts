@@ -40,6 +40,16 @@ export const COOKBOOK: readonly Recipe[] = [
   { title: "Roasted vegetables with couscous", ingredients: ["Couscous", "Sweet potato", "Courgette", "Red onion", "Chickpeas", "Lemon", "Parsley"], contains: ["gluten"] },
 ];
 
+/** What the cookbook says a dish needs, when it knows a dish by that name. */
+export function needsFromCookbook(title: string): string[] | null {
+  const wanted = title.trim().toLowerCase();
+  if (wanted.length < 3) return null;
+  const found =
+    COOKBOOK.find((recipe) => recipe.title.toLowerCase() === wanted) ??
+    COOKBOOK.find((recipe) => recipe.title.toLowerCase().startsWith(wanted) || wanted.startsWith(recipe.title.toLowerCase()));
+  return found ? [...found.ingredients] : null;
+}
+
 // What people write under "I don't eat", and what that rules out.
 const RULED_OUT: readonly { words: RegExp; contains: Contains[] }[] = [
   { words: /\bvegan/i, contains: ["meat", "pork", "fish", "dairy", "egg"] },
