@@ -29,14 +29,14 @@ export default async function PersonPage({ params }: PageProps<"/people/[id]">) 
   const self = person.userId === user.id;
   const answered = QUESTIONS.filter((question) => person.answers[question.key]);
   const picks = PICKS.filter((pick) => person.answers[pickKey(pick.key)]);
-  const turns = done.get(person.userId) ?? 0;
+  const turns = done.get(person.userId)?.turns ?? 0;
   const since = describeDay(dayInZone(person.joinedAt, household.timeZone));
   const empty = !person.bio && answered.length === 0 && picks.length === 0;
 
   return (
     <main className="mx-auto flex w-full max-w-md flex-col lg:max-w-3xl lg:pt-6">
       <header className="flex flex-col gap-4 p-6 pt-5 text-paper lg:rounded-3xl" style={{ backgroundColor: person.colour }}>
-        <BackLink href="/settings" label="Household" ring="focus-visible:ring-paper" />
+        <BackLink href={self ? "/profile" : "/settings"} label={self ? "You" : "Household"} ring="focus-visible:ring-paper" />
         <div className="flex items-center gap-4">
           <Avatar avatar={person.avatar} colour="transparent" className="size-28 border-4 border-paper" />
           <div className="flex min-w-0 flex-col gap-1">
@@ -49,7 +49,10 @@ export default async function PersonPage({ params }: PageProps<"/people/[id]">) 
       </header>
 
       <div className="flex flex-col gap-8 p-6">
-        {person.bio ? <p className="type-display text-4xl break-words">&ldquo;{person.bio}&rdquo;</p> : null}
+        {person.bio ? (
+          // A line reads well shouted; a paragraph does not.
+          <p className={`break-words ${person.bio.length > 60 ? "text-2xl font-semibold" : "type-display text-4xl"}`}>&ldquo;{person.bio}&rdquo;</p>
+        ) : null}
         {empty ? (
           <p className="text-lg text-ink-soft">
             {self ? "You haven't told your roommates anything about yourself yet." : `${person.name} hasn't written anything yet.`}
@@ -60,9 +63,11 @@ export default async function PersonPage({ params }: PageProps<"/people/[id]">) 
           <li className="rounded-full border-2 border-ink px-4 py-1.5 font-semibold">
             Here since {since.dayOfMonth} {since.monthShort}
           </li>
-          <li className="rounded-full border-2 border-ink px-4 py-1.5 font-semibold">
-            {turns === 1 ? "1 cleaning turn done" : `${turns} cleaning turns done`} lately
-          </li>
+          {turns > 0 ? (
+            <li className="rounded-full border-2 border-ink px-4 py-1.5 font-semibold">
+              {turns === 1 ? "1 cleaning turn done" : `${turns} cleaning turns done`} lately
+            </li>
+          ) : null}
           {person.avoids ? <li className="rounded-full border-2 border-ink px-4 py-1.5 font-semibold break-words">Doesn&apos;t eat: {person.avoids}</li> : null}
         </ul>
 

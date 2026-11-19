@@ -26,6 +26,11 @@ export function CreateHouseholdForm() {
         defaultValue={state?.values?.name}
         required
       />
+      {timeZone ? (
+        <p className="text-sm text-ink-soft" data-testid="zone-note">
+          Times will be shown in {timeZone.replaceAll("_", " ")} time, taken from this device. You can change that under Household.
+        </p>
+      ) : null}
       <FormError message={state?.error} />
       <SubmitButton pendingLabel="Creating household…">Create household</SubmitButton>
     </form>

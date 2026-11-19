@@ -49,9 +49,21 @@ export default async function JoinPage({ params }: PageProps<"/join/[code]">) {
               ? "The code may have been replaced. Ask your roommate for a new link."
               : "Too many tries. Wait a while, then open the link again."}
           </p>
-          <Link href={user ? "/onboarding" : "/sign-in"} className={secondary}>
-            {user ? "Enter a code yourself" : "Sign in"}
-          </Link>
+          {user ? (
+            <Link href="/onboarding" className={secondary}>
+              Enter a code yourself
+            </Link>
+          ) : (
+            // Someone new can still get started, and type a fresh code once they have one.
+            <div className="flex flex-col gap-3">
+              <Link href="/sign-up" className={primary}>
+                Create account
+              </Link>
+              <Link href="/sign-in" className={secondary}>
+                I already have an account
+              </Link>
+            </div>
+          )}
         </>
       ) : current ? (
         <>

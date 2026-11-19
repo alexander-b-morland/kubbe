@@ -218,13 +218,20 @@ export async function removeMember(householdId: string, userId: string, options:
   return result;
 }
 
-export async function setMemberColour(householdId: string, userId: string, colour: string) {
-  if (!(MEMBER_COLOURS as readonly string[]).includes(colour)) return false;
+export async function setMemberColour(householdId: string, userId: string, colour: string): Promise<"ok" | "unknown" | "taken"> {
+  if (!(MEMBER_COLOURS as readonly string[]).includes(colour)) return "unknown";
+  // Two people in one colour cannot be told apart on the calendar. Only once every colour is in use may one repeat.
+  const others = await db
+    .select({ colour: membership.colour })
+    .from(membership)
+    .where(and(eq(membership.householdId, householdId), ne(membership.userId, userId)));
+  const inUse = new Set(others.map((other) => other.colour));
+  if (inUse.has(colour) && MEMBER_COLOURS.some((option) => !inUse.has(option))) return "taken";
   await db
     .update(membership)
     .set({ colour })
     .where(and(eq(membership.householdId, householdId), eq(membership.userId, userId)));
-  return true;
+  return "ok";
 }
 
 /** Switch the household's extras on and off. Unknown keys are dropped. */

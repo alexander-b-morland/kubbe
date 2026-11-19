@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Avatar } from "@/components/avatar/avatar";
-import { RoomArt } from "@/components/illustrations/room-art";
+import { TabHeader } from "@/components/area/area-header";
 import { ActionButton } from "@/components/ui/action-button";
 import { EXTRAS } from "@/lib/extras";
 import { listMembers } from "@/lib/households";
@@ -25,14 +25,12 @@ export default async function HouseholdPage() {
   const zones = [...new Set([household.timeZone, ...Intl.supportedValuesOf("timeZone")])].sort();
 
   return (
-    <main className="mx-auto flex w-full max-w-md flex-col gap-10 p-6 pt-10 lg:max-w-3xl">
-      <header className="flex items-start justify-between gap-3">
-        <div className="flex min-w-0 flex-col gap-1">
-          <p className="font-semibold text-ink-soft">Household</p>
-          <h1 className="type-display text-6xl break-words">{household.name}</h1>
-        </div>
-        <RoomArt room="people" animate className="size-20 shrink-0" />
-      </header>
+    <main className="mx-auto flex w-full max-w-md flex-col lg:max-w-3xl lg:pt-6">
+      <TabHeader art="people" name="Household" eyebrow="Household">
+        {household.name}
+      </TabHeader>
+
+      <div className="flex flex-col gap-10 p-6">
 
       <section aria-labelledby="people-heading" className="flex flex-col gap-2">
         <h2 id="people-heading" className="type-display text-4xl">
@@ -60,16 +58,18 @@ export default async function HouseholdPage() {
                   <div className="flex flex-wrap justify-end gap-2">
                     <ActionButton
                       label={member.role === "admin" ? `Remove ${member.name} as admin` : `Make ${member.name} admin`}
+                      confirm={member.role === "admin" ? `Stop ${member.name} being an admin?` : `Make ${member.name} an admin? They can then change rules and remove people.`}
                       action={setRoleAction.bind(null, member.userId, member.role === "admin" ? "member" : "admin")}
                     >
                       {member.role === "admin" ? "Remove as admin" : "Make admin"}
                     </ActionButton>
                     <ActionButton
+                      look="link"
                       label={`Remove ${member.name}`}
-                      confirm={`Remove ${member.name} and cancel their bookings?`}
+                      confirm={`Remove ${member.name} from ${household.name} and cancel their bookings?`}
                       action={removeMemberAction.bind(null, member.userId)}
                     >
-                      Remove
+                      Remove from household
                     </ActionButton>
                   </div>
                 ) : null}
@@ -126,7 +126,10 @@ export default async function HouseholdPage() {
           <h2 id="extras-heading" className="type-display text-4xl">
             What you use
           </h2>
-          <p className="text-ink-soft">Each of these has a tile on Home. Switching one off hides it for everyone; nothing is deleted.</p>
+          <p className="text-ink-soft">
+            Each of these has a tile on Home. Ticking or unticking saves at once. Switching one off hides it, and what is in it, for
+            everyone until it is switched on again; nothing is deleted.
+          </p>
           <ExtrasForm extras={EXTRAS} enabled={household.extras} action={setExtrasAction} />
         </section>
       ) : null}
@@ -146,6 +149,7 @@ export default async function HouseholdPage() {
           </p>
         )}
       </section>
+      </div>
     </main>
   );
 }

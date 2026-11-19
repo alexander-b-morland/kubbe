@@ -4,6 +4,7 @@ import { household, membership, profile, resource, user } from "@/db/schema";
 import { defaultResourcesFor } from "@/lib/booking/defaults";
 import { generateJoinCode } from "@/lib/join-code";
 import { pinCurrentTurns } from "@/lib/cleaning/service";
+import { AVATAR_NAMES, DEFAULT_AVATAR } from "@/components/avatar/avatars";
 import { MEMBER_COLOURS, nextMemberColour } from "@/lib/member-colours";
 import { lockHousehold } from "@/lib/settings";
 import { dayInZone, isTimeZone } from "@/lib/time";
@@ -95,8 +96,9 @@ export async function joinHousehold(userId: string, code: string): Promise<JoinR
       // joins a household in the moment its last member leaves and deletes it.
       if (!(await lockHousehold(tx, found.id))) return { ok: false, reason: "not-found" };
       const members = await tx
-        .select({ colour: membership.colour })
+        .select({ colour: membership.colour, avatar: profile.avatar })
         .from(membership)
+        .leftJoin(profile, eq(profile.userId, membership.userId))
         .where(eq(membership.householdId, found.id));
       if (members.length >= MAX_MEMBERS) return { ok: false, reason: "full" };
       // A new person changes the cleaning rotation. Turns under way stay where they are.
@@ -107,6 +109,11 @@ export async function joinHousehold(userId: string, code: string): Promise<JoinR
         role: "member",
         colour: nextMemberColour(members.map((member) => member.colour)),
       });
+      // Someone who has never picked an avatar starts with one nobody here has, so five
+      // new roommates are not five trout. A profile that exists is left alone.
+      const taken = members.map((member) => member.avatar ?? DEFAULT_AVATAR);
+      const avatar = AVATAR_NAMES.find((name) => !taken.includes(name)) ?? DEFAULT_AVATAR;
+      await tx.insert(profile).values({ userId, avatar }).onConflictDoNothing();
       return { ok: true };
     });
   } catch (error) {
@@ -130,9 +137,7 @@ export async function listMembers(householdId: string) {
     .innerJoin(user, eq(membership.userId, user.id))
     .leftJoin(profile, eq(profile.userId, user.id))
     .where(eq(membership.householdId, householdId));
-  return rows.sort(
-    (a, b) =>
-      Number(b.role === "admin") - Number(a.role === "admin") ||
-      a.joinedAt.getTime() - b.joinedAt.getTime(),
-  );
+  // In the order people moved in. The list never reshuffles when someone's role changes,
+  // so a button does not move from under a finger.
+  return rows.sort((a, b) => a.joinedAt.getTime() - b.joinedAt.getTime() || a.userId.localeCompare(b.userId));
 }

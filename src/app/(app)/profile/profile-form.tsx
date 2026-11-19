@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useRef, useState } from "react";
 import { Avatar } from "@/components/avatar/avatar";
 import { AVATAR_LABELS, AVATAR_NAMES, type AvatarName } from "@/components/avatar/avatars";
 import { Field, focusRing } from "@/components/ui/form";
@@ -12,6 +12,8 @@ type Props = {
   colour: string;
   colours: readonly string[];
   colourNames: readonly string[];
+  /** Colours the other roommates have. */
+  taken: readonly { colour: string; name: string }[];
   avatar: AvatarName;
   bio: string;
   avoids: string;
@@ -26,21 +28,43 @@ const picked =
 const side =
   "flex min-h-12 flex-1 items-center justify-center rounded-full border-2 border-ink px-3 py-1.5 text-center font-bold peer-checked:bg-ink peer-checked:text-paper peer-focus-visible:ring-4 peer-focus-visible:ring-fjord";
 
+// Common things not to eat. Each is a word the dinner ideas understand.
+const DIETS = ["Vegetarian", "Vegan", "Pork", "Fish", "Dairy", "Gluten", "Nuts"];
+
 export function ProfileForm(props: Props) {
   const [state, formAction] = useActionState(saveProfileAction, undefined);
   // The avatars are shown on the colour that is picked right now, so the two are chosen together.
   const [colour, setColour] = useState(props.colour);
   const [avatar, setAvatar] = useState(props.avatar);
+  const [name, setName] = useState(props.name);
+  const avoids = useRef<HTMLInputElement>(null);
   const stored = JSON.stringify([props.name, props.colour, props.avatar, props.bio, props.avoids, props.answers]);
+  // Once every colour is in use, sharing one is allowed.
+  const allTaken = props.colours.every((option) => option === props.colour || props.taken.some((other) => other.colour === option));
+
+  /** Put a word in "What you don't eat", unless it is there. */
+  function addDiet(word: string) {
+    const input = avoids.current;
+    if (!input) return;
+    const have = input.value.split(",").map((part) => part.trim()).filter(Boolean);
+    if (have.some((part) => part.toLowerCase() === word.toLowerCase())) return;
+    input.value = [...have, word].join(", ").slice(0, 120);
+    // Tell the form something changed, as typing would, so Save appears.
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    input.focus();
+  }
 
   return (
-    <SavableForm action={formAction} state={state} resetKey={stored} variant="primary">
+    <SavableForm action={formAction} state={state} resetKey={stored} variant="primary" sticky>
       <div className="flex items-center gap-4 rounded-3xl p-5 text-paper" style={{ backgroundColor: colour }} data-testid="preview">
-        <Avatar avatar={avatar} colour="transparent" className="size-24 border-4 border-paper" />
-        <p className="type-display min-w-0 text-4xl break-words">This is you</p>
+        <Avatar avatar={avatar} colour="transparent" className="size-24 shrink-0 border-4 border-paper" />
+        <p className="flex min-w-0 flex-col gap-1">
+          <span className="font-semibold">How your roommates see you</span>
+          <span className="type-display text-4xl break-words">{name.trim() || "No name yet"}</span>
+        </p>
       </div>
 
-      <Field label="Your name" name="name" defaultValue={props.name} maxLength={60} autoComplete="given-name" />
+      <Field label="Your name" name="name" defaultValue={props.name} maxLength={60} autoComplete="given-name" onChange={(event) => setName(event.target.value)} />
 
       <fieldset className="flex flex-col gap-2">
         <legend className="pb-2 text-sm font-semibold">Your avatar</legend>
@@ -67,21 +91,33 @@ export function ProfileForm(props: Props) {
       <fieldset className="flex flex-col gap-2">
         <legend className="pb-2 text-sm font-semibold">Your colour</legend>
         <div className="flex flex-wrap gap-3">
-          {props.colours.map((option, index) => (
-            <label key={option} className="relative">
-              <input
-                type="radio"
-                name="colour"
-                value={option}
-                defaultChecked={option === props.colour}
-                onChange={() => setColour(option)}
-                className="peer sr-only"
-              />
-              <span className={`block size-11 rounded-full ${picked}`} style={{ backgroundColor: option }} />
-              <span className="sr-only">{props.colourNames[index] ?? `Colour ${index + 1}`}</span>
-            </label>
-          ))}
+          {props.colours.map((option, index) => {
+            const owner = option === props.colour ? undefined : props.taken.find((other) => other.colour === option);
+            const blocked = Boolean(owner) && !allTaken;
+            const colourName = props.colourNames[index] ?? `Colour ${index + 1}`;
+            return (
+              <label key={option} className="relative flex flex-col items-center gap-1" data-taken={owner ? "true" : undefined}>
+                <input
+                  type="radio"
+                  name="colour"
+                  value={option}
+                  defaultChecked={option === props.colour}
+                  disabled={blocked}
+                  onChange={() => setColour(option)}
+                  className="peer sr-only"
+                />
+                <span className={`block size-11 rounded-full ${picked} ${blocked ? "opacity-35" : ""}`} style={{ backgroundColor: option }} />
+                <span className="sr-only">{owner ? `${colourName}, ${owner.name}'s colour` : colourName}</span>
+                {owner ? (
+                  <span aria-hidden="true" className="max-w-14 truncate text-xs font-semibold text-ink-soft">
+                    {owner.name}
+                  </span>
+                ) : null}
+              </label>
+            );
+          })}
         </div>
+        {props.taken.length > 0 && !allTaken ? <p className="text-sm text-ink-soft">The faded ones are your roommates&apos; colours.</p> : null}
       </fieldset>
 
       <label className="flex flex-col gap-1.5">
@@ -124,14 +160,29 @@ export function ProfileForm(props: Props) {
         ))}
       </fieldset>
 
-      <Field
-        label="What you don't eat"
-        hint="Used when suggesting dinners. Leave empty if you eat everything."
-        name="avoids"
-        defaultValue={props.avoids}
-        maxLength={120}
-        placeholder="Fish, coriander"
-      />
+      <div className="flex flex-col gap-2">
+        <Field
+          ref={avoids}
+          label="What you don't eat"
+          hint="Used when suggesting dinners. Leave empty if you eat everything."
+          name="avoids"
+          defaultValue={props.avoids}
+          maxLength={120}
+          placeholder="Fish, coriander"
+        />
+        <div className="flex flex-wrap gap-2" role="group" aria-label="Add to what you don't eat">
+          {DIETS.map((word) => (
+            <button
+              key={word}
+              type="button"
+              onClick={() => addDiet(word)}
+              className={`min-h-11 rounded-full border-2 border-ink px-4 text-sm font-semibold ${focusRing}`}
+            >
+              {word}
+            </button>
+          ))}
+        </div>
+      </div>
     </SavableForm>
   );
 }

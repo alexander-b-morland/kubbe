@@ -46,9 +46,9 @@ export async function saveProfileAction(_previous: ProfileState, form: FormData)
   if (parsed.data.name !== user.name) {
     await auth.api.updateUser({ body: { name: parsed.data.name }, headers: await headers() });
   }
-  if (parsed.data.colour && !(await setMemberColour(household.id, user.id, parsed.data.colour))) {
-    return { error: "Pick one of the colours shown." };
-  }
+  const coloured = parsed.data.colour ? await setMemberColour(household.id, user.id, parsed.data.colour) : "ok";
+  if (coloured === "unknown") return { error: "Pick one of the colours shown." };
+  if (coloured === "taken") return { error: "A roommate already has that colour. Pick one that is free, so you can be told apart." };
   await saveProfile(user.id, {
     avatar: parsed.data.avatar as (typeof AVATAR_NAMES)[number],
     bio: parsed.data.bio,
