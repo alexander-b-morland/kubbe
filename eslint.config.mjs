@@ -12,6 +12,9 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Screenshots, and the throwaway scripts testers write next to them.
+    "test-shots/**",
+    "test-results/**",
   ]),
 ]);
 

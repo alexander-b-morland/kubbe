@@ -407,6 +407,8 @@ export const dinner = pgTable(
     cleanerId: text("cleaner_id").references(() => user.id, { onDelete: "set null" }),
     /** The dish that will be cooked, once it is settled. */
     chosenDishId: uuid("chosen_dish_id"),
+    /** Who settled it. */
+    decidedBy: text("decided_by").references(() => user.id, { onDelete: "set null" }),
     /** A dinner made from a weekday rule that someone then called off. */
     cancelled: boolean("cancelled").notNull().default(false),
     createdAt: createdAt(),
@@ -486,6 +488,11 @@ export const dishIngredient = pgTable(
     name: text("name").notNull(),
     /** "We already have that": nobody needs to buy it. */
     atHome: boolean("at_home").notNull().default(false),
+    /**
+     * Who said they will buy it. Kept here as well as on the shopping item, so the
+     * promise survives the vote being opened again, when the item leaves the list.
+     */
+    claimedBy: text("claimed_by").references(() => user.id, { onDelete: "set null" }),
   },
   (table) => [index("dish_ingredient_dish_idx").on(table.dishId)],
 );
