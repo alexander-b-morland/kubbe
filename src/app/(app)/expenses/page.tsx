@@ -10,6 +10,7 @@ import { listExpenses } from "@/lib/shopping";
 import { timeAgo } from "@/lib/time";
 import { removeExpenseAction, settleAction } from "./actions";
 import { ExpenseForm } from "./expense-form";
+import { getT } from "@/lib/i18n/server";
 
 // This screen depends on who is signed in, so it is rendered per request.
 export const instant = false;
@@ -23,13 +24,14 @@ const chevron = (
 );
 
 export default async function ExpensesPage() {
+  const t = await getT();
   const { user, household, membership } = await requireExtra("expenses");
   const now = new Date();
   const [entries, members] = await Promise.all([listExpenses(household.id), listMembers(household.id)]);
   const money = (amount: number) => formatAmount(amount, household.currency);
   const person = new Map<string, PersonLike>(members.map((member) => [member.userId, member]));
-  const nameOf = (userId: string) => person.get(userId)?.name ?? "Someone who moved out";
-  const who = (userId: string) => (userId === user.id ? "You" : nameOf(userId));
+  const nameOf = (userId: string) => person.get(userId)?.name ?? t("Someone who moved out");
+  const who = (userId: string) => (userId === user.id ? t("You") : nameOf(userId));
 
   const net = balances(entries);
   const mine = net.get(user.id) ?? 0;
@@ -42,7 +44,7 @@ export default async function ExpensesPage() {
     entries.length > 0 ? (
       <section aria-labelledby="history-heading" className="flex flex-col gap-1">
         <h2 id="history-heading" className="type-display text-3xl">
-          What was paid
+          {t("What was paid")}
         </h2>
         <ul className="flex flex-col">
           {entries.slice(0, 60).map((entry) => {
@@ -63,8 +65,8 @@ export default async function ExpensesPage() {
                 <p className="flex flex-wrap items-center gap-x-2 text-ink-soft">
                   {entry.isSettlement ? (
                     <>
-                      {enteredByOther ? `Marked as paid by ${who(enteredByOther) === "You" ? "you" : who(enteredByOther)}, ` : ""}
-                      {timeAgo(entry.createdAt, now, household.timeZone)}
+                      {enteredByOther ? t`Marked as paid by ${who(enteredByOther) === "You" ? "you" : who(enteredByOther)}, ` : ""}
+                      {timeAgo(entry.createdAt, now, household.timeZone, t)}
                     </>
                   ) : (
                     <>
@@ -73,14 +75,14 @@ export default async function ExpensesPage() {
                       </span>
                       <span>
                         <span className="sr-only">{who(entry.paidBy)} </span>
-                        paid,{" "}
+                        {t("paid,")}{" "}
                         {even
                           ? everyone
-                            ? "split between everyone"
-                            : `split between ${listNames(sharers, user.id, nameOf).replace(/^You\b/, "you")}`
+                            ? t("split between everyone")
+                            : t`split between ${listNames(sharers, user.id, nameOf, t).replace(/^You\b/, "you")}`
                           : entry.shares.map((share) => `${who(share.userId)} ${money(share.amount)}`).join(", ")}
-                        , {timeAgo(entry.createdAt, now, household.timeZone)}
-                        {enteredByOther ? `. Entered by ${who(enteredByOther) === "You" ? "you" : who(enteredByOther)}` : ""}
+                        , {timeAgo(entry.createdAt, now, household.timeZone, t)}
+                        {enteredByOther ? t`. Entered by ${who(enteredByOther) === "You" ? "you" : who(enteredByOther)}` : ""}
                       </span>
                     </>
                   )}
@@ -90,8 +92,8 @@ export default async function ExpensesPage() {
                     {!entry.isSettlement ? (
                       <details className="group min-w-0 flex-1">
                         <summary className="flex min-h-11 w-fit cursor-pointer list-none items-center gap-1 rounded font-bold underline underline-offset-4 outline-none focus-visible:ring-4 focus-visible:ring-fjord [&::-webkit-details-marker]:hidden">
-                          <span className="group-open:hidden">Change</span>
-                          <span className="hidden group-open:inline">Close</span>
+                          <span className="group-open:hidden">{t("Change")}</span>
+                          <span className="hidden group-open:inline">{t("Close")}</span>
                           <span className="sr-only">: {entry.description}</span>
                         </summary>
                         <div className="rounded-2xl bg-heather/30 p-4">
@@ -114,10 +116,10 @@ export default async function ExpensesPage() {
                       look="link"
                       align="start"
                       about={title}
-                      confirm={entry.isSettlement ? `Remove this repayment of ${money(entry.amount)}? The debt comes back.` : `Remove ${entry.description}, ${money(entry.amount)}?`}
+                      confirm={entry.isSettlement ? t`Remove this repayment of ${money(entry.amount)}? The debt comes back.` : t`Remove ${entry.description}, ${money(entry.amount)}?`}
                       action={removeExpenseAction.bind(null, entry.id)}
                     >
-                      Remove
+                      {t("Remove")}
                     </ActionButton>
                   </div>
                 ) : null}
@@ -131,33 +133,38 @@ export default async function ExpensesPage() {
   return (
     <AreaPage
       area="expenses"
-      eyebrow="Expenses"
-      title={mine > 0 ? `You're owed ${money(mine)}` : mine < 0 ? `You owe ${money(mine)}` : "All square"}
+      eyebrow={t("Expenses")}
+      title={mine > 0 ? t`You're owed ${money(mine)}` : mine < 0 ? t`You owe ${money(mine)}` : t("All square")}
       aside={history}
     >
       {transfers.length > 0 ? (
         <section aria-labelledby="settle-heading" className="flex flex-col gap-1" data-testid="settle">
           <h2 id="settle-heading" className="type-display text-3xl">
-            {involvesMe ? "To get square" : "Between the others"}
+            {involvesMe ? t("To get square") : t("Between the others")}
           </h2>
           <ul className="flex flex-col">
             {transfers.map((transfer) => {
               const involved = transfer.from === user.id || transfer.to === user.id || admin;
-              const sentence = `${transfer.from === user.id ? "You pay" : `${nameOf(transfer.from)} pays`} ${transfer.to === user.id ? "you" : nameOf(transfer.to)} ${money(transfer.amount)}`;
+              const sentence =
+                transfer.from === user.id
+                  ? t`You pay ${nameOf(transfer.to)} ${money(transfer.amount)}`
+                  : transfer.to === user.id
+                    ? t`${nameOf(transfer.from)} pays you ${money(transfer.amount)}`
+                    : t`${nameOf(transfer.from)} pays ${nameOf(transfer.to)} ${money(transfer.amount)}`;
               return (
                 <li key={`${transfer.from}-${transfer.to}`} className="flex flex-wrap items-center justify-between gap-3 border-b-2 border-ink/15 py-3">
                   <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-lg font-semibold">
                     <span aria-hidden="true" className="flex flex-wrap items-center gap-x-2">
                       <Person person={person.get(transfer.from)} me={user.id} />
-                      {transfer.from === user.id ? "pay" : "pays"}
+                      {transfer.from === user.id ? t("pay") : t("pays")}
                       <Person person={person.get(transfer.to)} me={user.id} />
                       <span className="type-display text-2xl whitespace-nowrap">{money(transfer.amount)}</span>
                     </span>
                     <span className="sr-only">{sentence}</span>
                   </span>
                   {involved ? (
-                    <ActionButton about={sentence} confirm={`Mark ${money(transfer.amount)} as paid?`} action={settleAction.bind(null, transfer.from, transfer.to, transfer.amount)}>
-                      Paid
+                    <ActionButton about={sentence} confirm={t`Mark ${money(transfer.amount)} as paid?`} action={settleAction.bind(null, transfer.from, transfer.to, transfer.amount)}>
+                      {t("Paid")}
                     </ActionButton>
                   ) : null}
                 </li>
@@ -165,15 +172,14 @@ export default async function ExpensesPage() {
             })}
           </ul>
           <p className="pt-2 text-sm text-ink-soft">
-            Debts are added up across the whole flat and paid the shortest way, so who you pay may not be who you shared most with.
-            Either of the two can mark a payment as paid.
+            {t("Debts are added up across the whole flat and paid the shortest way, so who you pay may not be who you shared most with. Either of the two can mark a payment as paid.")}
           </p>
         </section>
       ) : null}
 
       <details className="group rounded-3xl bg-heather/30 px-5" open={entries.length === 0} data-testid="add-expense">
         <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-lg py-4 outline-none focus-visible:ring-4 focus-visible:ring-fjord [&::-webkit-details-marker]:hidden">
-          <span className="type-display text-3xl">Add an expense</span>
+          <span className="type-display text-3xl">{t("Add an expense")}</span>
           {chevron}
         </summary>
         <div className="pb-6">
@@ -183,7 +189,7 @@ export default async function ExpensesPage() {
 
       {entries.length === 0 ? (
         <p className="text-lg">
-          When someone pays for something for the flat, log it here or tick it off on the shopping list. Kubbe keeps track of who owes whom.
+          {t("When someone pays for something for the flat, log it here or tick it off on the shopping list. Kubbe keeps track of who owes whom.")}
         </p>
       ) : null}
     </AreaPage>

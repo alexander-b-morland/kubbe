@@ -69,15 +69,15 @@ export function needsFromCookbook(title: string, ruledOutKinds: readonly string[
 // What people write under "I don't eat", and what that rules out.
 const RULED_OUT: readonly { words: RegExp; contains: Contains[] }[] = [
   { words: /\bvegan/i, contains: ["meat", "pork", "fish", "dairy", "egg"] },
-  { words: /\bvegetarian|\bveggie/i, contains: ["meat", "pork", "fish"] },
-  { words: /\bpescetarian|\bpescatarian/i, contains: ["meat", "pork"] },
-  { words: /\bmeat|\bbeef|\bchicken/i, contains: ["meat", "pork"] },
-  { words: /\bpork|\bbacon|\bham\b|\bhalal|\bkosher/i, contains: ["pork"] },
-  { words: /\bfish|\bseafood|\bsalmon/i, contains: ["fish"] },
-  { words: /\bdairy|\blactose|\bmilk|\bcheese/i, contains: ["dairy"] },
+  { words: /\bvegetar|\bveggie/i, contains: ["meat", "pork", "fish"] },
+  { words: /\bpescetar|\bpescatar/i, contains: ["meat", "pork"] },
+  { words: /\bmeat|\bbeef|\bchicken|\bkjøtt|\bstorfe|\bkylling/i, contains: ["meat", "pork"] },
+  { words: /\bpork|\bbacon|\bham\b|\bhalal|\bkosher|\bsvin|\bskinke/i, contains: ["pork"] },
+  { words: /\bfish|\bseafood|\bsalmon|\bfisk|\bsjømat|\blaks/i, contains: ["fish"] },
+  { words: /\bdairy|\blactose|\bmilk|\bcheese|\bmeieri|\blaktose|\bmelk|\bost\b/i, contains: ["dairy"] },
   { words: /\begg/i, contains: ["egg"] },
-  { words: /\bgluten|\bwheat|\bcoeliac|\bceliac/i, contains: ["gluten"] },
-  { words: /\bnut|\bpeanut/i, contains: ["nuts"] },
+  { words: /\bgluten|\bwheat|\bcoeliac|\bceliac|\bhvete|\bcøliaki/i, contains: ["gluten"] },
+  { words: /\bnut|\bpeanut|\bnøtt|\bpeanøtt/i, contains: ["nuts"] },
 ];
 
 /** What a list of "I don't eat" texts rules out. */

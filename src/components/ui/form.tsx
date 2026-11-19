@@ -2,6 +2,7 @@
 
 import { useRef, useState, type ComponentProps, type FormEvent, type ReactNode } from "react";
 import { useFormStatus } from "react-dom";
+import { useT } from "@/lib/i18n/client";
 
 // The gap of paper between the ring and what it surrounds keeps it visible on dark buttons too.
 export const focusRing = "outline-none focus-visible:ring-4 focus-visible:ring-fjord focus-visible:ring-offset-2 focus-visible:ring-offset-paper";
@@ -36,6 +37,7 @@ export function Field({ label, hint, look = "text", ...input }: FieldProps) {
  * keyboard locks someone out, since there is no password reset yet.
  */
 export function PasswordField({ label, hint, ...input }: Omit<FieldProps, "type" | "look">) {
+  const t = useT();
   const [shown, setShown] = useState(false);
   return (
     <div className="flex flex-col gap-1.5">
@@ -53,10 +55,10 @@ export function PasswordField({ label, hint, ...input }: Omit<FieldProps, "type"
           type="button"
           onClick={() => setShown((value) => !value)}
           aria-pressed={shown}
-          aria-label={shown ? "Hide password" : "Show password"}
+          aria-label={shown ? t("Hide password") : t("Show password")}
           className={`absolute inset-y-1.5 right-1.5 rounded-lg px-3 text-sm font-bold ${focusRing}`}
         >
-          {shown ? "Hide" : "Show"}
+          {shown ? t("Hide") : t("Show")}
         </button>
       </div>
       {hint ? <span className="text-sm text-ink-soft">{hint}</span> : null}
@@ -116,7 +118,7 @@ export function QuickAddForm({
   name,
   label,
   placeholder,
-  button = "Add",
+  button,
   variant = "primary",
 }: {
   action: (previous: undefined, form: FormData) => Promise<QuickResult>;
@@ -126,6 +128,7 @@ export function QuickAddForm({
   button?: string;
   variant?: "primary" | "secondary";
 }) {
+  const t = useT();
   const [value, setValue] = useState("");
   const [error, setError] = useState<string>();
   const [waiting, setWaiting] = useState(0);
@@ -146,7 +149,7 @@ export function QuickAddForm({
       try {
         problem = (await action(undefined, form))?.error;
       } catch {
-        problem = "Couldn't reach Kubbe. Check your connection and try again.";
+        problem = t("Couldn't reach Kubbe. Check your connection and try again.");
       }
       if (problem) {
         setError(problem);
@@ -177,10 +180,10 @@ export function QuickAddForm({
       </label>
       <FormError message={error} />
       <button type="submit" className={`h-14 w-full rounded-full px-6 text-lg font-bold transition-transform active:scale-[0.98] ${look} ${focusRing}`}>
-        {button}
+        {button ?? t("Add")}
       </button>
       <p role="status" className="min-h-5 text-sm font-semibold text-ink-soft">
-        {waiting > 0 ? (waiting === 1 ? "Adding…" : `Adding ${waiting}…`) : ""}
+        {waiting > 0 ? (waiting === 1 ? t("Adding…") : t`Adding ${waiting}…`) : ""}
       </p>
     </form>
   );
@@ -191,33 +194,36 @@ export function QuickAddForm({
  * long note is simply refused, or worse, cut.
  */
 export function Remaining({ used, max }: { used: number; max: number }) {
+  const t = useT();
   const left = max - used;
   if (left > max * 0.2) return null;
   return (
     <span role="status" className={`text-sm font-semibold ${left < 0 ? "text-barn" : "text-ink-soft"}`}>
-      {left >= 0 ? (left === 1 ? "1 character left" : `${left} characters left`) : `${-left} too many. Shorten it to save.`}
+      {left >= 0 ? (left === 1 ? t("1 character left") : t`${left} characters left`) : t`${-left} too many. Shorten it to save.`}
     </span>
   );
 }
 
 export function FormError({ message }: { message?: string }) {
+  const t = useT();
   if (!message) return null;
   return (
     <p role="alert" data-testid="form-error" className="rounded-xl border-2 border-barn px-4 py-3 font-semibold text-barn">
-      {message}
+      {t.loose(message)}
     </p>
   );
 }
 
 /** "Saved", with a tick that draws itself. */
-export function Saved({ show, children = "Saved" }: { show?: boolean; children?: ReactNode }) {
+export function Saved({ show, children }: { show?: boolean; children?: ReactNode }) {
+  const t = useT();
   if (!show) return null;
   return (
     <p role="status" className="flex items-center gap-2 font-bold text-spruce">
       <svg viewBox="0 0 24 24" className="tick-draw size-6 shrink-0" aria-hidden="true">
         <path d="M4 13C7 15 9 17 10 19C13 13 17 8 21 5" pathLength={1} />
       </svg>
-      {children}
+      {children ?? t("Saved")}
     </p>
   );
 }

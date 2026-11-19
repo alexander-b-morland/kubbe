@@ -1,17 +1,20 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { m } from "@/lib/i18n";
+import { useT } from "@/lib/i18n/client";
 
 type Status = "idle" | "copied" | "failed";
 
 const labels: Record<Status, string> = {
-  idle: "Share invite link",
-  copied: "Link copied",
-  failed: "Couldn't copy. Share the code instead",
+  idle: m("Share invite link"),
+  copied: m("Link copied"),
+  failed: m("Couldn't copy. Share the code instead"),
 };
 
 /** Copies the invite link, then says so on the button for a moment. */
 export function ShareCode({ code }: { code: string }) {
+  const t = useT();
   const [status, setStatus] = useState<Status>("idle");
 
   useEffect(() => {
@@ -36,7 +39,7 @@ export function ShareCode({ code }: { code: string }) {
       onClick={copyLink}
       className="min-h-12 rounded-full bg-ink px-6 py-2 font-bold text-paper outline-none transition-transform focus-visible:ring-4 focus-visible:ring-fjord active:scale-[0.98]"
     >
-      <span aria-live="polite">{labels[status]}</span>
+      <span aria-live="polite">{t(labels[status])}</span>
     </button>
   );
 }

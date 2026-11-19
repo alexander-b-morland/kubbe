@@ -2,13 +2,16 @@ import Link from "next/link";
 import type { CSSProperties, ReactNode } from "react";
 import { RoomArt, type Art } from "@/components/illustrations/room-art";
 import { areaOf, type AreaKey } from "@/lib/areas";
+import { getT } from "@/lib/i18n/server";
 
 export type Back = { href: string; label: string };
 
 const HOME: Back = { href: "/home", label: "Home" };
 
 /** The way back, top left on every screen below Home. Drawn in the colour of whatever it sits on. */
-export function BackLink({ href, label, ring = "focus-visible:ring-fjord" }: Back & { ring?: string }) {
+export async function BackLink({ href, label, ring = "focus-visible:ring-fjord" }: Back & { ring?: string }) {
+  // The label is the name of a screen ("Home", "All dinners"), written once in English where the link is made.
+  const t = await getT();
   return (
     <Link
       href={href}
@@ -18,7 +21,7 @@ export function BackLink({ href, label, ring = "focus-visible:ring-fjord" }: Bac
       <svg viewBox="0 0 24 24" aria-hidden="true" className="size-5 shrink-0">
         <path d="M20 12C15 11.500 9 11.500 4 12M10 6C8 8 6 10 4 12C6 14 8 16 10 18" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
       </svg>
-      {label}
+      {t(label)}
     </Link>
   );
 }
@@ -45,7 +48,8 @@ type BandProps = {
  * what matters right now, and a drawing. The small line and the headline are one
  * heading, so someone who hears only the heading still knows which screen this is.
  */
-function Band({ band, ring, art, name, eyebrow, children, back, extra }: BandProps) {
+async function Band({ band, ring, art, name: plainName, eyebrow, children, back, extra }: BandProps) {
+  const name = (await getT())(plainName);
   return (
     <header className={`flex flex-col gap-3 p-6 pt-5 lg:rounded-3xl ${band}`}>
       {back ? <BackLink {...back} ring={ring} /> : null}

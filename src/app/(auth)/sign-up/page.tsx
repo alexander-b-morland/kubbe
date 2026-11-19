@@ -6,6 +6,7 @@ import { isJoinCode, normaliseJoinCode } from "@/lib/join-code";
 import { allowAttempt, clientAddress } from "@/lib/rate-limit";
 import { getUser, safeNextPath } from "@/lib/session";
 import { SignUpForm } from "../auth-forms";
+import { getT } from "@/lib/i18n/server";
 
 // This screen depends on who is signed in, so it is rendered per request.
 export const instant = false;
@@ -13,6 +14,7 @@ export const instant = false;
 export const metadata: Metadata = { title: "Create account" };
 
 export default async function SignUpPage({ searchParams }: PageProps<"/sign-up">) {
+  const t = await getT();
   const { next } = await searchParams;
   const nextPath = typeof next === "string" ? safeNextPath(next, "") : "";
   if (await getUser()) redirect(nextPath || "/home");
@@ -25,17 +27,17 @@ export default async function SignUpPage({ searchParams }: PageProps<"/sign-up">
 
   return (
     <>
-      <h1 className="type-display text-5xl">Create your account</h1>
+      <h1 className="type-display text-5xl">{t("Create your account")}</h1>
       {invitedTo ? (
         <p className="text-lg break-words" data-testid="invited-to">
-          Then you are in {invitedTo.name} straight away.
+          {t`Then you are in ${invitedTo.name} straight away.`}
         </p>
       ) : null}
       <SignUpForm next={nextPath || undefined} />
       <p>
-        Already have an account?{" "}
+        {t("Already have an account?")}{" "}
         <Link href={nextPath ? `/sign-in?next=${encodeURIComponent(nextPath)}` : "/sign-in"} className="font-bold underline underline-offset-4">
-          Sign in
+          {t("Sign in")}
         </Link>
       </p>
     </>

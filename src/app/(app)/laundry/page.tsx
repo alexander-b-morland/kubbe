@@ -10,6 +10,7 @@ import { refusalFor, slotsForDay } from "@/lib/booking/rules";
 import { listDayBookings, listEnabled } from "@/lib/booking/service";
 import { requireHousehold } from "@/lib/session";
 import { clockTime } from "@/lib/time";
+import { getT } from "@/lib/i18n/server";
 
 // This screen depends on who is signed in, so it is rendered per request.
 export const instant = false;
@@ -17,11 +18,12 @@ export const instant = false;
 export const metadata: Metadata = { title: "Laundry" };
 
 export default async function LaundryPage({ searchParams }: PageProps<"/laundry">) {
+  const t = await getT();
   const { user, household, membership } = await requireHousehold();
   const params = await searchParams;
   // Washing machines first, then dryers. A household can have several of each.
   const machines = await listEnabled(household.id, ["washer", "dryer"]);
-  if (machines.length === 0) return <NothingToBook what="washing machine" />;
+  if (machines.length === 0) return <NothingToBook what={t("washing machine")} />;
 
   const active = machines.find((machine) => machine.id === params.machine) ?? machines[0];
   const dryers = machines.filter((machine) => machine.kind === "dryer");
@@ -42,7 +44,7 @@ export default async function LaundryPage({ searchParams }: PageProps<"/laundry"
       requestedDay={params.day}
       headerExtra={
         <Switcher
-          label="Machine"
+          label={t("Machine")}
           tone="on-light"
           items={switcherItems({ basePath: "/laundry", param: "machine", all: machines, active, day })}
         />
@@ -55,9 +57,9 @@ export default async function LaundryPage({ searchParams }: PageProps<"/laundry"
           <WashNote washers={washers} household={household} userId={user.id} day={shownDay} now={now} />
         ) : active.kind === "washer" && membership.role === "admin" ? (
           <p className="px-3 pb-1 text-sm text-ink-soft">
-            Have a dryer too?{" "}
+            {t("Have a dryer too?")}{" "}
             <Link href="/settings/rules?from=laundry" className="font-bold underline underline-offset-4">
-              Switch it on in the rules
+              {t("Switch it on in the rules")}
             </Link>
             .
           </p>
@@ -69,6 +71,7 @@ export default async function LaundryPage({ searchParams }: PageProps<"/laundry"
 
 /** On a dryer's sheet: when your wash that day ends, so you know which slot to take. */
 async function WashNote(props: { washers: Resource[]; household: { id: string; timeZone: string }; userId: string; day: string; now: Date }) {
+  const t = await getT();
   const { washers, household, userId, day, now } = props;
   const booked = await Promise.all(washers.map((washer) => listDayBookings(washer.id, household.id, day, household.timeZone)));
   const mine = booked
@@ -79,7 +82,7 @@ async function WashNote(props: { washers: Resource[]; household: { id: string; t
   const ends = mine.map((wash) => clockTime(wash.endsAt, household.timeZone));
   return (
     <p className="mx-3 mb-2 rounded-2xl border-2 border-ink p-4 font-semibold" data-testid="wash-note">
-      {mine.length === 1 ? `Your wash ends at ${ends[0]}.` : `Your washes end at ${ends.slice(0, -1).join(", ")} and ${ends.at(-1)}.`} Pick a slot after it.
+      {mine.length === 1 ? t`Your wash ends at ${ends[0]}.` : t`Your washes end at ${ends.slice(0, -1).join(", ")} and ${ends.at(-1) ?? ""}.`}{t(" Pick a slot after it.")}
     </p>
   );
 }
@@ -93,6 +96,7 @@ async function DryerSuggestion(props: {
   day: string;
   now: Date;
 }) {
+  const t = await getT();
   const { washer, dryers, household, userId, day, now } = props;
   const timeZone = household.timeZone;
   const [washes, ...drying] = await Promise.all([
@@ -112,7 +116,7 @@ async function DryerSuggestion(props: {
           <svg viewBox="0 0 24 24" className="tick-draw size-6 shrink-0" aria-hidden="true">
             <path d="M4 13C7 15 9 17 10 19C13 13 17 8 21 5" pathLength={1} />
           </svg>
-          Dryer booked for {clockTime(booked.startsAt, timeZone)}, after your wash.
+          {t`Dryer booked for ${clockTime(booked.startsAt, timeZone)}, after your wash.`}
         </aside>
       );
     }
@@ -130,11 +134,11 @@ async function DryerSuggestion(props: {
       return (
         <aside className="mx-3 mb-2 flex flex-col gap-3 rounded-2xl border-2 border-ink p-4" data-testid="dryer-suggestion">
           <p className="font-semibold">
-            Your wash ends at {clockTime(wash.endsAt, timeZone)}. Want the {which} after it?
+            {t`Your wash ends at ${clockTime(wash.endsAt, timeZone)}. Want the ${which} after it?`}
           </p>
           <QuickBook
-            label={`Book ${which} at ${start}`}
-            pendingLabel="Booking dryer…"
+            label={t`Book ${which} at ${start}`}
+            pendingLabel={t("Booking dryer…")}
             book={bookResource.bind(null, dryer.id, slot.startsAt.toISOString())}
           />
         </aside>

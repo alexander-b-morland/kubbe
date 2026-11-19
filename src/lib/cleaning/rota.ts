@@ -1,4 +1,5 @@
 import { addDays, daysBetween } from "@/lib/time";
+import { en, type Translate } from "@/lib/i18n";
 
 // The cleaning rota, as pure functions. Turns are never stored: who cleans what, and when,
 // follows from each room's start day and interval and the order people joined in.
@@ -50,16 +51,16 @@ export function assigneeFor(input: {
 }
 
 /** "Every week", "Every 2 weeks", "Every 3 days". */
-export function describeInterval(intervalDays: number): string {
-  if (intervalDays === 1) return "Every day";
-  if (intervalDays === 7) return "Every week";
-  if (intervalDays % 7 === 0) return `Every ${intervalDays / 7} weeks`;
-  return `Every ${intervalDays} days`;
+export function describeInterval(intervalDays: number, t: Translate = en): string {
+  if (intervalDays === 1) return t("Every day");
+  if (intervalDays === 7) return t("Every week");
+  if (intervalDays % 7 === 0) return t`Every ${intervalDays / 7} weeks`;
+  return t`Every ${intervalDays} days`;
 }
 
 /** "Due today", "1 day left", "5 days left". */
-export function describeDue(today: string, lastDay: string): string {
+export function describeDue(today: string, lastDay: string, t: Translate = en): string {
   const left = daysBetween(today, lastDay);
-  if (left <= 0) return "Due today";
-  return left === 1 ? "1 day left" : `${left} days left`;
+  if (left <= 0) return t("Due today");
+  return left === 1 ? t("1 day left") : t`${left} days left`;
 }

@@ -1,6 +1,7 @@
 import type { AreaKey } from "@/lib/areas";
 import { clockLabel } from "@/lib/booking/status";
 import { addDays, isDay } from "@/lib/time";
+import { en, type Translate } from "@/lib/i18n";
 
 // What happens when in a household, gathered from every area into one list of days.
 // Pure: the screens fetch, this decides what each day holds and how it is worded.
@@ -52,9 +53,9 @@ export type CalendarInput = {
   turns: readonly { areaId: string; name: string; day: string; assigneeId: string | null; done: boolean; routine?: boolean }[];
 };
 
-export function buildCalendar(input: CalendarInput): CalendarItem[] {
+export function buildCalendar(input: CalendarInput, t: Translate = en): CalendarItem[] {
   const { me, nameOf } = input;
-  const who = (userId: string) => (userId === me ? "You" : nameOf(userId));
+  const who = (userId: string) => (userId === me ? t("You") : nameOf(userId));
   const items: CalendarItem[] = [];
 
   for (const booking of input.bookings) {
@@ -65,7 +66,7 @@ export function buildCalendar(input: CalendarInput): CalendarItem[] {
       time: booking.from,
       area: laundry ? "laundry" : "shower",
       title: booking.name,
-      detail: `${who(booking.userId)}, until ${clockLabel(booking.to)}`,
+      detail: t`${who(booking.userId)}, until ${clockLabel(booking.to)}`,
       href: `${laundry ? "/laundry" : "/shower"}?day=${booking.day}`,
       people: [booking.userId],
       mine: booking.userId === me,
@@ -80,8 +81,8 @@ export function buildCalendar(input: CalendarInput): CalendarItem[] {
       day: dinner.day,
       time: dinner.time,
       area: "dinner",
-      title: dinner.chosenTitle ? `Dinner: ${dinner.chosenTitle}` : "Dinner",
-      detail: dinner.cookId ? `${who(dinner.cookId)} ${dinner.cookId === me ? "cook" : "cooks"}` : "Nobody cooks yet",
+      title: dinner.chosenTitle ? t`Dinner: ${dinner.chosenTitle}` : t("Dinner"),
+      detail: dinner.cookId ? (dinner.cookId === me ? t("You cook") : t`${nameOf(dinner.cookId)} cooks`) : t("Nobody cooks yet"),
       href: `/dinner/${dinner.id}`,
       people: [...dinner.going],
       mine: dinner.going.includes(me) || dinner.cookId === me,
@@ -96,8 +97,8 @@ export function buildCalendar(input: CalendarInput): CalendarItem[] {
       day: fixed.day,
       time: fixed.time,
       area: "dinner",
-      title: "Dinner",
-      detail: "A fixed dinner day. It opens for answers two weeks ahead.",
+      title: t("Dinner"),
+      detail: t("A fixed dinner day. It opens for answers two weeks ahead."),
       href: "/dinner",
       people: [],
       mine: false,
@@ -128,7 +129,7 @@ export function buildCalendar(input: CalendarInput): CalendarItem[] {
       time: null,
       area: "cleaning",
       title: turn.name,
-      detail: turn.done ? "Done" : turn.assigneeId ? `${turn.assigneeId === me ? "Your" : `${nameOf(turn.assigneeId)}'s`} turn` : "Nobody's turn",
+      detail: turn.done ? t("Done") : turn.assigneeId ? (turn.assigneeId === me ? t("Your turn") : t`${nameOf(turn.assigneeId)}'s turn`) : t("Nobody's turn"),
       href: "/cleaning",
       people: turn.assigneeId ? [turn.assigneeId] : [],
       mine: turn.assigneeId === me,

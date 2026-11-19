@@ -1,4 +1,5 @@
 import { addDays, describeDay } from "@/lib/time";
+import { en, m, type Translate } from "@/lib/i18n";
 
 // Pure dinner rules: which days get a dinner, how ideas are ranked, how typed
 // ingredients are read. Nothing here touches the database.
@@ -9,7 +10,7 @@ export const INGREDIENT_LENGTH = 80;
 export const MAX_DISHES = 12;
 export const MAX_INGREDIENTS = 30;
 
-export const WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"] as const;
+export const WEEKDAYS = [m("Monday"), m("Tuesday"), m("Wednesday"), m("Thursday"), m("Friday"), m("Saturday"), m("Sunday")] as const;
 
 export type DinnerRule = { weekday: number; time: number };
 
@@ -75,16 +76,16 @@ export function rankDishes<Dish extends { votes: readonly string[] }>(dishes: re
 }
 
 /** "Mondays", "Mondays and Thursdays", "Mondays, Wednesdays and Fridays". */
-export function describeRuleDays(rules: readonly DinnerRule[]): string {
-  const names = [...rules].sort((a, b) => a.weekday - b.weekday).map((rule) => `${WEEKDAYS[rule.weekday - 1]}s`);
+export function describeRuleDays(rules: readonly DinnerRule[], t: Translate = en): string {
+  const names = [...rules].sort((a, b) => a.weekday - b.weekday).map((rule) => t`${t(WEEKDAYS[rule.weekday - 1])}s`);
   if (names.length <= 1) return names[0] ?? "";
-  return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+  return t`${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
 }
 
-/** "Today", "Tomorrow", or "Thursday 19 Nov". */
-export function describeDinnerDay(day: string, today: string): string {
-  if (day === today) return "Today";
-  if (day === addDays(today, 1)) return "Tomorrow";
-  const { weekday, dayOfMonth, monthShort } = describeDay(day);
+/** "Today", "Tomorrow", or "Thursday 19 Nov". With `inSentence`, "today" and "tomorrow" are not capitalised. */
+export function describeDinnerDay(day: string, today: string, t: Translate = en, inSentence = false): string {
+  if (day === today) return inSentence ? t("today") : t("Today");
+  if (day === addDays(today, 1)) return inSentence ? t("tomorrow") : t("Tomorrow");
+  const { weekday, dayOfMonth, monthShort } = describeDay(day, t);
   return `${weekday} ${dayOfMonth} ${monthShort}`;
 }

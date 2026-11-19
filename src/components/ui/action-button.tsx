@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useEffect, useRef, useState, type ReactNode } from "react";
+import { useT } from "@/lib/i18n/client";
 
 type Result = { error?: string; saved?: boolean; message?: string } | undefined;
 
@@ -17,7 +18,7 @@ export function ActionButton({
   children,
   confirm,
   look = "outline",
-  pendingLabel = "Working…",
+  pendingLabel,
   doneLabel,
   label: fullLabel,
   about,
@@ -42,6 +43,7 @@ export function ActionButton({
   align?: "start" | "end";
   action: () => Promise<Result>;
 }) {
+  const t = useT();
   const label = fullLabel ?? (about && typeof children === "string" ? `${children}: ${about}` : undefined);
   const [state, formAction, pending] = useActionState<Result>(action, undefined);
   const [asking, setAsking] = useState(false);
@@ -81,7 +83,7 @@ export function ActionButton({
       ) : confirm ? (
         <span className={`flex flex-wrap gap-2 ${align === "end" ? "justify-end" : "justify-start"}`}>
           <button key="back" type="button" onClick={() => setAsking(false)} className={`${base} border-ink px-4`}>
-            Keep as it is
+            {t("Keep as it is")}
           </button>
           <button
             key="do"
@@ -90,7 +92,7 @@ export function ActionButton({
             aria-disabled={pending}
             className={`${base} border-barn bg-barn px-4 text-left text-paper ${pending ? "opacity-70" : ""}`}
           >
-            {pending ? pendingLabel : confirm}
+            {pending ? (pendingLabel ?? t("Working…")) : confirm}
           </button>
         </span>
       ) : (
@@ -101,17 +103,17 @@ export function ActionButton({
           aria-disabled={pending}
           className={`${base} ${colours} ${pending ? "opacity-70" : ""}`}
         >
-          {pending ? pendingLabel : children}
+          {pending ? (pendingLabel ?? t("Working…")) : children}
         </button>
       )}
       {state?.error ? (
         <p role="alert" className={`max-w-64 text-sm font-semibold text-barn ${align === "end" ? "text-right" : ""}`}>
-          {state.error}
+          {t.loose(state.error)}
         </p>
       ) : null}
       {state?.saved && (state.message ?? doneLabel) ? (
         <p role="status" className="max-w-80 text-sm font-bold text-spruce">
-          {state.message ?? doneLabel}
+          {state.message ? t.loose(state.message) : doneLabel}
         </p>
       ) : null}
     </form>

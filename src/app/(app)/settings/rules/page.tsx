@@ -8,6 +8,8 @@ import { requireHousehold } from "@/lib/session";
 import { SLOT_LENGTHS } from "@/lib/settings";
 import { addResourceAction, removeResourceAction, updateResourceAction } from "../actions";
 import { ResourceForm } from "../settings-forms";
+import { m } from "@/lib/i18n";
+import { getT } from "@/lib/i18n/server";
 
 // This screen depends on who is signed in, so it is rendered per request.
 export const instant = false;
@@ -16,35 +18,36 @@ export const metadata: Metadata = { title: "Booking rules" };
 
 // Where the way back leads. Only these: the value comes from the address bar.
 const cameFrom: Record<string, Back> = {
-  shower: { href: "/shower", label: "Shower" },
-  laundry: { href: "/laundry", label: "Laundry" },
+  shower: { href: "/shower", label: m("Shower") },
+  laundry: { href: "/laundry", label: m("Laundry") },
 };
 
 const groups = [
-  { kind: "shower", title: "Showers", one: "shower", art: "shower", band: "bg-fjord text-paper" },
-  { kind: "washer", title: "Washing machines", one: "washing machine", art: "laundry", band: "bg-ochre text-ink" },
-  { kind: "dryer", title: "Dryers", one: "dryer", art: "laundry", band: "bg-ochre text-ink" },
+  { kind: "shower", title: m("Showers"), one: m("shower"), art: "shower", band: "bg-fjord text-paper" },
+  { kind: "washer", title: m("Washing machines"), one: m("washing machine"), art: "laundry", band: "bg-ochre text-ink" },
+  { kind: "dryer", title: m("Dryers"), one: m("dryer"), art: "laundry", band: "bg-ochre text-ink" },
 ] as const;
 
 export default async function RulesPage({ searchParams }: PageProps<"/settings/rules">) {
+  const t = await getT();
   const { household, membership } = await requireHousehold();
   const params = await searchParams;
   const resources = await listResources(household.id);
   const admin = membership.role === "admin";
-  const back = (typeof params.from === "string" ? cameFrom[params.from] : undefined) ?? { href: "/settings", label: "Household" };
+  const back = (typeof params.from === "string" ? cameFrom[params.from] : undefined) ?? { href: "/settings", label: m("Household") };
   const open = typeof params.open === "string" ? params.open : undefined;
 
   return (
     <main className="mx-auto flex w-full max-w-md flex-col lg:max-w-3xl lg:pt-6">
-      <TabHeader art="people" name="Booking rules" eyebrow={household.name} back={back}>
-        Booking rules
+      <TabHeader art="people" name={t("Booking rules")} eyebrow={household.name} back={back}>
+        {t("Booking rules")}
       </TabHeader>
 
       <div className="flex flex-col gap-8 p-6">
         <p className="text-ink-soft">
           {admin
-            ? "Tap a shower or machine to change it. Changes apply to new bookings; slots already booked stay as they are."
-            : "Only an admin can change these."}
+            ? t("Tap a shower or machine to change it. Changes apply to new bookings; slots already booked stay as they are.")
+            : t("Only an admin can change these.")}
         </p>
 
       {groups.map((group) => {
@@ -77,8 +80,8 @@ export default async function RulesPage({ searchParams }: PageProps<"/settings/r
                 {/* A second one is only worth adding once the first is in use. */}
                 {mine.some((resource) => resource.enabled) ? (
                   <div className="pt-1" data-testid={`add-${group.kind}`}>
-                    <ActionButton align="start" doneLabel="Added, with the same rules." action={addResourceAction.bind(null, group.kind)}>
-                      + Add another {group.one}
+                    <ActionButton align="start" doneLabel={t("Added, with the same rules.")} action={addResourceAction.bind(null, group.kind)}>
+                      {t`+ Add another ${group.one}`}
                     </ActionButton>
                   </div>
                 ) : null}
@@ -91,12 +94,12 @@ export default async function RulesPage({ searchParams }: PageProps<"/settings/r
                     <li key={resource.id} className="flex flex-col border-b-2 border-ink/15 py-3">
                       <span className="text-lg font-semibold">{resource.name}</span>
                       <span className="text-ink-soft">
-                        {describeSlotLength(resource.slotMinutes)} slots from {clockLabel(resource.opensAt)} to {clockLabel(resource.closesAt)}, up to{" "}
-                        {resource.maxPerDay} a day{resource.allowBackToBack ? "" : ", not two in a row"}.
+                        {t`${describeSlotLength(resource.slotMinutes, t)} slots from ${clockLabel(resource.opensAt)} to ${clockLabel(resource.closesAt)}, up to `}
+                        {resource.maxPerDay}{t(" a day")}{resource.allowBackToBack ? "" : t(", not two in a row")}.
                       </span>
                     </li>
                   ))}
-                {mine.every((resource) => !resource.enabled) ? <li className="py-3 text-ink-soft">None in this home.</li> : null}
+                {mine.every((resource) => !resource.enabled) ? <li className="py-3 text-ink-soft">{t("None in this home.")}</li> : null}
               </ul>
             )}
           </section>

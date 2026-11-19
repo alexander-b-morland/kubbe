@@ -2,6 +2,8 @@
 
 import { useEffect, useOptimistic, useRef, useState, useTransition } from "react";
 import "./booking.css";
+import { m } from "@/lib/i18n";
+import { useT } from "@/lib/i18n/client";
 
 export type SlotRow = {
   /** When the slot starts, as an ISO string. Also its identity. */
@@ -36,10 +38,11 @@ type Change = { key: string; to: "booking" | "leaving" | "back" };
 type ShownRow = SlotRow & { waiting?: "booking" | "leaving" };
 
 const focusRing = "outline-none focus-visible:ring-4 focus-visible:ring-fjord focus-visible:ring-offset-2 focus-visible:ring-offset-paper";
-const unreachable = "Couldn't reach Kubbe. Check your connection and try again.";
+const unreachable = m("Couldn't reach Kubbe. Check your connection and try again.");
 
 /** The ladder of slots for one day. Booking is like signing a sheet: your time gets circled. */
 export function SlotList({ rows, mineClassName = "bg-fjord/25", book, cancel }: Props) {
+  const t = useT();
   const [, startTransition] = useTransition();
   const [shown, change] = useOptimistic<ShownRow[], Change>(rows, (current, { key, to }) =>
     current.map((row) => {
@@ -84,7 +87,7 @@ export function SlotList({ rows, mineClassName = "bg-fjord/25", book, cancel }: 
         setDrawn((previous) => new Set([...previous].filter((key) => key !== row.key)));
         setSaid(message);
       } else {
-        setSaid(to === "booking" ? `Booked ${row.time}.` : `Cancelled ${row.time}.`);
+        setSaid(to === "booking" ? t`Booked ${row.time}.` : t`Cancelled ${row.time}.`);
       }
     });
   }
@@ -137,10 +140,10 @@ export function SlotList({ rows, mineClassName = "bg-fjord/25", book, cancel }: 
                       <span className="truncate">{row.name}</span>
                     </span>
                   ) : null}
-                  {booking ? <span className="font-semibold">Booking…</span> : null}
-                  {leaving ? <span className="font-semibold">Cancelling…</span> : null}
-                  {row.state === "mine" && !leaving ? <span className="font-bold">You</span> : null}
-                  {row.state === "free" && !booking && !row.underWay ? <span className="text-ink-soft">Free</span> : null}
+                  {booking ? <span className="font-semibold">{t("Booking…")}</span> : null}
+                  {leaving ? <span className="font-semibold">{t("Cancelling…")}</span> : null}
+                  {row.state === "mine" && !leaving ? <span className="font-bold">{t("You")}</span> : null}
+                  {row.state === "free" && !booking && !row.underWay ? <span className="text-ink-soft">{t("Free")}</span> : null}
                   {row.state === "blocked" && row.reason ? <span className="text-ink-soft">{row.reason}</span> : null}
                   {row.underWay && !booking ? <span className="text-sm font-semibold">{row.underWay}</span> : null}
                 </span>
@@ -148,7 +151,7 @@ export function SlotList({ rows, mineClassName = "bg-fjord/25", book, cancel }: 
                 {question ? (
                   <span className="ml-auto flex flex-wrap justify-end gap-2">
                     <button type="button" onClick={() => setAsking(null)} className={`h-11 rounded-full border-2 border-ink px-4 font-bold ${focusRing}`}>
-                      Keep it
+                      {t("Keep it")}
                     </button>
                     <button
                       type="button"
@@ -156,7 +159,7 @@ export function SlotList({ rows, mineClassName = "bg-fjord/25", book, cancel }: 
                       onClick={() => onCancel(row)}
                       className={`h-11 rounded-full border-2 border-barn bg-barn px-4 font-bold text-paper ${focusRing}`}
                     >
-                      Cancel {row.time}?
+                      {t`Cancel ${row.time}`}?
                     </button>
                   </span>
                 ) : row.state === "mine" && row.cancellable && row.bookingId && !leaving ? (
@@ -166,10 +169,10 @@ export function SlotList({ rows, mineClassName = "bg-fjord/25", book, cancel }: 
                       acted.current = row.key;
                       setAsking(row.key);
                     }}
-                    aria-label={`Cancel ${row.time}`}
+                    aria-label={t`Cancel ${row.time}`}
                     className={`ml-auto h-11 shrink-0 rounded-full border-2 border-ink px-4 font-bold ${focusRing}`}
                   >
-                    Cancel
+                    {t("Cancel")}
                   </button>
                 ) : null}
 
@@ -177,17 +180,17 @@ export function SlotList({ rows, mineClassName = "bg-fjord/25", book, cancel }: 
                   <button
                     type="button"
                     onClick={() => onBook(row)}
-                    aria-label={`Book ${row.time}`}
+                    aria-label={t`Book ${row.time}`}
                     className={`area-button ml-auto h-11 shrink-0 rounded-full px-5 font-bold transition-transform active:scale-[0.97] ${focusRing}`}
                   >
-                    Book
+                    {t("Book")}
                   </button>
                 ) : null}
               </div>
 
               {problem?.key === row.key ? (
                 <p role="alert" data-testid="slot-error" className="px-5 pb-3 font-semibold text-barn">
-                  {problem.message}
+                  {t.loose(problem.message)}
                 </p>
               ) : null}
             </li>

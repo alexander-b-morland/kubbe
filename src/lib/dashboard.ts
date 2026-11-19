@@ -2,6 +2,7 @@ import type { AreaKey } from "@/lib/areas";
 import { clockLabel } from "@/lib/booking/status";
 import { describeDue } from "@/lib/cleaning/rota";
 import { describeDinnerDay, LOOK_AHEAD_DAYS } from "@/lib/dinner/plan";
+import { en, type Translate } from "@/lib/i18n";
 import { addDays, daysBetween } from "@/lib/time";
 
 // What one person has on their plate, gathered from every part of the app into one
@@ -59,13 +60,9 @@ const MAX_TASKS = 4;
 const UNDATED_AFTER_DAYS = 2;
 
 const shorten = (text: string, length: number) => (text.length > length ? `${text.slice(0, length - 1).trimEnd()}…` : text);
-/** "today", "tomorrow", "Thursday 19 Nov": a day at the end of a sentence. */
-const dayInSentence = (day: string, today: string) => {
-  const label = describeDinnerDay(day, today);
-  return label === "Today" || label === "Tomorrow" ? label.toLowerCase() : label;
-};
-
-export function buildToDos(input: ToDoInput): ToDo[] {
+export function buildToDos(input: ToDoInput, t: Translate = en): ToDo[] {
+  /** "today", "tomorrow", "Thursday 19 Nov": a day at the end of a sentence. */
+  const dayInSentence = (day: string, today: string) => describeDinnerDay(day, today, t, true);
   // Each line with when it falls due, so the list can be put in the order things need doing.
   const list: { item: ToDo; day: string; minutes: number }[] = [];
   const me = input.me;
@@ -74,7 +71,7 @@ export function buildToDos(input: ToDoInput): ToDo[] {
 
   for (const turn of input.turns) {
     add(
-      { key: `turn-${turn.id}`, area: "cleaning", what: turn.name, detail: `Your turn. ${describeDue(input.today, turn.lastDay)}.`, href: "/cleaning" },
+      { key: `turn-${turn.id}`, area: "cleaning", what: turn.name, detail: t`Your turn. ${describeDue(input.today, turn.lastDay, t)}.`, href: "/cleaning" },
       turn.lastDay,
       24 * 60,
     );
@@ -85,7 +82,7 @@ export function buildToDos(input: ToDoInput): ToDo[] {
   let firstMore: { day: string; time: number } | undefined;
   for (const dinner of input.dinners) {
     if (dinner.cancelled || daysBetween(input.today, dinner.day) >= LOOK_AHEAD_DAYS) continue;
-    const when = `${describeDinnerDay(dinner.day, input.today)} at ${clockLabel(dinner.time)}`;
+    const when = t`${describeDinnerDay(dinner.day, input.today, t)} at ${clockLabel(dinner.time)}`;
     const href = `/dinner/${dinner.id}`;
     const going = dinner.going.includes(me);
     const over = dinner.day === input.today && input.nowMinutes !== undefined && dinner.time <= input.nowMinutes;
@@ -97,10 +94,10 @@ export function buildToDos(input: ToDoInput): ToDo[] {
           {
             key: `in-${dinner.id}`,
             area: "dinner",
-            what: `Are you in? Dinner ${dayInSentence(dinner.day, input.today)}`,
-            detail: dinner.chosenTitle ? `${clockLabel(dinner.time)}, ${dinner.chosenTitle}` : `${clockLabel(dinner.time)}, not decided what yet`,
+            what: t`Are you in? Dinner ${dayInSentence(dinner.day, input.today)}`,
+            detail: dinner.chosenTitle ? `${clockLabel(dinner.time)}, ${dinner.chosenTitle}` : t`${clockLabel(dinner.time)}, not decided what yet`,
             href,
-            ask: { kind: "dinner", id: dinner.id, title: dinner.chosenTitle ? `dinner (${dinner.chosenTitle})` : `dinner ${dayInSentence(dinner.day, input.today)}` },
+            ask: { kind: "dinner", id: dinner.id, title: dinner.chosenTitle ? t`dinner (${dinner.chosenTitle})` : t`dinner ${dayInSentence(dinner.day, input.today)}` },
           },
           dinner.day,
           dinner.time,
@@ -116,8 +113,8 @@ export function buildToDos(input: ToDoInput): ToDo[] {
         {
           key: `cook-${dinner.id}`,
           area: "dinner",
-          what: dinner.chosenTitle ? `Cook ${dinner.chosenTitle}` : "Cook dinner",
-          detail: untaken > 0 ? `${when}. ${untaken === 1 ? "1 thing" : `${untaken} things`} nobody is buying yet.` : when,
+          what: dinner.chosenTitle ? t`Cook ${dinner.chosenTitle}` : t("Cook dinner"),
+          detail: untaken === 0 ? when : untaken === 1 ? t`${when}. 1 thing nobody is buying yet.` : t`${when}. ${untaken} things nobody is buying yet.`,
           href,
         },
         dinner.day,
@@ -125,11 +122,11 @@ export function buildToDos(input: ToDoInput): ToDo[] {
       );
     }
     if (dinner.cleanerId === me) {
-      add({ key: `tidy-${dinner.id}`, area: "dinner", what: "Clean up after dinner", detail: when, href }, dinner.day, dinner.time);
+      add({ key: `tidy-${dinner.id}`, area: "dinner", what: t("Clean up after dinner"), detail: when, href }, dinner.day, dinner.time);
     }
     if (going && !over && !dinner.chosenTitle && dinner.ideas > 0 && !dinner.voters.includes(me)) {
       add(
-        { key: `vote-${dinner.id}`, area: "dinner", what: "Vote on dinner", detail: `${when}. ${dinner.ideas === 1 ? "1 idea" : `${dinner.ideas} ideas`}.`, href },
+        { key: `vote-${dinner.id}`, area: "dinner", what: t("Vote on dinner"), detail: dinner.ideas === 1 ? t`${when}. 1 idea.` : t`${when}. ${dinner.ideas} ideas.`, href },
         dinner.day,
         dinner.time,
       );
@@ -140,8 +137,8 @@ export function buildToDos(input: ToDoInput): ToDo[] {
       {
         key: "in-more",
         area: "dinner",
-        what: moreInvitations === 1 ? "1 more dinner to answer" : `${moreInvitations} more dinners to answer`,
-        detail: `From ${dayInSentence(firstMore.day, input.today)}.`,
+        what: moreInvitations === 1 ? t("1 more dinner to answer") : t`${moreInvitations} more dinners to answer`,
+        detail: t`From ${dayInSentence(firstMore.day, input.today)}.`,
         href: "/dinner",
       },
       firstMore.day,
@@ -153,18 +150,18 @@ export function buildToDos(input: ToDoInput): ToDo[] {
     add({
       key: "buying",
       area: "shopping",
-      what: input.buying.length === 1 ? `Buy ${input.buying[0]}` : `Buy ${input.buying.length} things`,
-      detail: input.buying.length === 1 ? "You said you would." : shorten(input.buying.join(", "), 60),
+      what: input.buying.length === 1 ? t`Buy ${input.buying[0]}` : t`Buy ${input.buying.length} things`,
+      detail: input.buying.length === 1 ? t("You said you would.") : shorten(input.buying.join(", "), 60),
       href: input.buyingHref ?? "/shopping",
     });
   }
 
   for (const task of input.tasks.slice(0, MAX_TASKS)) {
-    add({ key: `task-${task.id}`, area: "board", what: shorten(task.body, 70), detail: "On the noticeboard, for you.", href: `/board#${task.id}` });
+    add({ key: `task-${task.id}`, area: "board", what: shorten(task.body, 70), detail: t("On the noticeboard, for you."), href: `/board#${task.id}` });
   }
   if (input.tasks.length > MAX_TASKS) {
     const more = input.tasks.length - MAX_TASKS;
-    add({ key: "tasks-more", area: "board", what: more === 1 ? "1 more to-do" : `${more} more to-dos`, detail: "On the noticeboard, for you.", href: "/board" });
+    add({ key: "tasks-more", area: "board", what: more === 1 ? t("1 more to-do") : t`${more} more to-dos`, detail: t("On the noticeboard, for you."), href: "/board" });
   }
 
   for (const happening of input.unanswered) {
@@ -172,7 +169,7 @@ export function buildToDos(input: ToDoInput): ToDo[] {
       {
         key: `answer-${happening.id}`,
         area: "happenings",
-        what: `Are you in? ${shorten(happening.title, 50)}`,
+        what: t`Are you in? ${shorten(happening.title, 50)}`,
         detail: happening.when,
         href: `/happenings#${happening.id}`,
         ask: { kind: "happening", id: happening.id, title: happening.title },
@@ -182,7 +179,7 @@ export function buildToDos(input: ToDoInput): ToDo[] {
   }
 
   for (const debt of input.owe ?? []) {
-    add({ key: `pay-${debt.to}`, area: "expenses", what: `Pay ${debt.name} ${debt.amount}`, detail: "To settle up.", href: "/expenses" });
+    add({ key: `pay-${debt.to}`, area: "expenses", what: t`Pay ${debt.name} ${debt.amount}`, detail: t("To settle up."), href: "/expenses" });
   }
 
   // Soonest first. Lines for the same moment keep the order they were added in.

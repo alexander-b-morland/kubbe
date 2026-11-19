@@ -4,6 +4,7 @@ import { NothingToBook } from "@/components/booking/nothing-to-book";
 import { Switcher, switcherItems } from "@/components/booking/switcher";
 import { listEnabled } from "@/lib/booking/service";
 import { requireHousehold } from "@/lib/session";
+import { getT } from "@/lib/i18n/server";
 
 // This screen depends on who is signed in, so it is rendered per request.
 export const instant = false;
@@ -11,10 +12,11 @@ export const instant = false;
 export const metadata: Metadata = { title: "Shower" };
 
 export default async function ShowerPage({ searchParams }: PageProps<"/shower">) {
+  const t = await getT();
   const { user, household, membership } = await requireHousehold();
   const params = await searchParams;
   const showers = await listEnabled(household.id, ["shower"]);
-  if (showers.length === 0) return <NothingToBook what="shower" />;
+  if (showers.length === 0) return <NothingToBook what={t("shower")} />;
 
   // A household can have several. The first is shown unless another is asked for.
   const active = showers.find((shower) => shower.id === params.shower) ?? showers[0];
@@ -34,7 +36,7 @@ export default async function ShowerPage({ searchParams }: PageProps<"/shower">)
       requestedDay={params.day}
       headerExtra={
         <Switcher
-          label="Which shower"
+          label={t("Which shower")}
           tone="on-dark"
           items={switcherItems({ basePath: "/shower", param: "shower", all: showers, active, day })}
         />

@@ -7,6 +7,7 @@ import { z } from "zod";
 import { auth } from "@/lib/auth";
 import type { FormState } from "@/lib/form-state";
 import { joinHousehold } from "@/lib/households";
+import { getLocale, getT, rememberLocale, savedLocale, saveLocale } from "@/lib/i18n/server";
 import { isJoinCode, normaliseJoinCode } from "@/lib/join-code";
 import { allowAttempt, clientAddress, tooManyAttempts } from "@/lib/rate-limit";
 import { safeNextPath } from "@/lib/session";
@@ -31,7 +32,9 @@ export async function signUp(_previous: FormState, form: FormData): Promise<Form
   if (!parsed.success) {
     const seen = new Set<PropertyKey>();
     const first = parsed.error.issues.filter((issue) => !seen.has(issue.path[0]) && seen.add(issue.path[0]));
-    return { error: first.map((issue) => issue.message).join(" "), values };
+    // Several sentences in one message: each is said in the reader's language here.
+    const t = await getT();
+    return { error: first.map((issue) => t(issue.message)).join(" "), values };
   }
   // Creating accounts is open to anyone, so one address can only make so many an hour.
   if (!(await allowAttempt(`sign-up:${await clientAddress()}`, 20, 3600))) return { error: tooManyAttempts, values };
@@ -52,6 +55,7 @@ export async function signUp(_previous: FormState, form: FormData): Promise<Form
     }
     throw error;
   }
+  if (userId) await saveLocale(userId, await getLocale());
   const next = safeNextPath(form.get("next"), "/onboarding");
   // An account made from an invitation is for that household: join it now, with no second screen
   // asking the same thing. If the code no longer works, the invitation screen says so.
@@ -76,8 +80,9 @@ export async function signIn(_previous: FormState, form: FormData): Promise<Form
   ]);
   if (!byEmail || !byAddress) return { error: tooManyAttempts, values };
 
+  let signedIn: string | undefined;
   try {
-    await auth.api.signInEmail({ body: parsed.data, headers: await headers() });
+    signedIn = (await auth.api.signInEmail({ body: parsed.data, headers: await headers() })).user.id;
   } catch (error) {
     // Only a refusal from the auth library means the details were wrong.
     // Anything else is our fault, and goes to the error screen.
@@ -86,6 +91,9 @@ export async function signIn(_previous: FormState, form: FormData): Promise<Form
     }
     throw error;
   }
+  // The language they chose before comes with them to this device.
+  const chosen = signedIn ? await savedLocale(signedIn) : null;
+  if (chosen) await rememberLocale(chosen);
   redirect(safeNextPath(form.get("next"), "/home"));
 }
 

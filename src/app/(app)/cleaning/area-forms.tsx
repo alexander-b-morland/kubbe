@@ -6,6 +6,8 @@ import { Field, FormError, Locked, selectLook, SubmitButton } from "@/components
 import { SavableForm } from "@/components/ui/savable-form";
 import { describeInterval } from "@/lib/cleaning/rota";
 import type { CleaningState } from "./actions";
+import { m } from "@/lib/i18n";
+import { useT } from "@/lib/i18n/client";
 
 type Action = (previous: CleaningState, form: FormData) => Promise<CleaningState>;
 
@@ -20,24 +22,25 @@ function RhythmFields({
   intervalDays: number;
   estimateMinutes: number;
 }) {
+  const t = useT();
   return (
     <div className="grid grid-cols-2 gap-3">
       <label className="flex flex-col gap-1.5">
-        <span className="text-sm font-semibold">How often</span>
+        <span className="text-sm font-semibold">{t("How often")}</span>
         <select name="intervalDays" defaultValue={intervalDays} className={selectLook}>
           {intervals.map((days) => (
             <option key={days} value={days}>
-              {describeInterval(days)}
+              {describeInterval(days, t)}
             </option>
           ))}
         </select>
       </label>
       <label className="flex flex-col gap-1.5">
-        <span className="text-sm font-semibold">Takes about</span>
+        <span className="text-sm font-semibold">{t("Takes about")}</span>
         <select name="estimateMinutes" defaultValue={estimateMinutes} className={selectLook}>
           {estimates.map((minutes) => (
             <option key={minutes} value={minutes}>
-              {minutes} min
+              {t`${minutes} min`}
             </option>
           ))}
         </select>
@@ -48,14 +51,14 @@ function RhythmFields({
 
 // Rooms and everyday chores, each with a rhythm that usually fits. Tapping one fills the form.
 const suggestions = [
-  { name: "Bathroom", days: 7, minutes: 30 },
-  { name: "Kitchen", days: 7, minutes: 30 },
-  { name: "Living room", days: 7, minutes: 20 },
-  { name: "Hallway", days: 14, minutes: 15 },
-  { name: "Empty the dishwasher", days: 1, minutes: 5 },
-  { name: "Take out the trash", days: 3, minutes: 5 },
-  { name: "Recycling", days: 14, minutes: 15 },
-  { name: "Water the plants", days: 7, minutes: 10 },
+  { name: m("Bathroom"), days: 7, minutes: 30 },
+  { name: m("Kitchen"), days: 7, minutes: 30 },
+  { name: m("Living room"), days: 7, minutes: 20 },
+  { name: m("Hallway"), days: 14, minutes: 15 },
+  { name: m("Empty the dishwasher"), days: 1, minutes: 5 },
+  { name: m("Take out the trash"), days: 3, minutes: 5 },
+  { name: m("Recycling"), days: 14, minutes: 15 },
+  { name: m("Water the plants"), days: 7, minutes: 10 },
 ] as const;
 
 export function AddAreaForm({
@@ -72,14 +75,15 @@ export function AddAreaForm({
   today: string;
   action: Action;
 }) {
+  const t = useT();
   const [state, formAction] = useActionState(action, undefined);
   const nameInput = useRef<HTMLInputElement>(null);
-  const unused = suggestions.filter((idea) => !existing.some((other) => other.toLowerCase() === idea.name.toLowerCase()));
+  const unused = suggestions.filter((idea) => !existing.some((other) => other.toLowerCase() === t(idea.name).toLowerCase()));
 
   function fill(idea: (typeof suggestions)[number]) {
     const input = nameInput.current;
     if (!input?.form) return;
-    input.value = idea.name;
+    input.value = t(idea.name);
     const select = (name: string) => input.form?.elements.namedItem(name) as HTMLSelectElement | null;
     const often = select("intervalDays");
     const takes = select("estimateMinutes");
@@ -90,9 +94,9 @@ export function AddAreaForm({
   return (
     <form action={formAction} noValidate className="flex flex-col gap-4">
       <Locked>
-      <Field ref={nameInput} label="Room or chore" name="name" placeholder="Bathroom" maxLength={30} defaultValue={state?.values?.name} />
+      <Field ref={nameInput} label={t("Room or chore")} name="name" placeholder={t("Bathroom")} maxLength={30} defaultValue={state?.values?.name} />
       {unused.length > 0 ? (
-        <div className="flex flex-wrap gap-2" aria-label="Suggestions">
+        <div className="flex flex-wrap gap-2" aria-label={t("Suggestions")}>
           {unused.map((idea) => (
             <button
               key={idea.name}
@@ -100,22 +104,22 @@ export function AddAreaForm({
               onClick={() => fill(idea)}
               className="min-h-11 rounded-full border-2 border-ink px-4 text-sm font-semibold outline-none focus-visible:ring-4 focus-visible:ring-fjord"
             >
-              {idea.name}
+              {t(idea.name)}
             </button>
           ))}
         </div>
       ) : null}
       <RhythmFields intervals={intervals} estimates={estimates} intervalDays={7} estimateMinutes={30} />
       <Field
-        label="First turn starts"
-        hint="Turns change hands on this day. Weekly from a Friday means every Friday."
+        label={t("First turn starts")}
+        hint={t("Turns change hands on this day. Weekly from a Friday means every Friday.")}
         name="startDay"
         type="date"
         defaultValue={today}
       />
       </Locked>
       <FormError message={state?.error} />
-      <SubmitButton pendingLabel="Adding…">Add</SubmitButton>
+      <SubmitButton pendingLabel={t("Adding…")}>{t("Add")}</SubmitButton>
     </form>
   );
 }
@@ -133,6 +137,7 @@ export function EditAreaForm({
   action: Action;
   remove: () => Promise<CleaningState>;
 }) {
+  const t = useT();
   const [state, formAction] = useActionState(action, undefined);
   return (
     <details className="group border-b-2 border-ink/15">
@@ -140,7 +145,7 @@ export function EditAreaForm({
         <span className="flex flex-col">
           <span className="text-lg font-semibold">{area.name}</span>
           <span className="text-ink-soft">
-            {describeInterval(area.intervalDays)}, about {area.estimateMinutes} min
+            {t`${describeInterval(area.intervalDays, t)}, about ${area.estimateMinutes} min`}
           </span>
         </span>
         <svg viewBox="0 0 24 24" aria-hidden="true" className="size-6 shrink-0 transition-transform group-open:rotate-180">
@@ -149,16 +154,16 @@ export function EditAreaForm({
       </summary>
       <div className="flex flex-col gap-4 pb-5">
         <SavableForm action={formAction} state={state} resetKey={JSON.stringify(area)}>
-          <Field label="Name" name="name" defaultValue={area.name} maxLength={30} />
+          <Field label={t("Name")} name="name" defaultValue={area.name} maxLength={30} />
           <RhythmFields intervals={intervals} estimates={estimates} intervalDays={area.intervalDays} estimateMinutes={area.estimateMinutes} />
-          <Field label="First turn started, or starts" name="startDay" type="date" defaultValue={area.startDay} />
+          <Field label={t("First turn started, or starts")} name="startDay" type="date" defaultValue={area.startDay} />
           <p className="text-sm text-ink-soft">
-            Turns change hands on that day&apos;s rhythm. Changing the day or how often starts its turns over, and clears who has done it.
+            {t("Turns change hands on that day's rhythm. Changing the day or how often starts its turns over, and clears who has done it.")}
           </p>
         </SavableForm>
         <div className="flex justify-start">
-          <ActionButton look="link" align="start" label={`Remove ${area.name}`} confirm={`Remove ${area.name} for everyone?`} action={remove}>
-            Remove
+          <ActionButton look="link" align="start" label={t`Remove ${area.name}`} confirm={t`Remove ${area.name} for everyone?`} action={remove}>
+            {t("Remove")}
           </ActionButton>
         </div>
       </div>

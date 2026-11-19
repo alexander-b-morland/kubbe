@@ -10,6 +10,7 @@ import { refusalFor, slotsForDay } from "@/lib/booking/rules";
 import { listDayBookings, listOwnElsewhereOn } from "@/lib/booking/service";
 import { clockLabel, describeNow, describeSlotLength } from "@/lib/booking/status";
 import { addDays, clockTime, dayInZone, describeDay, isDay } from "@/lib/time";
+import { getT } from "@/lib/i18n/server";
 
 export type BookingTheme = {
   /** Class for the row of a slot you have. */
@@ -43,8 +44,8 @@ const focusRing = "outline-none focus-visible:ring-4 focus-visible:ring-fjord";
 
 /** The whole booking screen for one resource: header, day picker and slots. */
 export async function BookingScreen(props: Props) {
+  const t = await getT();
   const { basePath, query = {}, room, label, theme, resource, household, userId } = props;
-  const noun = resource.kind === "shower" ? "shower" : resource.kind === "washer" ? "wash" : "dryer slot";
   const timeZone = household.timeZone;
   const now = new Date();
   const today = dayInZone(now, timeZone);
@@ -63,7 +64,7 @@ export async function BookingScreen(props: Props) {
     const key = slot.startsAt.toISOString();
     const time = clockTime(slot.startsAt, timeZone);
     // A slot that has started can still be taken, but say that part of it is gone.
-    const underWay = slot.startsAt <= now ? `Now, until ${clockTime(slot.endsAt, timeZone)}` : undefined;
+    const underWay = slot.startsAt <= now ? t`Now, until ${clockTime(slot.endsAt, timeZone)}` : undefined;
     const booked = bookings.find((b) => b.startsAt < slot.endsAt && b.endsAt > slot.startsAt);
     if (booked?.userId === userId) {
       return { key, time, state: "mine", bookingId: booked.id, cancellable: booked.endsAt > now, underWay };
@@ -71,8 +72,8 @@ export async function BookingScreen(props: Props) {
     if (booked) return { key, time, state: "taken", name: booked.name, colour: booked.colour, underWay };
 
     const refusal = refusalFor({ slot, rules: resource, timeZone, now, dayBookings: bookings, userId, ownElsewhere });
-    if (refusal === "back-to-back") return { key, time, state: "blocked", reason: "Leave a gap next to your slot" };
-    if (refusal === "own-overlap") return { key, time, state: "blocked", reason: `You have another ${noun} then` };
+    if (refusal === "back-to-back") return { key, time, state: "blocked", reason: t("Leave a gap next to your slot") };
+    if (refusal === "own-overlap") return { key, time, state: "blocked", reason: resource.kind === "shower" ? t("You have another shower then") : resource.kind === "washer" ? t("You have another wash then") : t("You have another dryer slot then") };
     if (refusal === "daily-limit") {
       // Said once above the list, not on every row.
       return { key, time, state: "blocked", reason: "" };
@@ -97,9 +98,9 @@ export async function BookingScreen(props: Props) {
   const atLimit = rows.some((row) => row.state === "blocked" && row.reason === "");
 
   // The headline says what matters right now: who has it, or how long it is free.
-  const describe = describeDay(day);
+  const describe = describeDay(day, t);
   const headline = isToday
-    ? describeNow({ rules: resource, bookings, now, timeZone, userId })
+    ? describeNow({ rules: resource, bookings, now, timeZone, userId, t })
     : describe.weekday;
 
   const hrefFor = (option: string) => {
@@ -110,7 +111,7 @@ export async function BookingScreen(props: Props) {
   };
   const days = Array.from({ length: resource.bookAheadDays + 1 }, (_, index) => addDays(today, index));
   const rules = [
-    `${describeSlotLength(resource.slotMinutes)} slots`,
+    `${describeSlotLength(resource.slotMinutes, t)} slots`,
     `up to ${resource.maxPerDay} a day each`,
     resource.allowBackToBack ? null : "not two in a row",
   ]
@@ -126,9 +127,9 @@ export async function BookingScreen(props: Props) {
         {headline}
       </AreaHeader>
 
-      <nav aria-label="Day" className="flex gap-2 overflow-x-auto px-4 py-4">
+      <nav aria-label={t("Day")} className="flex gap-2 overflow-x-auto px-4 py-4">
         {days.map((option) => {
-          const optionLabel = describeDay(option);
+          const optionLabel = describeDay(option, t);
           const active = option === day;
           return (
             <Link
@@ -137,7 +138,7 @@ export async function BookingScreen(props: Props) {
               aria-current={active ? "date" : undefined}
               className={`flex min-w-14 flex-col items-center rounded-2xl border-2 border-ink px-3 py-2 ${active ? "bg-ink text-paper" : ""} ${focusRing}`}
             >
-              <span className="text-sm font-semibold">{option === today ? "Today" : optionLabel.weekdayShort}</span>
+              <span className="text-sm font-semibold">{option === today ? t("Today") : optionLabel.weekdayShort}</span>
               <span className="type-display text-2xl">{optionLabel.dayOfMonth}</span>
             </Link>
           );
@@ -150,13 +151,13 @@ export async function BookingScreen(props: Props) {
           {rules.charAt(0).toUpperCase() + rules.slice(1)}.
           {props.manageHref ? (
             <Link href={props.manageHref} data-testid="manage" className={`flex min-h-11 items-center rounded font-bold text-ink underline underline-offset-4 ${focusRing}`}>
-              Change the rules
+              {t("Change the rules")}
             </Link>
           ) : null}
         </p>
         {atLimit ? (
           <p className="mx-3 rounded-2xl bg-ink px-4 py-3 font-semibold text-paper" data-testid="at-limit">
-            You&apos;ve booked your {resource.maxPerDay} for {isToday ? "today" : "this day"}. Cancel one to take another.
+            {t("You've booked your ")}{resource.maxPerDay}{t(" for ")}{isToday ? t("today") : t("this day")}{t(". Cancel one to take another.")}
           </p>
         ) : null}
         {rows.length > 0 ? (
@@ -169,13 +170,13 @@ export async function BookingScreen(props: Props) {
           />
         ) : (
           <div className="flex flex-col items-start gap-3 px-3 pt-6">
-            <h2 className="type-display text-3xl">No slots left {isToday ? "today" : "this day"}</h2>
+            <h2 className="type-display text-3xl">{t("No slots left ")}{isToday ? t("today") : t("this day")}</h2>
             {canBookTomorrow && isToday ? (
               <Link href={hrefFor(addDays(today, 1))} className="flex h-11 items-center font-bold underline underline-offset-4">
-                Book for tomorrow
+                {t("Book for tomorrow")}
               </Link>
             ) : (
-              <p>Booking opens again at {clockLabel(resource.opensAt)} tomorrow.</p>
+              <p>{t`Booking opens again at ${clockLabel(resource.opensAt)} tomorrow.`}</p>
             )}
           </div>
         )}

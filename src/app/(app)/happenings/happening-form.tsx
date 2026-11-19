@@ -3,6 +3,7 @@
 import { useActionState, useState } from "react";
 import { Field, focusRing, FormError, Locked, Remaining, Saved, SubmitButton } from "@/components/ui/form";
 import { addHappeningAction, updateHappeningAction, type HappeningState } from "./actions";
+import { useT } from "@/lib/i18n/client";
 
 type Existing = { id: string; title: string; day: string; time: string; place: string; details: string };
 
@@ -10,6 +11,7 @@ const MAX_DETAILS = 300;
 
 /** Suggest something to do together, or change one you suggested. */
 export function HappeningForm({ today, day, existing }: { today: string; /** The day to start on, when coming from the calendar. */ day?: string; existing?: Existing }) {
+  const t = useT();
   const [details, setDetails] = useState(existing?.details ?? "");
   const [title, setTitle] = useState(existing?.title ?? "");
   const [state, formAction] = useActionState(async (previous: HappeningState, form: FormData) => {
@@ -25,29 +27,29 @@ export function HappeningForm({ today, day, existing }: { today: string; /** The
     <form action={formAction} noValidate className="flex flex-col gap-4">
       <Locked>
         <label className="flex flex-col gap-1.5">
-          <span className="text-sm font-semibold">What&apos;s the plan</span>
+          <span className="text-sm font-semibold">{t("What's the plan")}</span>
           <input
             name="title"
             value={title}
             onChange={(event) => setTitle(event.target.value)}
-            placeholder="Film night"
+            placeholder={t("Film night")}
             className={`h-14 w-full rounded-xl border-2 border-ink bg-white/70 px-4 text-lg placeholder:text-ink-soft ${focusRing}`}
           />
           <Remaining used={title.length} max={60} />
         </label>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Day" name="day" type="date" min={today} defaultValue={values?.day ?? existing?.day ?? day ?? today} />
-          <Field label="Time" name="time" type="time" defaultValue={values?.time ?? existing?.time ?? "19:00"} />
+          <Field label={t("Day")} name="day" type="date" min={today} defaultValue={values?.day ?? existing?.day ?? day ?? today} />
+          <Field label={t("Time")} name="time" type="time" defaultValue={values?.time ?? existing?.time ?? "19:00"} />
         </div>
-        <Field label="Where" name="place" placeholder="Our living room" defaultValue={values?.place ?? existing?.place} />
+        <Field label={t("Where")} name="place" placeholder={t("Our living room")} defaultValue={values?.place ?? existing?.place} />
         <label className="flex flex-col gap-1.5">
-          <span className="text-sm font-semibold">Anything else</span>
+          <span className="text-sm font-semibold">{t("Anything else")}</span>
           <textarea
             name="details"
             rows={2}
             value={details}
             onChange={(event) => setDetails(event.target.value)}
-            placeholder="Bring snacks."
+            placeholder={t("Bring snacks.")}
             className={`w-full rounded-xl border-2 border-ink bg-white/70 px-4 py-3 text-lg placeholder:text-ink-soft ${focusRing}`}
           />
           <Remaining used={details.length} max={MAX_DETAILS} />
@@ -55,8 +57,8 @@ export function HappeningForm({ today, day, existing }: { today: string; /** The
       </Locked>
       <FormError message={state?.error} />
       <Saved show={Boolean(existing) && state?.saved} />
-      <SubmitButton pendingLabel={existing ? "Saving…" : "Suggesting…"} variant={existing ? "secondary" : "primary"}>
-        {existing ? "Save" : "Suggest it"}
+      <SubmitButton pendingLabel={existing ? t("Saving…") : t("Suggesting…")} variant={existing ? "secondary" : "primary"}>
+        {existing ? t("Save") : t("Suggest it")}
       </SubmitButton>
     </form>
   );

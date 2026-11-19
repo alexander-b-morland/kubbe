@@ -1,3 +1,4 @@
+import { m } from "@/lib/i18n";
 // The drawn avatars a person can pick from. Strokes are in a 120 x 120 space.
 // Drawn rather than uploaded: it fits how the rest of the app looks, and needs no file storage.
 
@@ -79,16 +80,16 @@ export function isAvatar(value: unknown): value is AvatarName {
 
 /** What each avatar is called, for screen readers and the picker. */
 export const AVATAR_LABELS: Record<AvatarName, string> = {
-  trout: "Trout",
-  cat: "Cat",
-  ghost: "Ghost",
-  coffee: "Coffee",
-  plant: "Plant",
-  bike: "Bike",
-  guitar: "Guitar",
-  mountain: "Mountain",
-  sun: "Sun",
-  mushroom: "Mushroom",
-  sock: "Sock",
-  pizza: "Pizza",
+  trout: m("Trout"),
+  cat: m("Cat"),
+  ghost: m("Ghost"),
+  coffee: m("Coffee"),
+  plant: m("Plant"),
+  bike: m("Bike"),
+  guitar: m("Guitar"),
+  mountain: m("Mountain"),
+  sun: m("Sun"),
+  mushroom: m("Mushroom"),
+  sock: m("Sock"),
+  pizza: m("Pizza"),
 };

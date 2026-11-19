@@ -7,17 +7,19 @@ import { ActionButton } from "@/components/ui/action-button";
 import { areaOf } from "@/lib/areas";
 import { clockLabel } from "@/lib/booking/status";
 import type { CalendarItem } from "@/lib/calendar";
+import { getT } from "@/lib/i18n/server";
 
 /** "I'm in" and "Can't" for a dinner or a happening, wherever it is shown. */
-export function AnswerButtons({ ask, title }: { ask: NonNullable<CalendarItem["ask"]>; title: string }) {
+export async function AnswerButtons({ ask, title }: { ask: NonNullable<CalendarItem["ask"]>; title: string }) {
+  const t = await getT();
   const answer = (going: boolean) => (ask.kind === "dinner" ? goingAction.bind(null, ask.id, going) : replyAction.bind(null, ask.id, going));
   return (
     <span className="flex flex-wrap gap-2" data-testid="answer">
-      <ActionButton look="filled" align="start" label={`I'm in for ${title}`} action={answer(true)}>
-        I&apos;m in
+      <ActionButton look="filled" align="start" label={t`I'm in for ${title}`} action={answer(true)}>
+        {t("I'm in")}
       </ActionButton>
-      <ActionButton align="start" label={`I can't make ${title}`} action={answer(false)}>
-        Can&apos;t
+      <ActionButton align="start" label={t`I can't make ${title}`} action={answer(false)}>
+        {t("Can't")}
       </ActionButton>
     </span>
   );
@@ -27,7 +29,7 @@ export function AnswerButtons({ ask, title }: { ask: NonNullable<CalendarItem["a
  * One thing on a day: its area's colour and drawing, when it is, what it is, whose it
  * is. If the reader has not answered an invitation, the answer buttons are right there.
  */
-export function AgendaItem({
+export async function AgendaItem({
   item,
   people,
   day,
@@ -40,6 +42,7 @@ export function AgendaItem({
   /** Leave the answer buttons out where the same invitation is already asked on the screen. */
   answers?: boolean;
 }) {
+  const t = await getT();
   const area = areaOf(item.area);
   const faces = item.people.map((id) => people.get(id)).filter((person) => person !== undefined);
   return (
@@ -51,7 +54,7 @@ export function AgendaItem({
         <Link href={item.href} className="flex flex-col rounded outline-none focus-visible:ring-4 focus-visible:ring-fjord">
           <span className="text-sm font-semibold text-ink-soft">
             {day ? `${day}, ` : ""}
-            {item.time === null ? (day ? "by the end of the day" : "By the end of the day") : clockLabel(item.time)}
+            {item.time === null ? (day ? t("by the end of the day") : t("By the end of the day")) : clockLabel(item.time)}
           </span>
           <span className={`text-lg font-semibold break-words ${item.done ? "text-ink-soft line-through" : ""}`}>{item.title}</span>
           {item.detail ? <span className="break-words text-ink-soft">{item.detail}</span> : null}
@@ -62,7 +65,7 @@ export function AgendaItem({
             {item.ask && answers ? <AnswerButtons ask={item.ask} title={item.title} /> : null}
             {item.answer ? (
               <span data-testid="my-answer" className={`rounded-full border-2 border-ink px-3 py-0.5 text-sm font-bold ${item.answer.going ? "bg-ink text-paper" : ""}`}>
-                {item.answer.going ? "You're in" : "You can't"}
+                {item.answer.going ? t("You're in") : t("You can't")}
               </span>
             ) : null}
             {item.answer && !item.answer.going ? (
@@ -73,7 +76,7 @@ export function AgendaItem({
                 about={item.title}
                 action={(item.answer.kind === "dinner" ? goingAction : replyAction).bind(null, item.answer.id, true)}
               >
-                I&apos;m in after all
+                {t("I'm in after all")}
               </ActionButton>
             ) : null}
           </div>

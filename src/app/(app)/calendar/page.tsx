@@ -9,18 +9,20 @@ import { isMonth, monthOf, monthSheet, pickDay, shiftMonth } from "@/lib/calenda
 import { loadCalendar } from "@/lib/calendar-service";
 import { hasExtra } from "@/lib/extras";
 import { listMembers } from "@/lib/households";
+import { INTL_LOCALE } from "@/lib/i18n";
 import { requireHousehold } from "@/lib/session";
 import { dayInZone, describeDay } from "@/lib/time";
+import { getT } from "@/lib/i18n/server";
 
 // This screen depends on who is signed in, so it is rendered per request.
 export const instant = false;
 
 export const metadata: Metadata = { title: "Calendar" };
 
-const weekdays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const ring = "outline-none focus-visible:ring-4 focus-visible:ring-fjord";
 
 export default async function CalendarPage({ searchParams }: PageProps<"/calendar">) {
+  const t = await getT();
   const { user, household } = await requireHousehold();
   const params = await searchParams;
   const today = dayInZone(new Date(), household.timeZone);
@@ -37,10 +39,10 @@ export default async function CalendarPage({ searchParams }: PageProps<"/calenda
   const all = await loadCalendar({
     household,
     me: user.id,
-    nameOf: (userId) => people.get(userId)?.name ?? "Someone",
+    nameOf: (userId) => people.get(userId)?.name ?? t("Someone"),
     fromDay: sheet[0][0],
     toDay: sheet[sheet.length - 1][6],
-    today,
+    today, t,
   });
   const items = who ? all.filter((item) => item.people.includes(who)) : all;
   const onDay = (date: string) => items.filter((item) => item.day === date);
@@ -58,43 +60,45 @@ export default async function CalendarPage({ searchParams }: PageProps<"/calenda
     // Picking a day lands on that day's list, which on a phone is below the whole month.
     return `${text ? `/calendar?${text}` : "/calendar"}${next.day ? "#day" : ""}`;
   };
-  const title = new Intl.DateTimeFormat("en-GB", { month: "long", year: "numeric", timeZone: "UTC" }).format(new Date(`${month}-15T12:00:00Z`));
-  const chosenDay = describeDay(day);
+  // Norwegian writes months in lower case; a headline still starts with a capital.
+  const monthName = new Intl.DateTimeFormat(INTL_LOCALE[t.locale], { month: "long", year: "numeric", timeZone: "UTC" }).format(new Date(`${month}-15T12:00:00Z`));
+  const title = monthName.charAt(0).toUpperCase() + monthName.slice(1);
+  const chosenDay = describeDay(day, t);
   const quick = [
-    { show: true, href: `/shower?day=${day}`, label: "Book the shower", area: "shower" as const },
-    { show: true, href: `/laundry?day=${day}`, label: "Book laundry", area: "laundry" as const },
-    { show: hasExtra(household, "dinner"), href: `/dinner?day=${day}`, label: "Plan a dinner", area: "dinner" as const },
-    { show: hasExtra(household, "happenings"), href: `/happenings?day=${day}`, label: "Suggest something", area: "happenings" as const },
+    { show: true, href: `/shower?day=${day}`, label: t("Book the shower"), area: "shower" as const },
+    { show: true, href: `/laundry?day=${day}`, label: t("Book laundry"), area: "laundry" as const },
+    { show: hasExtra(household, "dinner"), href: `/dinner?day=${day}`, label: t("Plan a dinner"), area: "dinner" as const },
+    { show: hasExtra(household, "happenings"), href: `/happenings?day=${day}`, label: t("Suggest something"), area: "happenings" as const },
   ].filter((link) => link.show && day >= today);
 
   return (
     <main className="mx-auto flex w-full max-w-md flex-col lg:max-w-6xl lg:pt-6">
-      <TabHeader art="calendar" name="Calendar" eyebrow={household.name}>
+      <TabHeader art="calendar" name={t("Calendar")} eyebrow={household.name}>
         {title}
       </TabHeader>
 
       <div className="flex flex-col gap-6 p-6">
-      <nav aria-label="Month" className="flex flex-wrap items-center gap-2">
+      <nav aria-label={t("Month")} className="flex flex-wrap items-center gap-2">
         <Link href={href({ month: shiftMonth(month, -1) })} className={`flex min-h-11 items-center rounded-full border-2 border-ink px-4 font-bold ${ring}`}>
-          Earlier
+          {t("Earlier")}
         </Link>
         <Link href={href({ month: shiftMonth(month, 1) })} className={`flex min-h-11 items-center rounded-full border-2 border-ink px-4 font-bold ${ring}`}>
-          Later
+          {t("Later")}
         </Link>
         {month !== monthOf(today) || day !== today ? (
           <Link href={who ? `/calendar?who=${who}` : "/calendar"} className={`flex min-h-11 items-center rounded-full bg-ink px-4 font-bold text-paper ${ring}`}>
-            Today
+            {t("Today")}
           </Link>
         ) : null}
       </nav>
 
-      <nav aria-label="Whose calendar" className="flex flex-wrap items-center gap-2" data-testid="who">
+      <nav aria-label={t("Whose calendar")} className="flex flex-wrap items-center gap-2" data-testid="who">
         <Link
           href={href({ who: null })}
           aria-current={who ? undefined : "true"}
           className={`flex min-h-11 items-center rounded-full border-2 border-ink px-4 font-bold ${who ? "" : "bg-ink text-paper"} ${ring}`}
         >
-          Everyone
+          {t("Everyone")}
         </Link>
         {members.map((member) => (
           <Link
@@ -104,7 +108,7 @@ export default async function CalendarPage({ searchParams }: PageProps<"/calenda
             className={`flex min-h-11 items-center gap-2 rounded-full border-2 border-ink py-1 pr-4 pl-1 font-bold ${who === member.userId ? "bg-ink text-paper" : ""} ${ring}`}
           >
             <Avatar avatar={member.avatar} colour={member.colour} className="size-8" />
-            {member.userId === user.id ? "You" : member.name}
+            {member.userId === user.id ? t("You") : member.name}
           </Link>
         ))}
       </nav>
@@ -112,7 +116,7 @@ export default async function CalendarPage({ searchParams }: PageProps<"/calenda
       <div className="flex flex-col gap-8 lg:grid lg:grid-cols-[2fr_1fr] lg:items-start">
         <section aria-label={title}>
           <ol aria-hidden="true" className="grid grid-cols-7 pb-1 text-center text-sm font-semibold text-ink-soft">
-            {weekdays.map((name) => (
+            {sheet[0].map((date) => describeDay(date, t).weekdayShort).map((name) => (
               <li key={name}>{name}</li>
             ))}
           </ol>
@@ -123,7 +127,7 @@ export default async function CalendarPage({ searchParams }: PageProps<"/calenda
               const areas = [...new Set(held.map((item) => item.area))];
               const selected = date === day;
               const outside = monthOf(date) !== month;
-              const label = describeDay(date);
+              const label = describeDay(date, t);
               const names = held.slice(0, 3).map((item) => item.title).join(", ");
               const spoken = held.length === 0 ? "nothing on" : `${names}${held.length > 3 ? `, and ${held.length - 3} more` : ""}`;
               return (
@@ -131,7 +135,7 @@ export default async function CalendarPage({ searchParams }: PageProps<"/calenda
                   <Link
                     href={href({ month: monthOf(date), day: date })}
                     aria-current={selected ? "date" : undefined}
-                    aria-label={`${date === today ? "Today, " : ""}${label.weekday} ${label.dayOfMonth} ${label.monthShort}: ${spoken}`}
+                    aria-label={`${date === today ? `${t("Today")}, ` : ""}${label.weekday} ${label.dayOfMonth} ${label.monthShort}: ${spoken}`}
                     data-day={date}
                     // The grey days belong to the months beside this one: reachable by tapping, skipped by the Tab key.
                     tabIndex={outside ? -1 : undefined}
@@ -140,7 +144,7 @@ export default async function CalendarPage({ searchParams }: PageProps<"/calenda
                     } ${outside && !selected ? "opacity-45" : ""}`}
                   >
                     {/* Today keeps its red mark when it is also the day picked. */}
-                    <span className={`type-display w-fit text-xl ${date === today ? "rounded-full bg-barn px-2 text-paper" : ""}`}>{label.dayOfMonth}</span>
+                    <span className={`type-display w-fit text-xl ${date === today ? "rounded-full bg-barn px-2 text-paper" : ""}`}>{Number(date.slice(8))}</span>
                     <span className="flex flex-wrap gap-1 lg:hidden">
                       {areas.slice(0, 4).map((area) => (
                         <span key={area} className={`size-2.5 rounded-full ${areaOf(area).dot} ${selected ? "ring-1 ring-paper" : ""}`} />
@@ -157,19 +161,19 @@ export default async function CalendarPage({ searchParams }: PageProps<"/calenda
                           </span>
                         );
                       })}
-                      {held.length > 3 ? <span className="text-xs font-semibold">and {held.length - 3} more</span> : null}
+                      {held.length > 3 ? <span className="text-xs font-semibold">{t`and ${held.length - 3} more`}</span> : null}
                     </span>
                   </Link>
                 </li>
               );
             })}
           </ol>
-          <ul className="flex flex-wrap gap-x-4 gap-y-1 pt-3 text-sm" aria-label="What the colours mean">
+          <ul className="flex flex-wrap gap-x-4 gap-y-1 pt-3 text-sm" aria-label={t("What the colours mean")}>
             {areasFor(household)
               .filter((area) => ["shower", "laundry", "cleaning", "dinner", "happenings"].includes(area.key))
               .map((area) => (
                 <li key={area.key} className="flex items-center gap-1.5">
-                  <span className={`size-2.5 rounded-full ${area.dot}`} /> {area.name}
+                  <span className={`size-2.5 rounded-full ${area.dot}`} /> {t(area.name)}
                 </li>
               ))}
           </ul>
@@ -177,7 +181,7 @@ export default async function CalendarPage({ searchParams }: PageProps<"/calenda
 
         <section id="day" data-quiet-target aria-labelledby="day-heading" className="flex scroll-mt-4 flex-col gap-2" data-testid="day">
           <h2 id="day-heading" className="type-display text-4xl">
-            {day === today ? "Today" : `${chosenDay.weekday} ${chosenDay.dayOfMonth} ${chosenDay.monthShort}`}
+            {day === today ? t("Today") : `${chosenDay.weekday} ${chosenDay.dayOfMonth} ${chosenDay.monthShort}`}
           </h2>
           {chosen.length > 0 ? (
             <ul className="flex flex-col">
@@ -187,7 +191,7 @@ export default async function CalendarPage({ searchParams }: PageProps<"/calenda
             </ul>
           ) : (
             <p className="text-ink-soft">
-              {who === user.id ? "Nothing on for you this day." : who ? `Nothing on for ${people.get(who)?.name ?? "them"} this day.` : "Nothing on this day."}
+              {who === user.id ? t("Nothing on for you this day.") : who ? t`Nothing on for ${people.get(who)?.name ?? "them"} this day.` : t("Nothing on this day.")}
             </p>
           )}
           {quick.length > 0 ? (

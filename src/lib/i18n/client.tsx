@@ -14,6 +14,11 @@ export function LocaleProvider({ locale, children }: { locale: Locale; children:
   return <LocaleContext.Provider value={locale}>{children}</LocaleContext.Provider>;
 }
 
+/** The reader's language, in a component that runs in the browser. */
+export function useLocale() {
+  return useContext(LocaleContext);
+}
+
 /** The translate function, in a component that runs in the browser: `const t = useT()`. */
 export function useT() {
   const locale = useContext(LocaleContext);

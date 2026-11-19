@@ -2,6 +2,8 @@ import type { Metadata, Viewport } from "next";
 import { Archivo, Schibsted_Grotesk } from "next/font/google";
 import { Suspense } from "react";
 import { KubbeLogo } from "@/components/logo/kubbe-logo";
+import { LocaleProvider } from "@/lib/i18n/client";
+import { getLocale } from "@/lib/i18n/server";
 import "./globals.css";
 
 // Body and interface text.
@@ -37,10 +39,15 @@ export const viewport: Viewport = {
 // Shown for the moment it takes to look up who is signed in.
 function Loading() {
   return (
-    <div className="flex min-h-dvh items-center justify-center" role="status" aria-label="Loading">
+    <div className="flex min-h-dvh items-center justify-center" role="status" aria-label="Kubbe">
       <KubbeLogo label="" className="w-24 opacity-50" />
     </div>
   );
+}
+
+// The language is read from a cookie, so it is known per request, inside the boundary below.
+async function Localised({ children }: { children: React.ReactNode }) {
+  return <LocaleProvider locale={await getLocale()}>{children}</LocaleProvider>;
 }
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
@@ -54,7 +61,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           Most screens read the session cookie, which only exists at request time.
           With Cache Components that work has to sit inside a Suspense boundary.
         */}
-        <Suspense fallback={<Loading />}>{children}</Suspense>
+        <Suspense fallback={<Loading />}>
+          <Localised>{children}</Localised>
+        </Suspense>
       </body>
     </html>
   );

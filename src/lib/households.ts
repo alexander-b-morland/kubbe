@@ -2,6 +2,7 @@ import { count, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { household, membership, profile, resource, user } from "@/db/schema";
 import { defaultResourcesFor } from "@/lib/booking/defaults";
+import { en, type Translate } from "@/lib/i18n";
 import { generateJoinCode } from "@/lib/join-code";
 import { pinCurrentTurns } from "@/lib/cleaning/service";
 import { AVATAR_NAMES, DEFAULT_AVATAR } from "@/components/avatar/avatars";
@@ -38,6 +39,7 @@ export async function createHousehold(
   userId: string,
   name: string,
   timeZone: string,
+  t: Translate = en,
 ): Promise<CreateResult> {
   // A join code can collide, however rarely: try a few fresh ones.
   for (let attempt = 0; attempt < 5; attempt++) {
@@ -55,7 +57,7 @@ export async function createHousehold(
         await tx
           .insert(membership)
           .values({ householdId: created.id, userId, role: "admin", colour: MEMBER_COLOURS[0] });
-        await tx.insert(resource).values(defaultResourcesFor(created.id));
+        await tx.insert(resource).values(defaultResourcesFor(created.id, t));
       });
       return { ok: true };
     } catch (error) {

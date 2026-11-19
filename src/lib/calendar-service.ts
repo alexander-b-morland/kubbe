@@ -4,6 +4,7 @@ import { listTurnsBetween } from "@/lib/cleaning/service";
 import { LOOK_AHEAD_DAYS, weekdayOf } from "@/lib/dinner/plan";
 import { listDinnersBetween, listRules, listUpcomingDinners } from "@/lib/dinner/service";
 import { hasExtra } from "@/lib/extras";
+import type { Translate } from "@/lib/i18n";
 import { listBetween } from "@/lib/happenings";
 import { addDays, dayInZone, instantInZone, minutesInZone } from "@/lib/time";
 
@@ -18,6 +19,7 @@ export async function loadCalendar(input: {
   fromDay: string;
   toDay: string;
   today: string;
+  t?: Translate;
 }): Promise<CalendarItem[]> {
   const { household, fromDay, toDay, today } = input;
   const zone = household.timeZone;
@@ -67,5 +69,5 @@ export async function loadCalendar(input: {
     })),
     turns,
     fixedDinners,
-  });
+  }, input.t);
 }

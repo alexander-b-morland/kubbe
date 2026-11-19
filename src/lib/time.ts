@@ -1,3 +1,4 @@
+import { en, INTL_LOCALE, type Locale, type Translate } from "@/lib/i18n";
 // Time zone helpers. Timestamps are stored in UTC; a household thinks in its own zone.
 // A "day" is always a calendar date string, YYYY-MM-DD, in the household's zone.
 
@@ -77,7 +78,8 @@ export function clockTime(instant: Date, timeZone: string): string {
 }
 
 /** Weekday and date parts for a calendar date, for labels. */
-export function describeDay(day: string, locale = "en-GB") {
+export function describeDay(day: string, reader: string | { locale: Locale } = "en-GB") {
+  const locale = typeof reader === "string" ? reader : INTL_LOCALE[reader.locale];
   const noon = new Date(`${day}T12:00:00Z`);
   const format = (options: Intl.DateTimeFormatOptions) =>
     new Intl.DateTimeFormat(locale, { timeZone: "UTC", ...options }).format(noon);
@@ -90,8 +92,8 @@ export function describeDay(day: string, locale = "en-GB") {
 }
 
 /** "Mon 23 Nov": a day far enough off that the weekday alone would not say which. */
-export function shortDate(day: string, locale = "en-GB"): string {
-  const parts = describeDay(day, locale);
+export function shortDate(day: string, reader: string | { locale: Locale } = "en-GB"): string {
+  const parts = describeDay(day, reader);
   return `${parts.weekdayShort} ${parts.dayOfMonth} ${parts.monthShort}`;
 }
 
@@ -107,14 +109,14 @@ export function isTimeZone(value: unknown): value is string {
 }
 
 /** "just now", "5 min ago", "3 h ago", "yesterday", "4 days ago", then the date. */
-export function timeAgo(then: Date, now: Date, timeZone: string): string {
+export function timeAgo(then: Date, now: Date, timeZone: string, t: Translate = en): string {
   const minutes = Math.floor((now.getTime() - then.getTime()) / 60_000);
-  if (minutes < 1) return "just now";
-  if (minutes < 60) return `${minutes} min ago`;
+  if (minutes < 1) return t("just now");
+  if (minutes < 60) return t`${minutes} min ago`;
   const days = daysBetween(dayInZone(then, timeZone), dayInZone(now, timeZone));
-  if (days === 0) return `${Math.floor(minutes / 60)} h ago`;
-  if (days === 1) return "yesterday";
-  if (days < 7) return `${days} days ago`;
-  const { dayOfMonth, monthShort } = describeDay(dayInZone(then, timeZone));
+  if (days === 0) return t`${Math.floor(minutes / 60)} h ago`;
+  if (days === 1) return t("yesterday");
+  if (days < 7) return t`${days} days ago`;
+  const { dayOfMonth, monthShort } = describeDay(dayInZone(then, timeZone), t);
   return `${dayOfMonth} ${monthShort}`;
 }

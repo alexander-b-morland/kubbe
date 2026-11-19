@@ -11,9 +11,10 @@ import { hasExtra } from "@/lib/extras";
 import { requireExtra } from "@/lib/extras-guard";
 import { listMembers } from "@/lib/households";
 import { goingTo, listBought, listToBuy } from "@/lib/shopping";
-import { dayInZone } from "@/lib/time";
+import { addDays, dayInZone } from "@/lib/time";
 import { boughtItemAction, claimItemAction, removeItemAction } from "./actions";
 import { AddItemForm, PayForm } from "./shopping-forms";
+import { getT } from "@/lib/i18n/server";
 
 // This screen depends on who is signed in, so it is rendered per request.
 export const instant = false;
@@ -21,6 +22,7 @@ export const instant = false;
 export const metadata: Metadata = { title: "Shopping" };
 
 export default async function ShoppingPage() {
+  const t = await getT();
   const { user, household } = await requireExtra("shopping");
   const now = new Date();
   const today = dayInZone(now, household.timeZone);
@@ -30,7 +32,9 @@ export default async function ShoppingPage() {
   const mine = bought.filter((item) => item.boughtBy === user.id);
   const theirs = bought.filter((item) => item.boughtBy !== user.id);
   const forDinner = (item: { dinnerDay: string | null; dishTitle: string | null }) =>
-    item.dinnerDay ? `For dinner ${describeDinnerDay(item.dinnerDay, today).toLowerCase() === "today" ? "today" : describeDinnerDay(item.dinnerDay, today) === "Tomorrow" ? "tomorrow" : `on ${describeDinnerDay(item.dinnerDay, today)}`}${item.dishTitle ? ` (${item.dishTitle})` : ""}. ` : "";
+    item.dinnerDay
+      ? `${item.dinnerDay <= addDays(today, 1) ? t`For dinner ${describeDinnerDay(item.dinnerDay, today, t, true)}` : t`For dinner on ${describeDinnerDay(item.dinnerDay, today, t)}`}${item.dishTitle ? ` (${item.dishTitle})` : ""}. `
+      : "";
 
   // What was bought for one dinner is shared by the people who are eating it.
   const dinners = [...new Set(mine.map((item) => item.dinnerId))];
@@ -43,7 +47,7 @@ export default async function ShoppingPage() {
         {mine.length > 0 ? (
           <section aria-labelledby="bag-heading" className="flex flex-col gap-4 rounded-3xl bg-sage/30 p-5" data-testid="bag">
             <h2 id="bag-heading" className="type-display text-3xl">
-              You got {mine.length === 1 ? "1 thing" : `${mine.length} things`}
+              {t("You got ")}{mine.length === 1 ? t("1 thing") : t`${mine.length} things`}
             </h2>
             <ul className="flex flex-col">
               {mine.map((item) => (
@@ -52,7 +56,7 @@ export default async function ShoppingPage() {
                     {item.name}
                   </Struck>
                   <ActionButton look="link" about={item.name} action={boughtItemAction.bind(null, item.id, false)}>
-                    Put back
+                    {t("Put back")}
                   </ActionButton>
                 </li>
               ))}
@@ -66,7 +70,7 @@ export default async function ShoppingPage() {
                 />
                 {eaters.length > 0 ? (
                   <p className="text-sm text-ink-soft" data-testid="eaters-note">
-                    These are for one dinner, so the people who are in for it are ticked. Change that if it is wrong.
+                    {t("These are for one dinner, so the people who are in for it are ticked. Change that if it is wrong.")}
                   </p>
                 ) : null}
               </PayForm>
@@ -77,7 +81,7 @@ export default async function ShoppingPage() {
         {theirs.length > 0 ? (
           <section aria-labelledby="others-heading" className="flex flex-col gap-1">
             <h2 id="others-heading" className="type-display text-3xl">
-              Already bought
+              {t("Already bought")}
             </h2>
             <ul className="flex flex-col">
               {theirs.map((item) => (
@@ -95,14 +99,14 @@ export default async function ShoppingPage() {
             href="/expenses"
             className="flex min-h-11 w-fit items-center rounded font-bold underline underline-offset-4 outline-none focus-visible:ring-4 focus-visible:ring-fjord"
           >
-            See who owes whom
+            {t("See who owes whom")}
           </Link>
         ) : null}
       </>
     ) : undefined;
 
   return (
-    <AreaPage area="shopping" eyebrow="Shopping" title={toBuy.length === 0 ? "Nothing to buy" : `${toBuy.length} to buy`} aside={aside}>
+    <AreaPage area="shopping" eyebrow={t("Shopping")} title={toBuy.length === 0 ? t("Nothing to buy") : t`${toBuy.length} to buy`} aside={aside}>
       <AutoRefresh everySeconds={30} />
       <AddItemForm />
 
@@ -116,7 +120,7 @@ export default async function ShoppingPage() {
                 <div className="flex items-center justify-between gap-3">
                   <span className="min-w-0 text-xl font-semibold break-words">{item.name}</span>
                   <ActionButton look="filled" about={item.name} action={boughtItemAction.bind(null, item.id, true)}>
-                    Bought
+                    {t("Bought")}
                   </ActionButton>
                 </div>
                 <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
@@ -128,22 +132,22 @@ export default async function ShoppingPage() {
                     ) : null}
                     <span>
                       {forDinner(item)}
-                      {claimedByMe ? "You'll buy it." : claimer ? `${claimer.name} will buy it.` : "Nobody has said they'll buy it."}
+                      {claimedByMe ? t("You'll buy it.") : claimer ? t`${claimer.name} will buy it.` : t("Nobody has said they'll buy it.")}
                     </span>
                   </span>
                   <span className="ml-auto flex gap-4">
                     {claimedByMe || !item.claimedBy ? (
                       <ActionButton look="link" about={item.name} action={claimItemAction.bind(null, item.id, !claimedByMe)}>
-                        {claimedByMe ? "Not me after all" : "I'll buy it"}
+                        {claimedByMe ? t("Not me after all") : t("I'll buy it")}
                       </ActionButton>
                     ) : null}
                     <ActionButton
                       look="link"
                       about={item.name}
-                      confirm={item.ingredientId ? `Take ${item.name} off the list? The dinner will show it as something you already have.` : `Take ${item.name} off the list?`}
+                      confirm={item.ingredientId ? t`Take ${item.name} off the list? The dinner will show it as something you already have.` : t`Take ${item.name} off the list?`}
                       action={removeItemAction.bind(null, item.id)}
                     >
-                      Remove
+                      {t("Remove")}
                     </ActionButton>
                   </span>
                 </div>
@@ -152,7 +156,7 @@ export default async function ShoppingPage() {
           })}
         </ul>
       ) : bought.length === 0 ? (
-        <p className="text-lg">Anything the flat is out of goes here. Whoever is in the shop ticks it off.</p>
+        <p className="text-lg">{t("Anything the flat is out of goes here. Whoever is in the shop ticks it off.")}</p>
       ) : null}
     </AreaPage>
   );

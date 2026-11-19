@@ -25,6 +25,7 @@ import { requireHousehold } from "@/lib/session";
 import { listExpenses, listToBuy } from "@/lib/shopping";
 import { addDays, dayInZone, daysBetween, describeDay, minutesInZone, shortDate } from "@/lib/time";
 import { ShareCode } from "./share-code";
+import { getT } from "@/lib/i18n/server";
 
 // This screen depends on who is signed in, so it is rendered per request.
 export const instant = false;
@@ -37,6 +38,7 @@ const more = `flex min-h-11 w-fit items-center rounded font-bold underline under
 type Tile = { status: string; detail?: string };
 
 export default async function HomePage() {
+  const t = await getT();
   const { user, household, membership } = await requireHousehold();
   const timeZone = household.timeZone;
   const now = new Date();
@@ -56,7 +58,7 @@ export default async function HomePage() {
   ]);
   const people = new Map<string, PersonLike>(members.map((member) => [member.userId, member]));
   const me = people.get(user.id);
-  const nameOf = (userId: string) => people.get(userId)?.name ?? "Someone who moved out";
+  const nameOf = (userId: string) => people.get(userId)?.name ?? t("Someone who moved out");
   const money = (amount: number) => formatAmount(amount, household.currency);
 
   // With several showers or machines, the tile speaks for all of them.
@@ -66,7 +68,7 @@ export default async function HomePage() {
   const nowLines = async (group: typeof resources) =>
     Promise.all(
       group.map(async (rules) =>
-        describeNow({ rules, bookings: await listDayBookings(rules.id, household.id, today, timeZone), now, timeZone, userId: user.id }),
+        describeNow({ rules, bookings: await listDayBookings(rules.id, household.id, today, timeZone), now, timeZone, userId: user.id, t }),
       ),
     );
   const [showerLines, machineLines] = await Promise.all([nowLines(showers), nowLines(machines)]);
@@ -74,8 +76,8 @@ export default async function HomePage() {
   const nextOf = (kinds: string[]) => {
     const next = upcoming.find((booking) => kinds.includes(booking.kind));
     if (!next) return undefined;
-    const what = next.kind === "dryer" ? "Your dryer slot" : next.kind === "washer" ? "Your wash" : "Your slot";
-    return next.startsAt <= now ? `${what} is now` : `${what}: ${describeWhen(next.startsAt, now, timeZone)}`;
+    const what = next.kind === "dryer" ? t("Your dryer slot") : next.kind === "washer" ? t("Your wash") : t("Your slot");
+    return next.startsAt <= now ? t`${what} is now` : `${what}: ${describeWhen(next.startsAt, now, timeZone, t)}`;
   };
 
   // ---- what each area's tile says
@@ -85,16 +87,16 @@ export default async function HomePage() {
   const firstStart = rota.map((row) => row.startsOn).filter((day) => day !== null).sort()[0];
   const cleaning: Tile =
     rota.length === 0
-      ? { status: "No turns yet", detail: membership.role === "admin" ? "Add the rooms and chores you share" : "An admin hasn't added any yet" }
+      ? { status: t("No turns yet"), detail: membership.role === "admin" ? t("Add the rooms and chores you share") : t("An admin hasn't added any yet") }
       : running.length === 0 && firstStart
-        ? { status: "Not started yet", detail: `First turn ${daysBetween(today, firstStart) === 1 ? "tomorrow" : shortDate(firstStart)}` }
+        ? { status: t("Not started yet"), detail: t`First turn ${daysBetween(today, firstStart) === 1 ? t("tomorrow") : shortDate(firstStart, t)}` }
       : myTurns.length === 1
-        ? { status: `Your turn: ${myTurns[0].name}`, detail: describeDue(today, myTurns[0].lastDay) }
+        ? { status: t`Your turn: ${myTurns[0].name}`, detail: describeDue(today, myTurns[0].lastDay, t) }
         : myTurns.length > 1
-          ? { status: `${myTurns.length} turns are yours`, detail: myTurns.map((turn) => turn.name).join(", ") }
+          ? { status: t`${myTurns.length} turns are yours`, detail: myTurns.map((turn) => turn.name).join(", ") }
           : running.every((row) => row.done)
-            ? { status: "All clean" }
-            : { status: "Nothing for you now" };
+            ? { status: t("All clean") }
+            : { status: t("Nothing for you now") };
 
   const nextDinner = dinners.find((dinner) => !dinner.cancelled);
   // What you said no to is not what is next for you.
@@ -107,27 +109,29 @@ export default async function HomePage() {
   const myTasks = openNotes.filter((note) => note.isTask && note.assigneeId === user.id);
 
   const tiles: Record<AreaKey, Tile> = {
-    shower: { status: describeNowAcross(showerLines), detail: showers.length > 0 ? nextOf(["shower"]) : undefined },
-    laundry: { status: describeNowAcross(machineLines), detail: machines.length > 0 ? nextOf(["washer", "dryer"]) : undefined },
+    shower: { status: describeNowAcross(showerLines, t), detail: showers.length > 0 ? nextOf(["shower"]) : undefined },
+    laundry: { status: describeNowAcross(machineLines, t), detail: machines.length > 0 ? nextOf(["washer", "dryer"]) : undefined },
     cleaning,
     dinner: nextDinner
       ? {
-          status: nextDinner.chosenTitle ?? `${describeDinnerDay(nextDinner.day, today)} ${clockLabel(nextDinner.time)}`,
+          status: nextDinner.chosenTitle ?? `${describeDinnerDay(nextDinner.day, today, t)} ${clockLabel(nextDinner.time)}`,
           detail: nextDinner.chosenTitle
-            ? `${describeDinnerDay(nextDinner.day, today)} at ${clockLabel(nextDinner.time)}`
+            ? t`${describeDinnerDay(nextDinner.day, today, t)} at ${clockLabel(nextDinner.time)}`
             : nextDinner.ideas === 0
-              ? "Nothing suggested yet"
-              : `${nextDinner.ideas === 1 ? "1 idea" : `${nextDinner.ideas} ideas`}, not decided`,
+              ? t("Nothing suggested yet")
+              : nextDinner.ideas === 1
+                ? t("1 idea, not decided")
+                : t`${nextDinner.ideas} ideas, not decided`,
         }
-      : { status: "Nothing planned", detail: "Plan a dinner" },
-    shopping: { status: toBuy.length === 0 ? "Nothing to buy" : `${toBuy.length} to buy`, detail: toBuy.length > 0 ? toBuy.slice(0, 3).map((item) => item.name).join(", ") : undefined },
-    expenses: { status: balance > 0 ? `You're owed ${money(balance)}` : balance < 0 ? `You owe ${money(balance)}` : "All square" },
+      : { status: t("Nothing planned"), detail: t("Plan a dinner") },
+    shopping: { status: toBuy.length === 0 ? t("Nothing to buy") : t`${toBuy.length} to buy`, detail: toBuy.length > 0 ? toBuy.slice(0, 3).map((item) => item.name).join(", ") : undefined },
+    expenses: { status: balance > 0 ? t`You're owed ${money(balance)}` : balance < 0 ? t`You owe ${money(balance)}` : t("All square") },
     happenings: nextHappening
-      ? { status: nextHappening.title, detail: describeWhen(nextHappening.startsAt, now, timeZone) }
-      : { status: "Nothing planned", detail: "Suggest something" },
+      ? { status: nextHappening.title, detail: describeWhen(nextHappening.startsAt, now, timeZone, t) }
+      : { status: t("Nothing planned"), detail: t("Suggest something") },
     board: {
-      status: openNotes.length === 0 ? "Empty" : myTasks.length > 0 ? `${myTasks.length} for you` : openTasks > 0 ? `${openTasks} to do` : openNotes.length === 1 ? "1 note" : `${openNotes.length} notes`,
-      detail: openNotes.length > 0 && (myTasks.length > 0 || openTasks > 0) ? (openNotes.length === 1 ? "1 note up" : `${openNotes.length} notes up`) : undefined,
+      status: openNotes.length === 0 ? t("Empty") : myTasks.length > 0 ? t`${myTasks.length} for you` : openTasks > 0 ? t`${openTasks} to do` : openNotes.length === 1 ? t("1 note") : t`${openNotes.length} notes`,
+      detail: openNotes.length > 0 && (myTasks.length > 0 || openTasks > 0) ? (openNotes.length === 1 ? t("1 note up") : t`${openNotes.length} notes up`) : undefined,
     },
   };
 
@@ -147,14 +151,14 @@ export default async function HomePage() {
       .map((happening) => ({
         id: happening.id,
         title: happening.title,
-        when: describeWhen(happening.startsAt, now, timeZone),
+        when: describeWhen(happening.startsAt, now, timeZone, t),
         day: dayInZone(happening.startsAt, timeZone),
       })),
-  });
+  }, t);
 
   // ---- the week ahead, from what is already loaded
   const weekEnd = addDays(today, 6);
-  const kindName = (kind: string) => resources.find((resource) => resource.kind === kind)?.name ?? (kind === "shower" ? "Shower" : "Laundry");
+  const kindName = (kind: string) => resources.find((resource) => resource.kind === kind)?.name ?? (kind === "shower" ? t("Shower") : t("Laundry"));
   const week = buildCalendar({
     me: user.id,
     nameOf,
@@ -178,29 +182,29 @@ export default async function HomePage() {
       notGoing: happening.notGoing,
     })),
     turns: myTurns.map((turn) => ({ areaId: turn.areaId, name: turn.name, day: turn.lastDay, assigneeId: user.id, done: false })),
-  }).filter((item) => item.day >= today && item.day <= weekEnd);
-  const dayLabel = (day: string) => (day === today ? "Today" : day === addDays(today, 1) ? "Tomorrow" : describeDay(day).weekday);
+  }, t).filter((item) => item.day >= today && item.day <= weekEnd);
+  const dayLabel = (day: string) => (day === today ? t("Today") : day === addDays(today, 1) ? t("Tomorrow") : describeDay(day, t).weekday);
 
   return (
     <main className="mx-auto flex w-full max-w-md flex-col gap-8 p-6 pt-10 lg:max-w-6xl">
       <AutoRefresh everySeconds={60} />
       <header className="flex items-center gap-4">
-        <Link href="/profile" aria-label="Your profile" className={`rounded-full ${ring}`}>
+        <Link href="/profile" aria-label={t("Your profile")} className={`rounded-full ${ring}`}>
           <Avatar avatar={me?.avatar} colour={me?.colour ?? membership.colour} className="size-16" />
         </Link>
         <div className="flex min-w-0 flex-col gap-1">
           <p className="font-semibold text-ink-soft break-words">{household.name}</p>
-          <h1 className="type-display text-5xl break-words">Hi {user.name}</h1>
+          <h1 className="type-display text-5xl break-words">{t`Hi ${user.name}`}</h1>
         </div>
       </header>
 
       {members.length === 1 ? (
         <section aria-labelledby="code-heading" className="flex flex-col gap-3 rounded-2xl border-2 border-ink p-5">
           <h2 id="code-heading" className="type-display text-2xl">
-            Invite your roommates
+            {t("Invite your roommates")}
           </h2>
           <p className="text-ink-soft">
-            Send them the link, or the code{" "}
+            {t("Send them the link, or the code")}{" "}
             <span className="type-display text-2xl tracking-widest whitespace-nowrap text-ink" data-testid="join-code">
               {formatJoinCode(household.joinCode)}
             </span>
@@ -215,7 +219,7 @@ export default async function HomePage() {
           {members.length > 1 || toDos.length > 0 ? (
             <section aria-labelledby="todo-heading" className="order-1 flex flex-col gap-1 lg:order-none" data-testid="todo">
               <h2 id="todo-heading" className="type-display text-3xl">
-                {toDos.length === 0 ? "Nothing waiting on you" : "Yours to do"}
+                {toDos.length === 0 ? t("Nothing waiting on you") : t("Yours to do")}
               </h2>
               {toDos.length > 0 ? (
                 <ul className="flex flex-col">
@@ -242,7 +246,7 @@ export default async function HomePage() {
                   <svg viewBox="0 0 24 24" className="tick-draw size-6 shrink-0 text-spruce" aria-hidden="true">
                     <path d="M4 13C7 15 9 17 10 19C13 13 17 8 21 5" pathLength={1} />
                   </svg>
-                  No turns, to-dos, invitations or shopping with your name on.
+                  {t("No turns, to-dos, invitations or shopping with your name on.")}
                 </p>
               )}
             </section>
@@ -250,7 +254,7 @@ export default async function HomePage() {
 
           <section aria-labelledby="areas-heading" className="order-4 flex flex-col gap-3 lg:order-none">
             <h2 id="areas-heading" className="type-display text-3xl">
-              The flat right now
+              {t("The flat right now")}
             </h2>
             <ul className="grid grid-cols-1 gap-3 min-[360px]:grid-cols-2 sm:grid-cols-3">
               {areasFor(household).map((area, index) => {
@@ -263,7 +267,7 @@ export default async function HomePage() {
                       className={`flex h-full flex-col gap-2 rounded-2xl p-4 min-[360px]:min-h-40 outline-none transition-transform focus-visible:ring-4 active:scale-[0.98] ${area.band} ${area.ring}`}
                     >
                       <span className="flex items-start justify-between gap-2">
-                        <span className="font-semibold">{area.name}</span>
+                        <span className="font-semibold">{t(area.name)}</span>
                         <RoomArt room={area.art} animate delay={0.1 + index * 0.12} className="size-11 shrink-0" />
                       </span>
                       <span className="type-display mt-1 text-2xl break-words">{tile.status}</span>
@@ -280,11 +284,11 @@ export default async function HomePage() {
           {owe.length > 0 || owed.length > 0 ? (
             <section aria-labelledby="money-heading" className="order-2 flex flex-col gap-3 rounded-3xl bg-heather/30 p-5 lg:order-none" data-testid="money">
               <h2 id="money-heading" className="type-display text-3xl">
-                Money
+                {t("Money")}
               </h2>
               {owe.length > 0 ? (
                 <div className="flex flex-col gap-1">
-                  <h3 className="font-semibold text-ink-soft">You owe</h3>
+                  <h3 className="font-semibold text-ink-soft">{t("You owe")}</h3>
                   <ul className="flex flex-col">
                     {owe.map((transfer) => (
                       <li key={transfer.to} className="flex items-center justify-between gap-3 py-1">
@@ -297,7 +301,7 @@ export default async function HomePage() {
               ) : null}
               {owed.length > 0 ? (
                 <div className="flex flex-col gap-1">
-                  <h3 className="font-semibold text-ink-soft">Owes you</h3>
+                  <h3 className="font-semibold text-ink-soft">{t("Owes you")}</h3>
                   <ul className="flex flex-col">
                     {owed.map((transfer) => (
                       <li key={transfer.from} className="flex items-center justify-between gap-3 py-1">
@@ -309,14 +313,14 @@ export default async function HomePage() {
                 </div>
               ) : null}
               <Link href="/expenses" className={more}>
-                {owe.length > 0 ? "Pay up, or see what it was for" : "See what it was for"}
+                {owe.length > 0 ? t("Pay up, or see what it was for") : t("See what it was for")}
               </Link>
             </section>
           ) : null}
 
           <section aria-labelledby="week-heading" className="order-3 flex flex-col gap-1 lg:order-none" data-testid="week">
             <h2 id="week-heading" className="type-display text-3xl">
-              This week
+              {t("This week")}
             </h2>
             {week.length > 0 ? (
               <ul className="flex flex-col">
@@ -325,17 +329,17 @@ export default async function HomePage() {
                 ))}
               </ul>
             ) : (
-              <p className="text-ink-soft">Nothing booked or planned for the next seven days.</p>
+              <p className="text-ink-soft">{t("Nothing booked or planned for the next seven days.")}</p>
             )}
             <Link href="/calendar" className={more}>
-              Open the calendar
+              {t("Open the calendar")}
             </Link>
           </section>
 
           {on("board") ? (
             <section aria-labelledby="board-heading" className="order-5 flex flex-col gap-3 lg:order-none" data-testid="board-preview">
               <h2 id="board-heading" className="type-display text-3xl">
-                On the board
+                {t("On the board")}
               </h2>
               {openNotes.length > 0 ? (
                 <ul className="grid grid-cols-2 items-start gap-3 rounded-2xl border-4 border-ink bg-white p-3">
@@ -345,16 +349,16 @@ export default async function HomePage() {
                       small
                       index={index}
                       author={people.get(note.authorId)}
-                      line={note.isTask ? (note.assigneeId ? `For ${note.assigneeId === user.id ? "you" : nameOf(note.assigneeId)}` : "For anyone") : undefined}
+                      line={note.isTask ? (note.assigneeId ? (note.assigneeId === user.id ? t("For you") : t`For ${nameOf(note.assigneeId)}`) : t("For anyone")) : undefined}
                       note={{ id: note.id, body: note.body, isTask: note.isTask, done: false }}
                     />
                   ))}
                 </ul>
               ) : (
-                <p className="text-ink-soft">Nothing up. Notes for everyone go on the board.</p>
+                <p className="text-ink-soft">{t("Nothing up. Notes for everyone go on the board.")}</p>
               )}
               <Link href="/board" className={more}>
-                {openNotes.length > 4 ? `See all ${openNotes.length} notes, or write one` : "Write a note"}
+                {openNotes.length > 4 ? t`See all ${openNotes.length} notes, or write one` : t("Write a note")}
               </Link>
             </section>
           ) : null}

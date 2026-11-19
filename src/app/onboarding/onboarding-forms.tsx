@@ -3,10 +3,12 @@
 import { useActionState, useSyncExternalStore } from "react";
 import { Field, FormError, SubmitButton } from "@/components/ui/form";
 import { createHouseholdAction, joinHouseholdAction } from "./actions";
+import { useT } from "@/lib/i18n/client";
 
 const noSubscription = () => () => {};
 
 export function CreateHouseholdForm() {
+  const t = useT();
   const [state, action] = useActionState(createHouseholdAction, undefined);
   // The household's time zone starts as the creator's. Slots are worked out in it.
   const timeZone = useSyncExternalStore(
@@ -19,32 +21,33 @@ export function CreateHouseholdForm() {
     <form action={action} className="flex flex-col gap-4">
       <input type="hidden" name="timeZone" value={timeZone} />
       <Field
-        label="Household name"
+        label={t("Household name")}
         name="name"
-        placeholder="Kollektivet"
+        placeholder={t("Kollektivet")}
         maxLength={40}
         defaultValue={state?.values?.name}
         required
       />
       {timeZone ? (
         <p className="text-sm text-ink-soft" data-testid="zone-note">
-          Times will be shown in {timeZone.replaceAll("_", " ")} time, taken from this device. You can change that under Household.
+          {t`Times will be shown in ${timeZone.replaceAll("_", " ")} time, taken from this device. You can change that under Household.`}
         </p>
       ) : null}
       <FormError message={state?.error} />
-      <SubmitButton pendingLabel="Creating household…">Create household</SubmitButton>
+      <SubmitButton pendingLabel={t("Creating household…")}>{t("Create household")}</SubmitButton>
     </form>
   );
 }
 
 export function JoinHouseholdForm({ code }: { code?: string }) {
+  const t = useT();
   const [state, action] = useActionState(joinHouseholdAction, undefined);
   return (
     <form action={action} noValidate className="flex flex-col gap-4">
       <Field
-        label="Join code"
+        label={t("Join code")}
         name="code"
-        placeholder="ABC D2F"
+        placeholder={t("ABC D2F")}
         autoCapitalize="characters"
         autoComplete="off"
         spellCheck={false}
@@ -53,8 +56,8 @@ export function JoinHouseholdForm({ code }: { code?: string }) {
         look="code"
       />
       <FormError message={state?.error} />
-      <SubmitButton pendingLabel="Joining…" variant="secondary">
-        Join household
+      <SubmitButton pendingLabel={t("Joining…")} variant="secondary">
+        {t("Join household")}
       </SubmitButton>
     </form>
   );
@@ -62,12 +65,13 @@ export function JoinHouseholdForm({ code }: { code?: string }) {
 
 /** Joining from an invite link: the code is already known, so there is one button. */
 export function JoinByLinkForm({ code, name }: { code: string; name: string }) {
+  const t = useT();
   const [state, action] = useActionState(joinHouseholdAction, undefined);
   return (
     <form action={action} className="flex flex-col gap-4">
       <input type="hidden" name="code" value={code} />
       <FormError message={state?.error} />
-      <SubmitButton pendingLabel="Joining…">Join {name}</SubmitButton>
+      <SubmitButton pendingLabel={t("Joining…")}>{t`Join ${name}`}</SubmitButton>
     </form>
   );
 }

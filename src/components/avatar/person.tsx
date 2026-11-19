@@ -1,9 +1,10 @@
 import { Avatar } from "./avatar";
+import { getT } from "@/lib/i18n/server";
 
 export type PersonLike = { userId: string; name: string; colour: string; avatar: string | null | undefined };
 
 /** Someone's avatar and name on one line. The reader is called "You", or "you" in the middle of a sentence. */
-export function Person({
+export async function Person({
   person,
   me,
   size = "size-7",
@@ -16,11 +17,12 @@ export function Person({
   className?: string;
   inSentence?: boolean;
 }) {
-  if (!person) return <span className={`text-ink-soft ${className}`}>{inSentence ? "someone who moved out" : "Someone who moved out"}</span>;
+  const t = await getT();
+  if (!person) return <span className={`text-ink-soft ${className}`}>{inSentence ? t("someone who moved out") : t("Someone who moved out")}</span>;
   return (
     <span className={`inline-flex min-w-0 items-center gap-2 ${className}`}>
       <Avatar avatar={person.avatar} colour={person.colour} className={size} />
-      <span className="min-w-0 break-words">{person.userId === me ? (inSentence ? "you" : "You") : person.name}</span>
+      <span className="min-w-0 break-words">{person.userId === me ? (inSentence ? t("you") : t("You")) : person.name}</span>
     </span>
   );
 }

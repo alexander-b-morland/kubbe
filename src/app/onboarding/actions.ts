@@ -7,6 +7,7 @@ import { createHousehold, joinHousehold } from "@/lib/households";
 import { isJoinCode, normaliseJoinCode } from "@/lib/join-code";
 import { allowAttempt, clientAddress, tooManyAttempts } from "@/lib/rate-limit";
 import { requireUser } from "@/lib/session";
+import { getT } from "@/lib/i18n/server";
 
 const nameSchema = z
   .string()
@@ -23,7 +24,7 @@ export async function createHouseholdAction(
   const parsed = nameSchema.safeParse(name);
   if (!parsed.success) return { error: parsed.error.issues[0].message, values: { name } };
 
-  await createHousehold(user.id, parsed.data, String(form.get("timeZone") ?? ""));
+  await createHousehold(user.id, parsed.data, String(form.get("timeZone") ?? ""), await getT());
   // Freshly created, or already in a household: either way, home is the place.
   redirect("/home");
 }

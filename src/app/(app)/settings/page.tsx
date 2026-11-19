@@ -10,6 +10,7 @@ import { requireHousehold } from "@/lib/session";
 import { ShareCode } from "../home/share-code";
 import { removeMemberAction, renameHouseholdAction, replaceJoinCodeAction, setExtrasAction, setRoleAction, setTimeZoneAction } from "./actions";
 import { ExtrasForm, RenameForm, TimeZoneForm } from "./settings-forms";
+import { getT } from "@/lib/i18n/server";
 
 // This screen depends on who is signed in, so it is rendered per request.
 export const instant = false;
@@ -17,6 +18,7 @@ export const instant = false;
 export const metadata: Metadata = { title: "Household" };
 
 export default async function HouseholdPage() {
+  const t = await getT();
   const { user, household, membership } = await requireHousehold();
   const members = await listMembers(household.id);
   const admin = membership.role === "admin";
@@ -26,7 +28,7 @@ export default async function HouseholdPage() {
 
   return (
     <main className="mx-auto flex w-full max-w-md flex-col lg:max-w-3xl lg:pt-6">
-      <TabHeader art="people" name="Household" eyebrow="Household">
+      <TabHeader art="people" name={t("Household")} eyebrow={t("Household")}>
         {household.name}
       </TabHeader>
 
@@ -34,7 +36,7 @@ export default async function HouseholdPage() {
 
       <section aria-labelledby="people-heading" className="flex flex-col gap-2">
         <h2 id="people-heading" className="type-display text-4xl">
-          Who lives here
+          {t("Who lives here")}
         </h2>
         <ul className="flex flex-col">
           {members.map((member) => {
@@ -48,28 +50,28 @@ export default async function HouseholdPage() {
                     className="min-w-0 rounded text-lg font-semibold break-words underline-offset-4 outline-none hover:underline focus-visible:ring-4 focus-visible:ring-fjord"
                   >
                     {member.name}
-                    {self ? " (you)" : ""}
+                    {self ? t(" (you)") : ""}
                   </Link>
                   {member.role === "admin" ? (
-                    <span className="ml-auto shrink-0 rounded-full border-2 border-ink px-3 py-0.5 text-sm font-bold">Admin</span>
+                    <span className="ml-auto shrink-0 rounded-full border-2 border-ink px-3 py-0.5 text-sm font-bold">{t("Admin")}</span>
                   ) : null}
                 </div>
                 {admin && !self ? (
                   <div className="flex flex-wrap justify-end gap-2">
                     <ActionButton
-                      label={member.role === "admin" ? `Remove ${member.name} as admin` : `Make ${member.name} admin`}
-                      confirm={member.role === "admin" ? `Stop ${member.name} being an admin?` : `Make ${member.name} an admin? They can then change rules and remove people.`}
+                      label={member.role === "admin" ? t`Remove ${member.name} as admin` : t`Make ${member.name} admin`}
+                      confirm={member.role === "admin" ? t`Stop ${member.name} being an admin?` : t`Make ${member.name} an admin? They can then change rules and remove people.`}
                       action={setRoleAction.bind(null, member.userId, member.role === "admin" ? "member" : "admin")}
                     >
-                      {member.role === "admin" ? "Remove as admin" : "Make admin"}
+                      {member.role === "admin" ? t("Remove as admin") : t("Make admin")}
                     </ActionButton>
                     <ActionButton
                       look="link"
-                      label={`Remove ${member.name}`}
-                      confirm={`Remove ${member.name} from ${household.name} and cancel their bookings?`}
+                      label={t`Remove ${member.name}`}
+                      confirm={t`Remove ${member.name} from ${household.name} and cancel their bookings?`}
                       action={removeMemberAction.bind(null, member.userId)}
                     >
-                      Remove from household
+                      {t("Remove from household")}
                     </ActionButton>
                   </div>
                 ) : null}
@@ -78,23 +80,23 @@ export default async function HouseholdPage() {
           })}
         </ul>
         {admin && !alone ? (
-          <p className="text-sm text-ink-soft">Removing someone also replaces the invite code, since they know the old one.</p>
+          <p className="text-sm text-ink-soft">{t("Removing someone also replaces the invite code, since they know the old one.")}</p>
         ) : null}
       </section>
 
       <section aria-labelledby="invite-heading" className="flex flex-col gap-3 rounded-2xl border-2 border-ink p-5">
         <h2 id="invite-heading" className="type-display text-3xl">
-          Invite a roommate
+          {t("Invite a roommate")}
         </h2>
-        <p className="text-ink-soft">Send the link, or have them type this code after signing up.</p>
+        <p className="text-ink-soft">{t("Send the link, or have them type this code after signing up.")}</p>
         <p className="type-display text-4xl tracking-widest" data-testid="join-code">
           {formatJoinCode(household.joinCode)}
         </p>
         <ShareCode code={household.joinCode} />
         {admin ? (
           <div data-testid="replace-code">
-            <ActionButton look="link" align="start" confirm="Replace the code? Old links stop working." doneLabel="New code ready." action={replaceJoinCodeAction}>
-              Replace with a new code
+            <ActionButton look="link" align="start" confirm={t("Replace the code? Old links stop working.")} doneLabel={t("New code ready.")} action={replaceJoinCodeAction}>
+              {t("Replace with a new code")}
             </ActionButton>
           </div>
         ) : null}
@@ -102,19 +104,19 @@ export default async function HouseholdPage() {
 
       <section aria-labelledby="rules-heading" className="flex flex-col gap-3">
         <h2 id="rules-heading" className="type-display text-4xl">
-          Booking rules
+          {t("Booking rules")}
         </h2>
         <p className="text-ink-soft">
           {admin
-            ? "Slot length, opening hours and limits for each shower and machine. Add a second shower or a dryer here too."
-            : "Slot length, opening hours and limits for each shower and machine. An admin sets them."}
+            ? t("Slot length, opening hours and limits for each shower and machine. Add a second shower or a dryer here too.")
+            : t("Slot length, opening hours and limits for each shower and machine. An admin sets them.")}
         </p>
         <Link
           href="/settings/rules"
           data-testid="open-rules"
           className="flex min-h-14 items-center justify-between gap-3 rounded-2xl border-2 border-ink px-5 py-3 text-lg font-bold outline-none focus-visible:ring-4 focus-visible:ring-fjord"
         >
-          {admin ? "Change showers and machines" : "See the rules"}
+          {admin ? t("Change showers and machines") : t("See the rules")}
           <svg viewBox="0 0 24 24" aria-hidden="true" className="size-6 shrink-0">
             <path d="M4 12C9 11.500 15 11.500 20 12M14 6C16 8 18 10 20 12C18 14 16 16 14 18" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
@@ -124,11 +126,10 @@ export default async function HouseholdPage() {
       {admin ? (
         <section aria-labelledby="extras-heading" className="flex flex-col gap-4">
           <h2 id="extras-heading" className="type-display text-4xl">
-            What you use
+            {t("What you use")}
           </h2>
           <p className="text-ink-soft">
-            Each of these has a tile on Home. Ticking or unticking saves at once. Switching one off hides it, and what is in it, for
-            everyone until it is switched on again; nothing is deleted.
+            {t("Each of these has a tile on Home. Ticking or unticking saves at once. Switching one off hides it, and what is in it, for everyone until it is switched on again; nothing is deleted.")}
           </p>
           <ExtrasForm extras={EXTRAS} enabled={household.extras} action={setExtrasAction} />
         </section>
@@ -136,7 +137,7 @@ export default async function HouseholdPage() {
 
       <section aria-labelledby="details-heading" className="flex flex-col gap-5">
         <h2 id="details-heading" className="type-display text-4xl">
-          Name and time zone
+          {t("Name and time zone")}
         </h2>
         {admin ? (
           <>
@@ -145,7 +146,7 @@ export default async function HouseholdPage() {
           </>
         ) : (
           <p>
-            {household.name}. Times are shown in {household.timeZone.replaceAll("_", " ")} time.
+            {t`${household.name}. Times are shown in ${household.timeZone.replaceAll("_", " ")} time.`}
           </p>
         )}
       </section>

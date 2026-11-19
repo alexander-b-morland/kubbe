@@ -5,6 +5,7 @@ import { SplitFields } from "@/components/money/split-fields";
 import { Field, FormError, Locked, Saved, selectLook, SubmitButton } from "@/components/ui/form";
 import { formatAmount } from "@/lib/money";
 import { addExpenseAction, updateExpenseAction, type ExpenseState } from "./actions";
+import { useT } from "@/lib/i18n/client";
 
 type Person = { userId: string; name: string };
 
@@ -22,6 +23,7 @@ export function ExpenseForm({
   currency: string;
   existing?: Existing;
 }) {
+  const t = useT();
   // After a new expense is added, the parts start empty again. Counting our own saves,
   // not the list's length: someone else's expense must not wipe a form being filled in.
   const [round, setRound] = useState(0);
@@ -31,19 +33,19 @@ export function ExpenseForm({
     return result;
   }, undefined);
   // Someone who paid but has moved out stays selectable while correcting their expense.
-  const payers = existing && !people.some((person) => person.userId === existing.paidBy) ? [...people, { userId: existing.paidBy, name: "Someone who moved out" }] : people;
+  const payers = existing && !people.some((person) => person.userId === existing.paidBy) ? [...people, { userId: existing.paidBy, name: t("Someone who moved out") }] : people;
   return (
     <form key={existing ? JSON.stringify(existing) : "new"} action={formAction} noValidate className="flex flex-col gap-4">
       <Locked>
       <Field
-        label="What was it for"
+        label={t("What was it for")}
         name="description"
-        placeholder="Toilet paper and dish soap"
+        placeholder={t("Toilet paper and dish soap")}
         maxLength={80}
         defaultValue={state?.values?.description ?? existing?.description}
       />
       <Field
-        label="Amount"
+        label={t("Amount")}
         name="amount"
         inputMode="decimal"
         placeholder="349,50"
@@ -51,11 +53,11 @@ export function ExpenseForm({
         autoComplete="off"
       />
       <label className="flex flex-col gap-1.5">
-        <span className="text-sm font-semibold">Who paid</span>
+        <span className="text-sm font-semibold">{t("Who paid")}</span>
         <select name="paidBy" defaultValue={existing?.paidBy ?? me} className={selectLook}>
           {payers.map((person) => (
             <option key={person.userId} value={person.userId}>
-              {person.userId === me ? `${person.name} (you)` : person.name}
+              {person.userId === me ? t`${person.name} (you)` : person.name}
             </option>
           ))}
         </select>
@@ -64,8 +66,8 @@ export function ExpenseForm({
       </Locked>
       <FormError message={state?.error} />
       <Saved show={Boolean(existing) && state?.saved} />
-      <SubmitButton pendingLabel={existing ? "Saving…" : "Adding…"} variant={existing ? "secondary" : "primary"}>
-        {existing ? "Save" : "Add expense"}
+      <SubmitButton pendingLabel={existing ? t("Saving…") : t("Adding…")} variant={existing ? "secondary" : "primary"}>
+        {existing ? t("Save") : t("Add expense")}
       </SubmitButton>
     </form>
   );

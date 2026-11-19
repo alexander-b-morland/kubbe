@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { formatAmount, parseAmount } from "@/lib/money";
+import { useT } from "@/lib/i18n/client";
 
 type Person = { userId: string; name: string };
 
@@ -14,7 +15,7 @@ const box = "h-12 w-28 rounded-xl border-2 border-ink bg-white/70 px-3 text-lg o
 export function SplitFields({
   people,
   currency = "kr",
-  legend = "Split between",
+  legend,
   initial,
   ticked,
 }: {
@@ -26,6 +27,7 @@ export function SplitFields({
   /** Who is ticked to begin with, when it is not everyone. */
   ticked?: readonly string[];
 }) {
+  const t = useT();
   // An even split can differ by one øre between people: that is still an even split.
   const parts0 = Object.values(initial ?? {});
   const uneven = parts0.length > 0 && Math.max(...parts0) - Math.min(...parts0) > 1;
@@ -52,13 +54,13 @@ export function SplitFields({
 
   return (
     <fieldset ref={fieldset} className="flex flex-col gap-3">
-      <legend className="pb-2 text-sm font-semibold">{legend}</legend>
+      <legend className="pb-2 text-sm font-semibold">{legend ?? t("Split between")}</legend>
       <div className="flex gap-2">
         {(["even", "amounts"] as const).map((option) => (
           <label key={option} className="relative">
             <input type="radio" name="split" value={option} checked={mode === option} onChange={() => setMode(option)} className="peer sr-only" />
             <span className="flex min-h-11 items-center rounded-full border-2 border-ink px-4 text-sm font-bold peer-checked:bg-ink peer-checked:text-paper peer-focus-visible:ring-4 peer-focus-visible:ring-fjord">
-              {option === "even" ? "Evenly" : "An amount each"}
+              {option === "even" ? t("Evenly") : t("An amount each")}
             </span>
           </label>
         ))}
@@ -85,7 +87,7 @@ export function SplitFields({
                     placeholder="0"
                     value={parts[person.userId] ?? ""}
                     onChange={(event) => setParts((current) => ({ ...current, [person.userId]: event.target.value }))}
-                    aria-label={`${person.name}'s part`}
+                    aria-label={t`${person.name}'s part`}
                     autoComplete="off"
                     className={box}
                   />
@@ -95,14 +97,14 @@ export function SplitFields({
           </ul>
           <p role="status" className={`text-sm font-semibold ${negative || (left !== null && left !== 0) ? "text-barn" : "text-ink-soft"}`} data-testid="split-left">
             {negative
-              ? "A part can't be less than nothing."
+              ? t("A part can't be less than nothing.")
               : left === null
-              ? "Enter the amount above, then each person's part."
+              ? t("Enter the amount above, then each person's part.")
               : left === 0
-                ? "The parts add up."
+                ? t("The parts add up.")
                 : left > 0
-                  ? `${formatAmount(left, currency)} left to share out.`
-                  : `${formatAmount(-left, currency)} too much shared out.`}
+                  ? t`${formatAmount(left, currency)} left to share out.`
+                  : t`${formatAmount(-left, currency)} too much shared out.`}
           </p>
         </>
       )}

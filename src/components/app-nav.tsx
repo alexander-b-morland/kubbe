@@ -4,14 +4,16 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { RoomArt, type Art } from "@/components/illustrations/room-art";
+import { m } from "@/lib/i18n";
+import { useT } from "@/lib/i18n/client";
 
 type Tab = { href: string; label: string; art: Art; under: string[] };
 
 const tabs: Tab[] = [
-  { href: "/home", label: "Home", art: "home", under: [] },
-  { href: "/calendar", label: "Calendar", art: "calendar", under: ["/calendar"] },
-  { href: "/settings", label: "Household", art: "people", under: ["/settings", "/people"] },
-  { href: "/profile", label: "You", art: "you", under: ["/profile"] },
+  { href: "/home", label: m("Home"), art: "home", under: [] },
+  { href: "/calendar", label: m("Calendar"), art: "calendar", under: ["/calendar"] },
+  { href: "/settings", label: m("Household"), art: "people", under: ["/settings", "/people"] },
+  { href: "/profile", label: m("You"), art: "you", under: ["/profile"] },
 ];
 
 export type NavArea = { key: string; name: string; href: string; art: Art; band: string };
@@ -25,6 +27,7 @@ const ring = "outline-none focus-visible:ring-4 focus-visible:ring-fjord focus-v
  * the column lists the areas too, and marks the one you are in.
  */
 export function AppNav({ areas }: { areas: NavArea[] }) {
+  const t = useT();
   const pathname = usePathname();
   // The tab you pressed is marked at once, before the server has answered with its screen.
   // The press is remembered together with the screen it was made on, so it stops counting
@@ -51,7 +54,7 @@ export function AppNav({ areas }: { areas: NavArea[] }) {
           }`}
         >
           <RoomArt room={tab.art} className="size-7" />
-          {tab.label}
+          {t(tab.label)}
           {/* A pen stroke under the screen you are on. */}
           <svg viewBox="0 0 38 8" aria-hidden="true" className={`h-1.5 w-8 lg:hidden ${here || within ? "" : "invisible"}`}>
             <path d="M2 5C8 1 12 8 18 4C24 0 28 7 36 3" fill="none" stroke="var(--color-fjord)" strokeWidth="2.6" strokeLinecap="round" />
@@ -63,10 +66,10 @@ export function AppNav({ areas }: { areas: NavArea[] }) {
 
   return (
     <nav
-      aria-label="Main"
+      aria-label={t("Main")}
       className="fixed inset-x-0 bottom-0 z-10 border-t-2 border-ink bg-paper pb-[env(safe-area-inset-bottom)] lg:inset-x-auto lg:inset-y-0 lg:left-0 lg:w-56 lg:overflow-y-auto lg:border-t-0 lg:border-r-2 lg:pb-6"
     >
-      <p className="type-display hidden px-6 pt-8 pb-6 text-4xl lg:block">Kubbe</p>
+      <p className="type-display hidden px-6 pt-8 pb-6 text-4xl lg:block">{t("Kubbe")}</p>
       <ul className="mx-auto flex max-w-md lg:max-w-none lg:flex-col lg:gap-1 lg:px-3">
         {tabLink(tabs[0])}
         {/* On a wide screen, every area sits under Home. */}
@@ -85,7 +88,7 @@ export function AppNav({ areas }: { areas: NavArea[] }) {
                     <span className={`flex size-7 shrink-0 items-center justify-center rounded-lg ${item.band}`}>
                       <RoomArt room={item.art} className="size-5" />
                     </span>
-                    {item.name}
+                    {t(item.name)}
                   </Link>
                 </li>
               );

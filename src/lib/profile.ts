@@ -2,25 +2,26 @@ import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { membership, profile, user } from "@/db/schema";
 import { DEFAULT_AVATAR, isAvatar, type AvatarName } from "@/components/avatar/avatars";
+import { m } from "@/lib/i18n";
 
 /** The fun questions on a profile. Keys are stored; the wording can change freely. */
 export const QUESTIONS = [
-  { key: "dish", ask: "My signature dish" },
-  { key: "habit", ask: "My worst habit as a roommate" },
-  { key: "song", ask: "The song I play too loud" },
-  { key: "gift", ask: "What I bring to the flat" },
-  { key: "show", ask: "The show I won't shut up about" },
-  { key: "fridge", ask: "Always on my shelf in the fridge" },
+  { key: "dish", ask: m("My signature dish") },
+  { key: "habit", ask: m("My worst habit as a roommate") },
+  { key: "song", ask: m("The song I play too loud") },
+  { key: "gift", ask: m("What I bring to the flat") },
+  { key: "show", ask: m("The show I won't shut up about") },
+  { key: "fridge", ask: m("Always on my shelf in the fridge") },
 ] as const;
 
 /** "This or that": one tap each, and it says a lot about living with someone. Stored as "a" or "b". */
 export const PICKS = [
-  { key: "shower", a: "Morning shower", b: "Evening shower" },
-  { key: "bird", a: "Early bird", b: "Night owl" },
-  { key: "chore", a: "Does the dishes", b: "Takes out the trash" },
-  { key: "sound", a: "Music on", b: "Quiet, please" },
-  { key: "taste", a: "Sweet", b: "Salty" },
-  { key: "plans", a: "Plans ahead", b: "Wings it" },
+  { key: "shower", a: m("Morning shower"), b: m("Evening shower") },
+  { key: "bird", a: m("Early bird"), b: m("Night owl") },
+  { key: "chore", a: m("Does the dishes"), b: m("Takes out the trash") },
+  { key: "sound", a: m("Music on"), b: m("Quiet, please") },
+  { key: "taste", a: m("Sweet"), b: m("Salty") },
+  { key: "plans", a: m("Plans ahead"), b: m("Wings it") },
 ] as const;
 
 export const pickKey = (key: string) => `pick-${key}`;

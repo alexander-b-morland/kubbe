@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import type { DishIdea } from "@/lib/dinner/cookbook";
 import { suggestDishes, suggestNeeds } from "@/lib/dinner/ideas";
+import { getLocale } from "@/lib/i18n/server";
 import { INGREDIENT_LENGTH, MAX_DISHES, MAX_INGREDIENTS, minutesOf, parseIngredients, TITLE_LENGTH } from "@/lib/dinner/plan";
 import {
   addDinner,
@@ -158,7 +159,7 @@ export async function ideasAction(dinnerId: string): Promise<IdeasState> {
     avoids: coming.avoids,
     recent,
     already: found.dishes.map((dish) => dish.title),
-    language: "en",
+    language: await getLocale(),
   });
   if (ideas.length === 0) return { error: "No ideas this time. Type one in instead." };
   return { ideas, source };
@@ -181,7 +182,7 @@ export async function needsAction(dinnerId: string, title: string): Promise<Need
   const found = await getDinner(household.id, dinnerId);
   if (!found) return undefined;
   const coming = await avoidsOfThoseComing(household.id, [...found.going, user.id]);
-  const needs = await suggestNeeds({ title, avoids: coming.avoids, language: "en" });
+  const needs = await suggestNeeds({ title, avoids: coming.avoids, language: await getLocale() });
   return needs ?? undefined;
 }
 
