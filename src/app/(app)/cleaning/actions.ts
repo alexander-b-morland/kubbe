@@ -19,7 +19,7 @@ import type { FormState } from "@/lib/form-state";
 import { requireHousehold } from "@/lib/session";
 import { dayInZone, daysBetween, isDay } from "@/lib/time";
 
-export type CleaningState = (FormState & { saved?: boolean }) | undefined;
+export type CleaningState = (FormState & { saved?: boolean; message?: string }) | undefined;
 
 const adminsOnly = "Only an admin can change the rooms and chores. Ask one of them.";
 const gone = "That has been removed.";
@@ -69,7 +69,10 @@ export async function updateAreaAction(areaId: string, _previous: CleaningState,
   if (membership.role !== "admin") return { error: adminsOnly };
   const parsed = areaSchema.safeParse(Object.fromEntries(form));
   if (!parsed.success) return { error: parsed.error.issues[0].message };
-  if (!idSchema.safeParse(areaId).success || !(await updateArea(household.id, areaId, parsed.data, today))) return { error: gone };
+  const picked = String(form.get("startDay") ?? "");
+  const offset = isDay(picked) ? daysBetween(today, picked) : Number.NaN;
+  if (picked !== "" && !(offset >= -62 && offset <= 62)) return { error: "Pick a start day within two months of today." };
+  if (!idSchema.safeParse(areaId).success || !(await updateArea(household.id, areaId, parsed.data, today, picked === "" ? undefined : picked))) return { error: gone };
   refresh();
   return { saved: true };
 }
@@ -85,9 +88,17 @@ export async function deleteAreaAction(areaId: string): Promise<CleaningState> {
 export async function redealTurnsAction(): Promise<CleaningState> {
   const { household, membership, today } = await context();
   if (membership.role !== "admin") return { error: adminsOnly };
-  await redealTurns(household.id, today);
+  const changed = await redealTurns(household.id, today);
   refresh();
-  return { saved: true };
+  return {
+    saved: true,
+    message:
+      changed === 0
+        ? "Nothing changed: this round already follows the rotation."
+        : changed === 1
+          ? "Dealt out again. 1 turn changed hands."
+          : `Dealt out again. ${changed} turns changed hands.`,
+  };
 }
 
 type TurnChange = typeof markDone;

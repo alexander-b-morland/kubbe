@@ -2,7 +2,7 @@
 
 import { useActionState, useRef } from "react";
 import { ActionButton } from "@/components/ui/action-button";
-import { Field, FormError, selectLook, SubmitButton } from "@/components/ui/form";
+import { Field, FormError, Locked, selectLook, SubmitButton } from "@/components/ui/form";
 import { SavableForm } from "@/components/ui/savable-form";
 import { describeInterval } from "@/lib/cleaning/rota";
 import type { CleaningState } from "./actions";
@@ -88,8 +88,8 @@ export function AddAreaForm({
   }
 
   return (
-    // Built again after each addition, so the name field starts empty.
-    <form key={existing.length} action={formAction} noValidate className="flex flex-col gap-4">
+    <form action={formAction} noValidate className="flex flex-col gap-4">
+      <Locked>
       <Field ref={nameInput} label="Room or chore" name="name" placeholder="Bathroom" maxLength={30} defaultValue={state?.values?.name} />
       {unused.length > 0 ? (
         <div className="flex flex-wrap gap-2" aria-label="Suggestions">
@@ -113,6 +113,7 @@ export function AddAreaForm({
         type="date"
         defaultValue={today}
       />
+      </Locked>
       <FormError message={state?.error} />
       <SubmitButton pendingLabel="Adding…">Add</SubmitButton>
     </form>
@@ -126,7 +127,7 @@ export function EditAreaForm({
   action,
   remove,
 }: {
-  area: { id: string; name: string; intervalDays: number; estimateMinutes: number };
+  area: { id: string; name: string; intervalDays: number; estimateMinutes: number; startDay: string };
   intervals: readonly number[];
   estimates: readonly number[];
   action: Action;
@@ -150,10 +151,13 @@ export function EditAreaForm({
         <SavableForm action={formAction} state={state} resetKey={JSON.stringify(area)}>
           <Field label="Name" name="name" defaultValue={area.name} maxLength={30} />
           <RhythmFields intervals={intervals} estimates={estimates} intervalDays={area.intervalDays} estimateMinutes={area.estimateMinutes} />
-          <p className="text-sm text-ink-soft">If you change how often, its turns start again from today.</p>
+          <Field label="First turn started, or starts" name="startDay" type="date" defaultValue={area.startDay} />
+          <p className="text-sm text-ink-soft">
+            Turns change hands on that day&apos;s rhythm. Changing the day or how often starts its turns over, and clears who has done it.
+          </p>
         </SavableForm>
         <div className="flex justify-start">
-          <ActionButton align="start" label={`Remove ${area.name}`} confirm={`Remove ${area.name} for everyone?`} action={remove}>
+          <ActionButton look="link" align="start" label={`Remove ${area.name}`} confirm={`Remove ${area.name} for everyone?`} action={remove}>
             Remove
           </ActionButton>
         </div>

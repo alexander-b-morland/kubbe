@@ -1,7 +1,7 @@
-import { and, asc, count, eq, gte, inArray } from "drizzle-orm";
+import { and, asc, count, eq, gte, inArray, sum } from "drizzle-orm";
 import { db, type Transaction } from "@/db";
 import { cleaningArea, cleaningDone, cleaningTakeover, household, membership, user } from "@/db/schema";
-import { assigneeFor, periodDays, periodOn, startDayFor } from "./rota";
+import { assigneeFor, periodDays, periodOn} from "./rota";
 
 // Database work behind the Cleaning screen. Callers have already established who is
 // asking and which household they are in (see requireHousehold).
@@ -31,6 +31,10 @@ export type RotaRow = {
   next: Person | null;
   /** The period before this one ended without anyone marking it done. */
   lastWasSkipped: boolean;
+  /** The first turn has not begun: the day it does. Until then there is nothing to do or tick off. */
+  startsOn: string | null;
+  /** Whose turn the rotation made it, when someone else took it over. */
+  takenFrom: Person | null;
 };
 
 export async function listAreas(householdId: string) {
@@ -74,6 +78,10 @@ export async function getRota(householdId: string, today: string): Promise<RotaR
     const doneIn = (p: number) => doneRows.find((d) => d.areaId === area.id && d.period === p);
     const done = doneIn(period);
     const current = held(period);
+    const takenOver = Boolean(current && !current.pinned && memberIds.includes(current.userId));
+    const byRotation = assigneeFor({ period, areaIndex, memberIds });
+    // A chore added this week has no "last time" to have been skipped.
+    const existedLastTime = period > 0 && area.createdAt.toISOString().slice(0, 10) <= periodDays(area, period - 1).to;
 
     return {
       areaId: area.id,
@@ -84,10 +92,12 @@ export async function getRota(householdId: string, today: string): Promise<RotaR
       lastDay: periodDays(area, period).to,
       assignee: who(period),
       // A pinned turn is still the rotation's choice, so it is not shown as taken over.
-      takenOver: Boolean(current && !current.pinned && memberIds.includes(current.userId)),
+      takenOver,
+      takenFrom: takenOver && byRotation ? (personById.get(byRotation) ?? null) : null,
+      startsOn: today < area.startDay ? area.startDay : null,
       done: done ? { by: personById.get(done.doneBy) ?? null, at: done.doneAt } : null,
       next: who(period + 1),
-      lastWasSkipped: period > 0 && !doneIn(period - 1),
+      lastWasSkipped: existedLastTime && !doneIn(period - 1),
     };
   });
 }
@@ -191,7 +201,7 @@ export async function createArea(householdId: string, input: AreaInput, startDay
  * Change a room. A new rhythm starts over from today, and with it the record of
  * which periods were done, since the periods are no longer the same ones.
  */
-export async function updateArea(householdId: string, areaId: string, input: AreaInput, today: string) {
+export async function updateArea(householdId: string, areaId: string, input: AreaInput, today: string, startDay?: string) {
   return db.transaction(async (tx) => {
     const [found] = await tx
       .select()
@@ -199,12 +209,14 @@ export async function updateArea(householdId: string, areaId: string, input: Are
       .where(and(eq(cleaningArea.id, areaId), eq(cleaningArea.householdId, householdId)));
     if (!found) return false;
 
-    if (found.intervalDays !== input.intervalDays) {
+    // A new rhythm or a new start day makes new periods, so the old ones' ticks no longer mean anything.
+    const moved = startDay !== undefined && startDay !== found.startDay;
+    if (found.intervalDays !== input.intervalDays || moved) {
       await tx.delete(cleaningDone).where(eq(cleaningDone.areaId, areaId));
       await tx.delete(cleaningTakeover).where(eq(cleaningTakeover.areaId, areaId));
       await tx
         .update(cleaningArea)
-        .set({ ...input, startDay: startDayFor(today, input.intervalDays) })
+        .set({ ...input, startDay: moved ? startDay : today })
         .where(eq(cleaningArea.id, areaId));
     } else {
       await tx.update(cleaningArea).set(input).where(eq(cleaningArea.id, areaId));
@@ -226,14 +238,31 @@ export async function deleteArea(householdId: string, areaId: string, today: str
  * Turns normally stay where they are when people move in or out; this is the admin
  * saying "share this round out afresh". Turns already marked done stay done.
  */
-export async function redealTurns(householdId: string, today: string) {
-  await db.transaction(async (tx) => {
-    const areas = await tx.select().from(cleaningArea).where(eq(cleaningArea.householdId, householdId));
-    for (const area of areas) {
-      await tx
+export async function redealTurns(householdId: string, today: string): Promise<number> {
+  return db.transaction(async (tx) => {
+    const areas = await tx
+      .select()
+      .from(cleaningArea)
+      .where(eq(cleaningArea.householdId, householdId))
+      .orderBy(asc(cleaningArea.createdAt));
+    const people = await tx
+      .select({ userId: membership.userId })
+      .from(membership)
+      .where(eq(membership.householdId, householdId))
+      .orderBy(asc(membership.joinedAt), asc(membership.userId));
+    const memberIds = people.map((person) => person.userId);
+    let changed = 0;
+    for (const [areaIndex, area] of areas.entries()) {
+      const period = periodOn(area, today);
+      const removed = await tx
         .delete(cleaningTakeover)
-        .where(and(eq(cleaningTakeover.areaId, area.id), eq(cleaningTakeover.period, periodOn(area, today))));
+        .where(and(eq(cleaningTakeover.areaId, area.id), eq(cleaningTakeover.period, period)))
+        .returning({ userId: cleaningTakeover.userId });
+      // Only a turn that was held somewhere the rotation would not put it has moved.
+      const byRotation = assigneeFor({ period, areaIndex, memberIds });
+      changed += removed.filter((held) => held.userId !== byRotation).length;
     }
+    return changed;
   });
 }
 
@@ -301,13 +330,16 @@ export async function giveBack(householdId: string, userId: string, areaId: stri
   return state;
 }
 
-/** How many turns each person has marked done since a point in time. */
+/**
+ * What each person has marked done since a point in time: how many turns, and how many
+ * minutes of work those add up to. A five-minute chore and a bathroom are not the same.
+ */
 export async function tally(householdId: string, since: Date) {
   const rows = await db
-    .select({ userId: cleaningDone.doneBy, turns: count() })
+    .select({ userId: cleaningDone.doneBy, turns: count(), minutes: sum(cleaningArea.estimateMinutes) })
     .from(cleaningDone)
     .innerJoin(cleaningArea, eq(cleaningDone.areaId, cleaningArea.id))
     .where(and(eq(cleaningArea.householdId, householdId), gte(cleaningDone.doneAt, since)))
     .groupBy(cleaningDone.doneBy);
-  return new Map(rows.map((row) => [row.userId, row.turns]));
+  return new Map(rows.map((row) => [row.userId, { turns: row.turns, minutes: Number(row.minutes ?? 0) }]));
 }
