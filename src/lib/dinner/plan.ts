@@ -4,8 +4,8 @@ import { addDays, describeDay } from "@/lib/time";
 // ingredients are read. Nothing here touches the database.
 
 export const LOOK_AHEAD_DAYS = 14;
-export const TITLE_LENGTH = 60;
-export const INGREDIENT_LENGTH = 60;
+export const TITLE_LENGTH = 80;
+export const INGREDIENT_LENGTH = 80;
 export const MAX_DISHES = 12;
 export const MAX_INGREDIENTS = 30;
 
@@ -27,13 +27,17 @@ export function missingDinnerDays(
   existingDays: ReadonlySet<string>,
   today: string,
   lookAhead = LOOK_AHEAD_DAYS,
+  /** Minutes after midnight now. A fixed day whose dinner time has passed today starts next time. */
+  nowMinutes = -1,
 ): { day: string; time: number }[] {
   const timeOn = new Map(rules.map((rule) => [rule.weekday, rule.time]));
   const missing: { day: string; time: number }[] = [];
   for (let offset = 0; offset < lookAhead; offset++) {
     const day = addDays(today, offset);
     const time = timeOn.get(weekdayOf(day));
-    if (time !== undefined && !existingDays.has(day)) missing.push({ day, time });
+    if (time === undefined || existingDays.has(day)) continue;
+    if (offset === 0 && time <= nowMinutes) continue;
+    missing.push({ day, time });
   }
   return missing;
 }

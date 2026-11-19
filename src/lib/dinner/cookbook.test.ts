@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { COOKBOOK, pickFromCookbook, ruledOut } from "./cookbook";
+import { COOKBOOK, needsFromCookbook, pickFromCookbook, recipeFor, ruledOut } from "./cookbook";
 
 const first = () => 0;
 
@@ -8,6 +8,29 @@ describe("ruledOut", () => {
     expect([...ruledOut(["Vegetarian"])].sort()).toEqual(["fish", "meat", "pork"]);
     expect([...ruledOut(["no pork please", "lactose intolerant"])].sort()).toEqual(["dairy", "pork"]);
     expect(ruledOut(["nothing, I eat everything"]).size).toBe(0);
+  });
+});
+
+describe("recipeFor", () => {
+  it("finds a dish however it is typed", () => {
+    expect(recipeFor("tacos")?.title).toBe("Tacos");
+    expect(recipeFor("taco")?.title).toBe("Tacos");
+    expect(recipeFor("Pizza")?.title).toBe("Homemade pizza");
+    expect(recipeFor("pancakes")?.title).toBe("Pancakes");
+    expect(recipeFor("Shakshuka")?.title).toBe("Shakshuka with bread");
+  });
+
+  it("knows nothing about what is not in the cookbook", () => {
+    expect(recipeFor("Bibimbap")).toBeNull();
+    expect(recipeFor("ta")).toBeNull();
+    expect(needsFromCookbook("Just leftovers lol")).toBeNull();
+  });
+
+  it("offers what everyone at the table can eat", () => {
+    const vegetarian = [...ruledOut(["Vegetarian"])];
+    expect(recipeFor("bolognese", vegetarian)?.title).toBe("Lentil bolognese");
+    expect(recipeFor("Tacos", vegetarian)?.title).toBe("Bean tacos");
+    expect(recipeFor("Lasagne", vegetarian)).toBeNull();
   });
 });
 

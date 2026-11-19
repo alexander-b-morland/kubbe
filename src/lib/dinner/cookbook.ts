@@ -40,14 +40,30 @@ export const COOKBOOK: readonly Recipe[] = [
   { title: "Roasted vegetables with couscous", ingredients: ["Couscous", "Sweet potato", "Courgette", "Red onion", "Chickpeas", "Lemon", "Parsley"], contains: ["gluten"] },
 ];
 
-/** What the cookbook says a dish needs, when it knows a dish by that name. */
-export function needsFromCookbook(title: string): string[] | null {
+// "taco" and "tacos", "pizza" and "pizzas": compare without a plural s.
+const stem = (word: string) => word.replace(/e?s$/, "");
+
+/**
+ * The cookbook's recipe for a dish someone typed, when it knows one: the same name, a
+ * name that starts the same way, or one that shares its main word ("pizza" finds
+ * "Homemade pizza"). `ruledOut` leaves out recipes someone at the table cannot eat,
+ * so a vegetarian typing "bolognese" is offered the lentil one.
+ */
+export function recipeFor(title: string, ruledOutKinds: readonly string[] = []): { title: string; ingredients: string[] } | null {
   const wanted = title.trim().toLowerCase();
   if (wanted.length < 3) return null;
+  const edible = COOKBOOK.filter((recipe) => !recipe.contains.some((kind) => ruledOutKinds.includes(kind)));
+  const words = wanted.split(/\s+/).filter((word) => word.length >= 4).map(stem);
   const found =
-    COOKBOOK.find((recipe) => recipe.title.toLowerCase() === wanted) ??
-    COOKBOOK.find((recipe) => recipe.title.toLowerCase().startsWith(wanted) || wanted.startsWith(recipe.title.toLowerCase()));
-  return found ? [...found.ingredients] : null;
+    edible.find((recipe) => recipe.title.toLowerCase() === wanted) ??
+    edible.find((recipe) => recipe.title.toLowerCase().startsWith(wanted) || wanted.startsWith(recipe.title.toLowerCase())) ??
+    edible.find((recipe) => words.length > 0 && words.every((word) => recipe.title.toLowerCase().split(/\s+/).map(stem).includes(word)));
+  return found ? { title: found.title, ingredients: [...found.ingredients] } : null;
+}
+
+/** What the cookbook says a dish needs, when it knows a dish by that name. */
+export function needsFromCookbook(title: string, ruledOutKinds: readonly string[] = []): string[] | null {
+  return recipeFor(title, ruledOutKinds)?.ingredients ?? null;
 }
 
 // What people write under "I don't eat", and what that rules out.

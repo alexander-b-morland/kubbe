@@ -1,6 +1,6 @@
 import { and, asc, count, desc, eq, gte, inArray, isNotNull, isNull, or } from "drizzle-orm";
 import { db, type Transaction } from "@/db";
-import { dishIngredient, expense, expenseShare, membership, shoppingItem } from "@/db/schema";
+import { dinner, dinnerReply, dish, dishIngredient, expense, expenseShare, membership, shoppingItem } from "@/db/schema";
 import { resyncIngredient } from "@/lib/dinner/service";
 import { balances, settleUp, sharesFor, splitEvenly, type Split } from "@/lib/money";
 import { lockHousehold } from "@/lib/settings";
@@ -9,26 +9,55 @@ import { lockHousehold } from "@/lib/settings";
 // asking and which household they are in (see requireExtra).
 
 export const MAX_ITEMS = 200;
-export const ITEM_LENGTH = 60;
+export const ITEM_LENGTH = 80;
 export const MAX_EXPENSES = 5000;
 /** How long something ticked off waits to be paid up for. */
 const BAG_DAYS = 14;
 
+// An item, with the dinner it is for when it is an ingredient.
+const itemFields = {
+  id: shoppingItem.id,
+  name: shoppingItem.name,
+  addedBy: shoppingItem.addedBy,
+  claimedBy: shoppingItem.claimedBy,
+  boughtAt: shoppingItem.boughtAt,
+  boughtBy: shoppingItem.boughtBy,
+  ingredientId: shoppingItem.ingredientId,
+  createdAt: shoppingItem.createdAt,
+  dinnerId: dish.dinnerId,
+  dinnerDay: dinner.day,
+  dishTitle: dish.title,
+};
+
+const items = () =>
+  db
+    .select(itemFields)
+    .from(shoppingItem)
+    .leftJoin(dishIngredient, eq(dishIngredient.id, shoppingItem.ingredientId))
+    .leftJoin(dish, eq(dish.id, dishIngredient.dishId))
+    .leftJoin(dinner, eq(dinner.id, dish.dinnerId));
+
 /** What still needs buying, oldest first, so the list keeps its order as people add to it. */
 export async function listToBuy(householdId: string) {
-  return db
-    .select()
-    .from(shoppingItem)
+  return items()
     .where(and(eq(shoppingItem.householdId, householdId), isNull(shoppingItem.boughtAt)))
-    .orderBy(asc(shoppingItem.createdAt));
+    // A dinner's ingredients arrive together, so the name settles their order.
+    .orderBy(asc(shoppingItem.createdAt), asc(shoppingItem.name));
+}
+
+/** Who said they are in for a dinner: the people a dinner's shopping is split between. */
+export async function goingTo(dinnerId: string): Promise<string[]> {
+  const rows = await db
+    .select({ userId: dinnerReply.userId })
+    .from(dinnerReply)
+    .where(and(eq(dinnerReply.dinnerId, dinnerId), eq(dinnerReply.going, true)));
+  return rows.map((row) => row.userId);
 }
 
 /** What has been bought but not paid up for yet, from the last two weeks. */
 export async function listBought(householdId: string, now: Date) {
   const since = new Date(now.getTime() - BAG_DAYS * 86_400_000);
-  return db
-    .select()
-    .from(shoppingItem)
+  return items()
     .where(
       and(
         eq(shoppingItem.householdId, householdId),
@@ -40,12 +69,13 @@ export async function listBought(householdId: string, now: Date) {
     .orderBy(desc(shoppingItem.boughtAt));
 }
 
-export async function addItem(householdId: string, userId: string, name: string): Promise<"ok" | "full"> {
-  const [open] = await db
-    .select({ items: count() })
+export async function addItem(householdId: string, userId: string, name: string): Promise<"ok" | "full" | "already"> {
+  const open = await db
+    .select({ name: shoppingItem.name })
     .from(shoppingItem)
     .where(and(eq(shoppingItem.householdId, householdId), isNull(shoppingItem.boughtAt)));
-  if (open.items >= MAX_ITEMS) return "full";
+  if (open.length >= MAX_ITEMS) return "full";
+  if (open.some((item) => item.name.trim().toLowerCase() === name.toLowerCase())) return "already";
   await db.insert(shoppingItem).values({ householdId, name, addedBy: userId });
   return "ok";
 }
@@ -55,7 +85,7 @@ const inHousehold = (householdId: string, itemId: string) =>
 
 /** Say "I'll buy it", or take that back. Nobody takes over or drops someone else's claim. */
 export async function setClaim(householdId: string, userId: string, itemId: string, claim: boolean) {
-  await db
+  const [changed] = await db
     .update(shoppingItem)
     .set({ claimedBy: claim ? userId : null })
     .where(
@@ -64,7 +94,12 @@ export async function setClaim(householdId: string, userId: string, itemId: stri
         isNull(shoppingItem.boughtAt),
         claim ? isNull(shoppingItem.claimedBy) : eq(shoppingItem.claimedBy, userId),
       ),
-    );
+    )
+    .returning({ ingredientId: shoppingItem.ingredientId });
+  // The dinner remembers the promise too, so it survives the vote being opened again.
+  if (changed?.ingredientId) {
+    await db.update(dishIngredient).set({ claimedBy: claim ? userId : null }).where(eq(dishIngredient.id, changed.ingredientId));
+  }
 }
 
 /**
@@ -120,8 +155,10 @@ export type ExpenseInput = { paidBy: string; amount: number; description: string
 /** Who paid and each person's part, once everyone named is known to live here and the parts add up. */
 async function checkExpense(householdId: string, input: ExpenseInput) {
   const named = input.split.kind === "even" ? input.split.userIds : input.split.parts.map((part) => part.userId);
-  const [payers, sharers] = await Promise.all([membersAmong(householdId, [input.paidBy]), membersAmong(householdId, named)]);
+  const [payers, inOrder] = await Promise.all([membersAmong(householdId, [input.paidBy]), membersAmong(householdId, named)]);
   if (payers.length === 0) return "nobody" as const;
+  // When an amount does not divide evenly, whoever paid takes the odd øre, not a roommate.
+  const sharers = [...inOrder].sort((a, b) => Number(b === payers[0]) - Number(a === payers[0]));
   // Only people who live here share a cost, in the order they joined, so the odd unit lands the same way each time.
   const split: Split =
     input.split.kind === "even"

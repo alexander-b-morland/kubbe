@@ -54,11 +54,11 @@ export async function saveRules(householdId: string, rules: readonly DinnerRule[
  * Dinners from today on, soonest first, with what the list needs to say about each.
  * Fixed dinner days that have no dinner yet get one here, so they exist once seen.
  */
-export async function listUpcomingDinners(householdId: string, today: string) {
+export async function listUpcomingDinners(householdId: string, today: string, nowMinutes = -1) {
   const upcoming = and(eq(dinner.householdId, householdId), gte(dinner.day, today));
   const [rules, found] = await Promise.all([listRules(householdId), db.select().from(dinner).where(upcoming)]);
   let rows = found;
-  const missing = missingDinnerDays(rules, new Set(rows.map((row) => row.day)), today);
+  const missing = missingDinnerDays(rules, new Set(rows.map((row) => row.day)), today, undefined, nowMinutes);
   if (missing.length > 0) {
     await db.insert(dinner).values(missing.map((slot) => ({ householdId, ...slot }))).onConflictDoNothing();
     rows = await db.select().from(dinner).where(upcoming);
@@ -78,7 +78,8 @@ async function describeDinners(rows: Dinner[]) {
   if (rows.length === 0) return [];
 
   const ids = rows.map((row) => row.id);
-  const [dishes, replies, votes] = await Promise.all([
+  const chosenIds = rows.map((row) => row.chosenDishId).filter((id): id is string => id !== null);
+  const [dishes, replies, votes, needs] = await Promise.all([
     db.select({ id: dish.id, dinnerId: dish.dinnerId, title: dish.title }).from(dish).where(inArray(dish.dinnerId, ids)),
     db.select().from(dinnerReply).where(inArray(dinnerReply.dinnerId, ids)),
     db
@@ -86,11 +87,23 @@ async function describeDinners(rows: Dinner[]) {
       .from(dishVote)
       .innerJoin(dish, eq(dish.id, dishVote.dishId))
       .where(inArray(dish.dinnerId, ids)),
+    // What the decided dishes still need from the shop.
+    chosenIds.length === 0
+      ? []
+      : db
+          .select({ dishId: dishIngredient.dishId, claimedBy: dishIngredient.claimedBy, boughtAt: shoppingItem.boughtAt })
+          .from(dishIngredient)
+          .leftJoin(shoppingItem, eq(shoppingItem.ingredientId, dishIngredient.id))
+          .where(and(inArray(dishIngredient.dishId, chosenIds), eq(dishIngredient.atHome, false))),
   ]);
   return rows.map((row) => {
     const ideas = dishes.filter((idea) => idea.dinnerId === row.id);
+    const open = needs.filter((need) => need.dishId === row.chosenDishId && !need.boughtAt);
     return {
       ...row,
+      /** For a decided dish: how much is left to buy, and how much of that nobody has taken. */
+      toBuy: open.length,
+      untaken: open.filter((need) => !need.claimedBy).length,
       ideas: ideas.length,
       chosenTitle: ideas.find((idea) => idea.id === row.chosenDishId)?.title ?? null,
       /** Who said they are in, and who said they are not. Everyone else has not answered. */
@@ -125,7 +138,7 @@ export async function getDinner(householdId: string, dinnerId: string) {
               name: dishIngredient.name,
               atHome: dishIngredient.atHome,
               itemId: shoppingItem.id,
-              claimedBy: shoppingItem.claimedBy,
+              claimedBy: dishIngredient.claimedBy,
               boughtAt: shoppingItem.boughtAt,
               boughtBy: shoppingItem.boughtBy,
             })
@@ -141,7 +154,8 @@ export async function getDinner(householdId: string, dinnerId: string) {
     dishes: dishes.map((row) => ({
       ...row,
       votes: votes.filter((vote) => vote.dishId === row.id).map((vote) => vote.userId),
-      ingredients: ingredients.filter((ingredient) => ingredient.dishId === row.id),
+      // In the order of the alphabet, whatever the capitals.
+      ingredients: ingredients.filter((ingredient) => ingredient.dishId === row.id).sort((a, b) => a.name.localeCompare(b.name, "en", { sensitivity: "base" })),
     })),
   };
 }
@@ -161,7 +175,8 @@ export async function recentDishTitles(householdId: string, today: string, limit
 }
 
 /** What the people coming to a dinner wrote under "I don't eat". No names attached. */
-export async function avoidsOfThoseComing(householdId: string, going: readonly string[]): Promise<{ people: number; avoids: string[] }> {
+export async function avoidsOfThoseComing(householdId: string, comingIds: readonly string[]): Promise<{ people: number; avoids: string[] }> {
+  const going = [...new Set(comingIds)];
   const rows = await db
     .select({ userId: membership.userId, avoids: profile.avoids })
     .from(membership)
@@ -207,6 +222,7 @@ async function syncShopping(tx: Transaction, householdId: string, userId: string
       dishId: dishIngredient.dishId,
       name: dishIngredient.name,
       atHome: dishIngredient.atHome,
+      claimedBy: dishIngredient.claimedBy,
       itemId: shoppingItem.id,
       boughtAt: shoppingItem.boughtAt,
     })
@@ -221,7 +237,8 @@ async function syncShopping(tx: Transaction, householdId: string, userId: string
   if (drop.length > 0) await tx.delete(shoppingItem).where(and(inArray(shoppingItem.id, drop), isNull(shoppingItem.boughtAt)));
   const add = rows.filter((row) => !row.itemId && wanted(row));
   if (add.length > 0) {
-    await tx.insert(shoppingItem).values(add.map((row) => ({ householdId, name: row.name, addedBy: userId, ingredientId: row.id })));
+    // A promise to buy it, made before the dish was changed or the vote reopened, still stands.
+    await tx.insert(shoppingItem).values(add.map((row) => ({ householdId, name: row.name, addedBy: userId, ingredientId: row.id, claimedBy: row.claimedBy })));
   }
 }
 
@@ -366,29 +383,55 @@ export async function setVote(householdId: string, userId: string, dishId: strin
   });
 }
 
-/** Settle on a dish, or open the vote again with `null`. What needs buying moves to the shopping list. */
-export async function chooseDish(householdId: string, userId: string, dinnerId: string, dishId: string | null): Promise<"ok" | "gone"> {
+/**
+ * Settle on a dish, or open the vote again with `null`. What needs buying moves to the
+ * shopping list. Only someone who is in decides what the table eats.
+ *
+ * What the flat already said about an ingredient carries over to the new dish: if
+ * onions were "we have it" for the lasagne, they are for the bolognese too, and whoever
+ * promised to buy the tomatoes still has them.
+ */
+export async function chooseDish(householdId: string, userId: string, dinnerId: string, dishId: string | null): Promise<"ok" | "gone" | "not-in"> {
   return db.transaction(async (tx) => {
     if (!(await lockDinner(tx, householdId, dinnerId))) return "gone";
+    const [reply] = await tx.select({ going: dinnerReply.going }).from(dinnerReply).where(and(eq(dinnerReply.dinnerId, dinnerId), eq(dinnerReply.userId, userId)));
+    if (!reply?.going) return "not-in";
     if (dishId) {
       const [found] = await tx.select({ id: dish.id }).from(dish).where(and(eq(dish.id, dishId), eq(dish.dinnerId, dinnerId)));
       if (!found) return "gone";
+      const all = await tx
+        .select({ id: dishIngredient.id, dishId: dishIngredient.dishId, name: dishIngredient.name, atHome: dishIngredient.atHome, claimedBy: dishIngredient.claimedBy })
+        .from(dishIngredient)
+        .innerJoin(dish, eq(dish.id, dishIngredient.dishId))
+        .where(eq(dish.dinnerId, dinnerId));
+      const key = (name: string) => name.trim().toLowerCase();
+      for (const mine of all.filter((ingredient) => ingredient.dishId === dishId)) {
+        const same = all.filter((other) => other.dishId !== dishId && key(other.name) === key(mine.name));
+        const atHome = mine.atHome || same.some((other) => other.atHome);
+        const claimedBy = mine.claimedBy ?? same.find((other) => other.claimedBy)?.claimedBy ?? null;
+        if (atHome !== mine.atHome || claimedBy !== mine.claimedBy) {
+          await tx.update(dishIngredient).set({ atHome, claimedBy }).where(eq(dishIngredient.id, mine.id));
+        }
+      }
     }
-    await tx.update(dinner).set({ chosenDishId: dishId }).where(eq(dinner.id, dinnerId));
+    await tx.update(dinner).set({ chosenDishId: dishId, decidedBy: dishId ? userId : null }).where(eq(dinner.id, dinnerId));
     await syncShopping(tx, householdId, userId, dinnerId);
     return "ok";
   });
 }
 
-export async function addIngredient(householdId: string, userId: string, dishId: string, name: string): Promise<"ok" | "full" | "gone"> {
+/** Add to what a dish needs. Names it already has, in any capitals, are skipped. Returns how many were new. */
+export async function addIngredients(householdId: string, userId: string, dishId: string, names: readonly string[]): Promise<number | "full" | "gone"> {
   return db.transaction(async (tx) => {
     const found = await lockDinnerOfDish(tx, householdId, dishId);
     if (!found) return "gone";
-    const [existing] = await tx.select({ ingredients: count() }).from(dishIngredient).where(eq(dishIngredient.dishId, dishId));
-    if (existing.ingredients >= MAX_INGREDIENTS) return "full";
-    await tx.insert(dishIngredient).values({ dishId, name });
+    const existing = await tx.select({ name: dishIngredient.name }).from(dishIngredient).where(eq(dishIngredient.dishId, dishId));
+    const have = new Set(existing.map((row) => row.name.trim().toLowerCase()));
+    const fresh = names.filter((name) => !have.has(name.toLowerCase()));
+    if (existing.length + fresh.length > MAX_INGREDIENTS) return "full";
+    if (fresh.length > 0) await tx.insert(dishIngredient).values(fresh.map((name) => ({ dishId, name })));
     await syncShopping(tx, householdId, userId, found.dinner.id);
-    return "ok";
+    return fresh.length;
   });
 }
 
@@ -403,7 +446,8 @@ export async function setAtHome(householdId: string, userId: string, ingredientI
   await db.transaction(async (tx) => {
     const found = await lockDinnerOfIngredient(tx, householdId, ingredientId);
     if (!found) return;
-    await tx.update(dishIngredient).set({ atHome }).where(eq(dishIngredient.id, ingredientId));
+    // Something the flat has needs no buyer.
+    await tx.update(dishIngredient).set(atHome ? { atHome, claimedBy: null } : { atHome }).where(eq(dishIngredient.id, ingredientId));
     await syncShopping(tx, householdId, userId, found.dinner.id);
   });
 }

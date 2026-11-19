@@ -5,7 +5,7 @@ import { z } from "zod";
 import { hasExtra } from "@/lib/extras";
 import { requireExtra } from "@/lib/extras-guard";
 import type { FormState } from "@/lib/form-state";
-import { parseAmount } from "@/lib/money";
+import { AMOUNT_MESSAGES, amountProblem, parseAmount } from "@/lib/money";
 import { addItem, ITEM_LENGTH, MAX_ITEMS, payForBought, removeItem, setBought, setClaim } from "@/lib/shopping";
 
 export type ShoppingState = (FormState & { saved?: boolean }) | undefined;
@@ -21,12 +21,12 @@ function refresh() {
 
 export async function addItemAction(_previous: ShoppingState, form: FormData): Promise<ShoppingState> {
   const { user, household } = await requireExtra("shopping");
-  const name = String(form.get("name") ?? "").trim();
+  const name = String(form.get("name") ?? "").replace(/\s+/g, " ").trim();
   if (!name) return { error: "Write what to buy." };
   if (name.length > ITEM_LENGTH) return { error: `Keep it under ${ITEM_LENGTH} characters.`, values: { name } };
-  if ((await addItem(household.id, user.id, name)) === "full") {
-    return { error: `The list holds ${MAX_ITEMS} things. Tick some off first.`, values: { name } };
-  }
+  const result = await addItem(household.id, user.id, name);
+  if (result === "full") return { error: `The list holds ${MAX_ITEMS} things. Tick some off first.`, values: { name } };
+  if (result === "already") return { error: `${name} is already on the list.`, values: { name } };
   refresh();
   return { saved: true };
 }
@@ -57,8 +57,10 @@ export async function payForBoughtAction(_previous: ShoppingState, form: FormDat
   const { user, household } = await requireExtra("shopping");
   if (!hasExtra(household, "expenses")) return { error: "Expenses are switched off for this household." };
   const typed = String(form.get("amount") ?? "");
+  const problem = amountProblem(typed);
   const amount = parseAmount(typed);
-  if (amount === null) return { error: "Enter what you paid, like 349 or 349,50.", values: { amount: typed } };
+  if (problem === "empty" || problem === "not-a-number") return { error: "Enter what you paid, like 349 or 349,50.", values: { amount: typed } };
+  if (problem || amount === null) return { error: AMOUNT_MESSAGES[problem ?? "not-a-number"], values: { amount: typed } };
   const sharedBy = form.getAll("sharedBy").map(String);
   if (sharedBy.length === 0) return { error: "Tick at least one person to split it between.", values: { amount: typed } };
 

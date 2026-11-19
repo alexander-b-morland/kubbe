@@ -51,6 +51,17 @@ export async function addHappening(householdId: string, userId: string, input: H
   return "ok";
 }
 
+/** Change a happening. Whoever suggested it can, and so can an admin. Everyone's answers stay. */
+export async function updateHappening(householdId: string, userId: string, happeningId: string, isAdmin: boolean, input: HappeningInput): Promise<boolean> {
+  const found = and(eq(happening.id, happeningId), eq(happening.householdId, householdId));
+  const changed = await db
+    .update(happening)
+    .set(input)
+    .where(isAdmin ? found : and(found, eq(happening.createdBy, userId)))
+    .returning({ id: happening.id });
+  return changed.length > 0;
+}
+
 /** Say whether you are in. */
 export async function setReply(householdId: string, userId: string, happeningId: string, going: boolean) {
   const [found] = await db

@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireExtra } from "@/lib/extras-guard";
 import type { FormState } from "@/lib/form-state";
-import { formatAmount, parseAmount, type Split } from "@/lib/money";
+import { AMOUNT_MESSAGES, amountProblem, formatAmount, parseAmount, type Split } from "@/lib/money";
 import { addExpense, addSettlement, removeExpense, updateExpense, type ExpenseInput } from "@/lib/shopping";
 
 export type ExpenseState = (FormState & { saved?: boolean }) | undefined;
@@ -24,16 +24,20 @@ function readExpense(form: FormData, me: string, currency: string): { input: Exp
   const values = { description, amount: typed };
   if (!description) return { error: "Say what it was for.", values };
   if (description.length > 80) return { error: "Keep the description under 80 characters.", values };
+  const problem = amountProblem(typed);
   const amount = parseAmount(typed);
-  if (amount === null) return { error: "Enter an amount, like 349 or 349,50.", values };
+  if (problem || amount === null) return { error: AMOUNT_MESSAGES[problem ?? "not-a-number"], values };
 
   let split: Split;
   if (form.get("split") === "amounts") {
     const parts: { userId: string; amount: number }[] = [];
     for (const [name, value] of form) {
       if (!name.startsWith("share-") || String(value).trim() === "") continue;
+      // Nothing is nothing, however it is written.
+      if (amountProblem(String(value)) === "zero") continue;
       const userId = personSchema.safeParse(name.slice("share-".length));
       const part = parseAmount(String(value));
+      if (amountProblem(String(value)) === "negative") return { error: "A part can't be less than nothing. Leave the box empty for someone who pays nothing.", values };
       if (!userId.success || part === null) return { error: "Enter each person's part as an amount, like 120 or 120,50. Leave a box empty for nothing.", values };
       parts.push({ userId: userId.data, amount: part });
     }

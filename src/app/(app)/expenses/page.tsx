@@ -5,6 +5,7 @@ import { ActionButton } from "@/components/ui/action-button";
 import { requireExtra } from "@/lib/extras-guard";
 import { listMembers } from "@/lib/households";
 import { balances, formatAmount, settleUp } from "@/lib/money";
+import { listNames } from "@/lib/names";
 import { listExpenses } from "@/lib/shopping";
 import { timeAgo } from "@/lib/time";
 import { removeExpenseAction, settleAction } from "./actions";
@@ -33,32 +34,129 @@ export default async function ExpensesPage() {
   const net = balances(entries);
   const mine = net.get(user.id) ?? 0;
   const transfers = settleUp(net);
+  const involvesMe = transfers.some((transfer) => transfer.from === user.id || transfer.to === user.id);
   const people = members.map((member) => ({ userId: member.userId, name: member.name }));
   const admin = membership.role === "admin";
 
+  const history =
+    entries.length > 0 ? (
+      <section aria-labelledby="history-heading" className="flex flex-col gap-1">
+        <h2 id="history-heading" className="type-display text-3xl">
+          What was paid
+        </h2>
+        <ul className="flex flex-col">
+          {entries.slice(0, 60).map((entry) => {
+            const mayChange = entry.paidBy === user.id || entry.createdBy === user.id || admin;
+            const parts = entry.shares.map((share) => share.amount);
+            const even = parts.length > 0 && Math.max(...parts) - Math.min(...parts) <= 1;
+            const sharers = entry.shares.map((share) => share.userId);
+            const everyone = members.length > 1 && members.every((member) => sharers.includes(member.userId));
+            const receiver = entry.shares[0]?.userId ?? "";
+            const title = entry.isSettlement ? `${who(entry.paidBy)} paid ${receiver === user.id ? "you" : nameOf(receiver)} back` : entry.description;
+            const enteredByOther = entry.createdBy && entry.createdBy !== entry.paidBy ? entry.createdBy : null;
+            return (
+              <li key={entry.id} data-testid="expense" className="flex flex-col gap-1 border-b-2 border-ink/15 py-3">
+                <div className="flex items-baseline justify-between gap-3">
+                  <span className="min-w-0 text-lg font-semibold break-words">{title}</span>
+                  <span className="type-display shrink-0 text-2xl">{money(entry.amount)}</span>
+                </div>
+                <p className="flex flex-wrap items-center gap-x-2 text-ink-soft">
+                  {entry.isSettlement ? (
+                    <>
+                      {enteredByOther ? `Marked as paid by ${who(enteredByOther) === "You" ? "you" : who(enteredByOther)}, ` : ""}
+                      {timeAgo(entry.createdAt, now, household.timeZone)}
+                    </>
+                  ) : (
+                    <>
+                      <span aria-hidden="true">
+                        <Person person={person.get(entry.paidBy)} me={user.id} size="size-6" className="font-semibold text-ink" />
+                      </span>
+                      <span>
+                        <span className="sr-only">{who(entry.paidBy)} </span>
+                        paid,{" "}
+                        {even
+                          ? everyone
+                            ? "split between everyone"
+                            : `split between ${listNames(sharers, user.id, nameOf).replace(/^You\b/, "you")}`
+                          : entry.shares.map((share) => `${who(share.userId)} ${money(share.amount)}`).join(", ")}
+                        , {timeAgo(entry.createdAt, now, household.timeZone)}
+                        {enteredByOther ? `. Entered by ${who(enteredByOther) === "You" ? "you" : who(enteredByOther)}` : ""}
+                      </span>
+                    </>
+                  )}
+                </p>
+                {mayChange ? (
+                  <div className="flex flex-wrap items-start gap-x-5 gap-y-1">
+                    {!entry.isSettlement ? (
+                      <details className="group min-w-0 flex-1">
+                        <summary className="flex min-h-11 w-fit cursor-pointer list-none items-center gap-1 rounded font-bold underline underline-offset-4 outline-none focus-visible:ring-4 focus-visible:ring-fjord [&::-webkit-details-marker]:hidden">
+                          <span className="group-open:hidden">Change</span>
+                          <span className="hidden group-open:inline">Close</span>
+                          <span className="sr-only">: {entry.description}</span>
+                        </summary>
+                        <div className="rounded-2xl bg-heather/30 p-4">
+                          <ExpenseForm
+                            people={people}
+                            me={user.id}
+                            currency={household.currency}
+                            existing={{
+                              id: entry.id,
+                              description: entry.description,
+                              amount: entry.amount,
+                              paidBy: entry.paidBy,
+                              shares: Object.fromEntries(entry.shares.map((share) => [share.userId, share.amount])),
+                            }}
+                          />
+                        </div>
+                      </details>
+                    ) : null}
+                    <ActionButton
+                      look="link"
+                      align="start"
+                      about={title}
+                      confirm={entry.isSettlement ? `Remove this repayment of ${money(entry.amount)}? The debt comes back.` : `Remove ${entry.description}, ${money(entry.amount)}?`}
+                      action={removeExpenseAction.bind(null, entry.id)}
+                    >
+                      Remove
+                    </ActionButton>
+                  </div>
+                ) : null}
+              </li>
+            );
+          })}
+        </ul>
+      </section>
+    ) : undefined;
+
   return (
-    <AreaPage area="expenses" eyebrow="Expenses" title={mine > 0 ? `You're owed ${money(mine)}` : mine < 0 ? `You owe ${money(mine)}` : "All square"}>
+    <AreaPage
+      area="expenses"
+      eyebrow="Expenses"
+      title={mine > 0 ? `You're owed ${money(mine)}` : mine < 0 ? `You owe ${money(mine)}` : "All square"}
+      aside={history}
+    >
       {transfers.length > 0 ? (
         <section aria-labelledby="settle-heading" className="flex flex-col gap-1" data-testid="settle">
           <h2 id="settle-heading" className="type-display text-3xl">
-            To get square
+            {involvesMe ? "To get square" : "Between the others"}
           </h2>
           <ul className="flex flex-col">
             {transfers.map((transfer) => {
               const involved = transfer.from === user.id || transfer.to === user.id || admin;
+              const sentence = `${transfer.from === user.id ? "You pay" : `${nameOf(transfer.from)} pays`} ${transfer.to === user.id ? "you" : nameOf(transfer.to)} ${money(transfer.amount)}`;
               return (
                 <li key={`${transfer.from}-${transfer.to}`} className="flex flex-wrap items-center justify-between gap-3 border-b-2 border-ink/15 py-3">
                   <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-lg font-semibold">
-                    <Person person={person.get(transfer.from)} me={user.id} />
-                    {transfer.from === user.id ? "pay" : "pays"}
-                    <Person person={person.get(transfer.to)} me={user.id} />
-                    <span className="type-display text-2xl">{money(transfer.amount)}</span>
-                    <span className="sr-only">
-                      {transfer.from === user.id ? "You pay" : `${nameOf(transfer.from)} pays`} {transfer.to === user.id ? "you" : nameOf(transfer.to)} {money(transfer.amount)}
+                    <span aria-hidden="true" className="flex flex-wrap items-center gap-x-2">
+                      <Person person={person.get(transfer.from)} me={user.id} />
+                      {transfer.from === user.id ? "pay" : "pays"}
+                      <Person person={person.get(transfer.to)} me={user.id} />
+                      <span className="type-display text-2xl whitespace-nowrap">{money(transfer.amount)}</span>
                     </span>
+                    <span className="sr-only">{sentence}</span>
                   </span>
                   {involved ? (
-                    <ActionButton confirm={`Mark ${money(transfer.amount)} as paid?`} action={settleAction.bind(null, transfer.from, transfer.to, transfer.amount)}>
+                    <ActionButton about={sentence} confirm={`Mark ${money(transfer.amount)} as paid?`} action={settleAction.bind(null, transfer.from, transfer.to, transfer.amount)}>
                       Paid
                     </ActionButton>
                   ) : null}
@@ -66,6 +164,10 @@ export default async function ExpensesPage() {
               );
             })}
           </ul>
+          <p className="pt-2 text-sm text-ink-soft">
+            Debts are added up across the whole flat and paid the shortest way, so who you pay may not be who you shared most with.
+            Either of the two can mark a payment as paid.
+          </p>
         </section>
       ) : null}
 
@@ -75,76 +177,15 @@ export default async function ExpensesPage() {
           {chevron}
         </summary>
         <div className="pb-6">
-          <ExpenseForm people={people} me={user.id} currency={household.currency} count={entries.length} />
+          <ExpenseForm people={people} me={user.id} currency={household.currency} />
         </div>
       </details>
 
-      {entries.length > 0 ? (
-        <section aria-labelledby="history-heading" className="flex flex-col gap-1">
-          <h2 id="history-heading" className="type-display text-3xl">
-            What was paid
-          </h2>
-          <ul className="flex flex-col">
-            {entries.slice(0, 40).map((entry) => {
-              const mayChange = entry.paidBy === user.id || entry.createdBy === user.id || admin;
-              const even = new Set(entry.shares.map((share) => share.amount)).size <= 1 || Math.max(...entry.shares.map((share) => share.amount)) - Math.min(...entry.shares.map((share) => share.amount)) <= 1;
-              return (
-                <li key={entry.id} data-testid="expense" className="flex flex-col gap-1 border-b-2 border-ink/15 py-3">
-                  <div className="flex items-baseline justify-between gap-3">
-                    <span className="min-w-0 text-lg font-semibold break-words">
-                      {entry.isSettlement ? `${who(entry.paidBy)} paid ${entry.shares[0]?.userId === user.id ? "you" : nameOf(entry.shares[0]?.userId ?? "")} back` : entry.description}
-                    </span>
-                    <span className="type-display shrink-0 text-2xl">{money(entry.amount)}</span>
-                  </div>
-                  <p className="flex flex-wrap items-center gap-x-2 text-ink-soft">
-                    {entry.isSettlement ? (
-                      timeAgo(entry.createdAt, now, household.timeZone)
-                    ) : (
-                      <>
-                        <Person person={person.get(entry.paidBy)} me={user.id} size="size-6" className="font-semibold text-ink" />
-                        paid, {even ? `split between ${entry.shares.length}` : entry.shares.map((share) => `${who(share.userId)} ${money(share.amount)}`).join(", ")}, {timeAgo(entry.createdAt, now, household.timeZone)}
-                      </>
-                    )}
-                  </p>
-                  {mayChange ? (
-                    <div className="flex flex-col gap-2">
-                      {!entry.isSettlement ? (
-                        <details className="group">
-                          <summary className="flex min-h-11 w-fit cursor-pointer list-none items-center gap-1 rounded font-bold underline underline-offset-4 outline-none focus-visible:ring-4 focus-visible:ring-fjord [&::-webkit-details-marker]:hidden">
-                            <span>Change</span>
-                            <span className="sr-only">{entry.description}</span>
-                          </summary>
-                          <div className="rounded-2xl bg-heather/30 p-4">
-                            <ExpenseForm
-                              people={people}
-                              me={user.id}
-                              currency={household.currency}
-                              existing={{
-                                id: entry.id,
-                                description: entry.description,
-                                amount: entry.amount,
-                                paidBy: entry.paidBy,
-                                shares: Object.fromEntries(entry.shares.map((share) => [share.userId, share.amount])),
-                              }}
-                            />
-                          </div>
-                        </details>
-                      ) : null}
-                      <ActionButton look="link" align="start" label={`Remove ${entry.description}`} confirm="Remove this?" action={removeExpenseAction.bind(null, entry.id)}>
-                        Remove
-                      </ActionButton>
-                    </div>
-                  ) : null}
-                </li>
-              );
-            })}
-          </ul>
-        </section>
-      ) : (
+      {entries.length === 0 ? (
         <p className="text-lg">
           When someone pays for something for the flat, log it here or tick it off on the shopping list. Kubbe keeps track of who owes whom.
         </p>
-      )}
+      ) : null}
     </AreaPage>
   );
 }

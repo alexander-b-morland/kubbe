@@ -28,6 +28,12 @@ describe("missingDinnerDays", () => {
     expect(days).toEqual(["2026-11-16"]);
   });
 
+  it("does not make a dinner for today once its time has passed", () => {
+    const days = (nowMinutes: number) => missingDinnerDays(rules, new Set(), "2026-11-16", 7, nowMinutes).map((slot) => slot.day);
+    expect(days(1079)).toEqual(["2026-11-16", "2026-11-19"]);
+    expect(days(1080)).toEqual(["2026-11-19"]);
+  });
+
   it("finds nothing without fixed days", () => {
     expect(missingDinnerDays([], new Set(), "2026-11-16")).toEqual([]);
   });
@@ -55,7 +61,7 @@ describe("parseIngredients", () => {
   it("caps the list and the length of each", () => {
     const many = parseIngredients(Array.from({ length: 50 }, (_, index) => `thing ${index}`).join(","));
     expect(many).toHaveLength(30);
-    expect(parseIngredients("x".repeat(200))[0]).toHaveLength(60);
+    expect(parseIngredients("x".repeat(200))[0]).toHaveLength(80);
   });
 });
 

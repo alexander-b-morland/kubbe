@@ -2,11 +2,11 @@
 
 import { useActionState, useEffect, useMemo, useState, useTransition } from "react";
 import { ActionButton } from "@/components/ui/action-button";
-import { Field, focusRing, FormError, SubmitButton } from "@/components/ui/form";
+import { Field, focusRing, FormError, Locked, QuickAddForm, Remaining, SubmitButton } from "@/components/ui/form";
 import { SavableForm } from "@/components/ui/savable-form";
-import { COOKBOOK, needsFromCookbook, type DishIdea } from "@/lib/dinner/cookbook";
-import { WEEKDAYS } from "@/lib/dinner/plan";
-import { addDinnerAction, addDishAction, addIdeaAction, addIngredientAction, ideasAction, needsAction, saveRulesAction, type IdeasState } from "./actions";
+import { COOKBOOK, recipeFor, type DishIdea } from "@/lib/dinner/cookbook";
+import { TITLE_LENGTH, WEEKDAYS } from "@/lib/dinner/plan";
+import { addDinnerAction, addDishAction, addIdeaAction, addIngredientAction, ideasAction, needsAction, saveRulesAction, type DinnerState, type IdeasState } from "./actions";
 
 /** Which weekdays always have a dinner, and when. */
 export function RulesForm({ weekdays, time }: { weekdays: readonly number[]; time: string }) {
@@ -26,7 +26,7 @@ export function RulesForm({ weekdays, time }: { weekdays: readonly number[]; tim
                 aria-label={name}
                 className="peer absolute inset-0 size-full cursor-pointer opacity-0"
               />
-              <span className="flex h-11 min-w-12 items-center justify-center rounded-full border-2 border-ink px-3 font-bold peer-checked:bg-ink peer-checked:text-paper peer-focus-visible:ring-4 peer-focus-visible:ring-fjord">
+              <span className="flex h-11 min-w-12 items-center justify-center rounded-full border-2 border-ink px-3 font-bold peer-checked:bg-ink peer-checked:text-paper peer-focus-visible:ring-4 peer-focus-visible:ring-fjord peer-focus-visible:ring-offset-2">
                 {name.slice(0, 3)}
               </span>
             </label>
@@ -39,19 +39,21 @@ export function RulesForm({ weekdays, time }: { weekdays: readonly number[]; tim
 }
 
 /** Plan a dinner on one day. Whoever plans it says whether they are in themselves. */
-export function AddDinnerForm({ today }: { today: string }) {
+export function AddDinnerForm({ today, day }: { today: string; /** The day to start on, when coming from the calendar. */ day?: string }) {
   const [state, formAction] = useActionState(addDinnerAction, undefined);
   return (
     <form action={formAction} noValidate className="flex flex-col gap-4">
-      <div className="grid grid-cols-2 gap-3">
-        <Field label="Day" name="day" type="date" min={today} defaultValue={state?.values?.day ?? today} />
-        <Field label="Time" name="time" type="time" defaultValue={state?.values?.time ?? "18:00"} />
-      </div>
-      <label className="flex items-center gap-3 text-lg font-semibold">
-        <input type="checkbox" name="in" defaultChecked className="size-6 accent-ink" />
-        I&apos;m in myself
-      </label>
-      <p className="-mt-2 text-sm text-ink-soft">The others answer for themselves once it is planned.</p>
+      <Locked>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Day" name="day" type="date" min={today} defaultValue={state?.values?.day ?? day ?? today} />
+          <Field label="Time" name="time" type="time" defaultValue={state?.values?.time ?? "18:00"} />
+        </div>
+        <label className="flex items-center gap-3 text-lg font-semibold">
+          <input type="checkbox" name="in" defaultChecked className="size-6 accent-ink" />
+          I&apos;m in myself
+        </label>
+        <p className="-mt-2 text-sm text-ink-soft">The others answer for themselves once it is planned.</p>
+      </Locked>
       <FormError message={state?.error} />
       <SubmitButton pendingLabel="Planning…">Plan dinner</SubmitButton>
     </form>
@@ -62,24 +64,33 @@ type Hint = { ingredients: string[]; source: "claude" | "cookbook" };
 
 /**
  * Suggest a dish, with what it needs. While the name is typed, the form looks up what
- * such a dish usually needs and offers it: one tap, or Tab in the empty box, takes it.
+ * such a dish usually needs and offers it below the box: one press takes it. The box
+ * itself only ever holds what will be sent.
  */
-export function DishForm({ dinnerId, count }: { dinnerId: string; count: number }) {
-  // Built again after each suggestion, so the fields start empty.
-  return <DishFields key={count} dinnerId={dinnerId} />;
-}
-
-function DishFields({ dinnerId }: { dinnerId: string }) {
-  const [state, formAction] = useActionState(addDishAction.bind(null, dinnerId), undefined);
-  const [title, setTitle] = useState(state?.values?.title ?? "");
-  const [needs, setNeeds] = useState(state?.values?.ingredients ?? "");
+export function DishForm({ dinnerId, ruledOut }: { dinnerId: string; /** What the people eating cannot have, so the cookbook offers a dish that fits. */ ruledOut: readonly string[] }) {
+  const [title, setTitle] = useState("");
+  const [needs, setNeeds] = useState("");
+  // The list that was taken from an offer, untouched since. If the dish is renamed, it
+  // belongs to the old name, and the new offer may replace it.
+  const [taken, setTaken] = useState("");
   const [remote, setRemote] = useState<{ for: string; found: Hint | null } | null>(null);
+  // The fields empty when the dish is up, not when the list of dishes changes: a
+  // roommate's suggestion must not wipe what is being typed here.
+  const [state, formAction] = useActionState(async (previous: DinnerState, form: FormData) => {
+    const result = await addDishAction(dinnerId, previous, form);
+    if (result?.saved) {
+      setTitle("");
+      setNeeds("");
+      setTaken("");
+    }
+    return result;
+  }, undefined);
 
   const wanted = title.trim();
-  const empty = needs.trim() === "";
+  const replaceable = needs.trim() === "" || needs === taken;
   // The cookbook is on hand and costs nothing, so it answers at once.
-  const known = useMemo(() => needsFromCookbook(wanted), [wanted]);
-  const askClaude = wanted.length >= 3 && empty && !known;
+  const known = useMemo(() => recipeFor(wanted, ruledOut)?.ingredients ?? null, [wanted, ruledOut]);
+  const askClaude = wanted.length >= 3 && replaceable && !known;
 
   // For a dish the cookbook does not know, ask a moment after the typing stops.
   useEffect(() => {
@@ -97,85 +108,88 @@ function DishFields({ dinnerId }: { dinnerId: string }) {
     };
   }, [askClaude, wanted, dinnerId]);
 
-  const offer: Hint | null = !empty ? null : known ? { ingredients: known, source: "cookbook" } : remote?.for === wanted ? remote.found : null;
+  const found: Hint | null = known ? { ingredients: known, source: "cookbook" } : remote?.for === wanted ? remote.found : null;
+  const offered = found?.ingredients.join(", ") ?? "";
+  const offer = replaceable && found && offered !== needs ? found : null;
   const looking = askClaude && remote?.for !== wanted;
   const take = () => {
-    if (offer) setNeeds(offer.ingredients.join(", "));
+    setNeeds(offered);
+    setTaken(offered);
   };
 
   return (
     <form action={formAction} noValidate className="flex flex-col gap-3" data-testid="dish-form">
-      <Field
-        label="Suggest a dish"
-        name="title"
-        placeholder="Tacos"
-        maxLength={60}
-        value={title}
-        onChange={(event) => setTitle(event.target.value)}
-        list="dish-names"
-        autoComplete="off"
-      />
-      <datalist id="dish-names">
-        {COOKBOOK.map((recipe) => (
-          <option key={recipe.title} value={recipe.title} />
-        ))}
-      </datalist>
-      <label className="flex flex-col gap-1.5">
-        <span className="text-sm font-semibold">What it needs</span>
-        <textarea
-          name="ingredients"
-          rows={3}
-          value={needs}
-          onChange={(event) => setNeeds(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === "Tab" && !event.shiftKey && offer) {
-              event.preventDefault();
-              take();
-            }
-          }}
-          placeholder={offer ? offer.ingredients.join(", ") : "Tortillas, minced beef, salsa"}
-          className={`w-full rounded-xl border-2 border-ink bg-white/70 px-4 py-3 text-lg placeholder:text-ink-soft ${focusRing}`}
-        />
-        <span className="text-sm text-ink-soft">Separate with commas or new lines. You can add more later.</span>
-      </label>
-      <div aria-live="polite" className="min-h-6">
-        {offer ? (
-          <div className="flex flex-col items-start gap-2 rounded-2xl bg-salmon/30 p-4" data-testid="needs-offer">
-            <p className="font-semibold">
-              {offer.source === "claude" ? "Claude thinks it needs" : "It usually needs"}: <span className="font-normal">{offer.ingredients.join(", ")}</span>
-            </p>
-            <div className="flex flex-wrap items-center gap-3">
-              <button
-                type="button"
-                onClick={take}
-                className={`min-h-11 rounded-full border-2 border-ink bg-ink px-4 py-1.5 text-sm font-bold text-paper ${focusRing}`}
-              >
-                Use these
-              </button>
-              <span className="hidden text-sm text-ink-soft lg:inline">or press Tab in the box</span>
+      <Locked>
+        <label className="flex flex-col gap-1.5">
+          <span className="text-sm font-semibold">Suggest a dish</span>
+          <input
+            name="title"
+            value={title}
+            onChange={(event) => setTitle(event.target.value)}
+            placeholder="What would you like to eat?"
+            list="dish-names"
+            autoComplete="off"
+            className={`h-14 w-full rounded-xl border-2 border-ink bg-white/70 px-4 text-lg placeholder:text-ink-soft ${focusRing}`}
+          />
+          <Remaining used={title.length} max={TITLE_LENGTH} />
+        </label>
+        <datalist id="dish-names">
+          {COOKBOOK.map((recipe) => (
+            <option key={recipe.title} value={recipe.title} />
+          ))}
+        </datalist>
+        <label className="flex flex-col gap-1.5">
+          <span className="text-sm font-semibold">What it needs</span>
+          <textarea
+            name="ingredients"
+            rows={3}
+            value={needs}
+            onChange={(event) => setNeeds(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Tab" && !event.shiftKey && offer && needs.trim() === "") {
+                event.preventDefault();
+                take();
+              }
+            }}
+            placeholder="For example: tortillas, beans, salsa"
+            className={`w-full rounded-xl border-2 border-ink bg-white/70 px-4 py-3 text-lg placeholder:text-ink-soft ${focusRing}`}
+          />
+          <span className="text-sm text-ink-soft">Separate with commas or new lines. You can add more later.</span>
+        </label>
+        <div aria-live="polite" className="min-h-6">
+          {offer ? (
+            <div className="flex flex-col items-start gap-2 rounded-2xl border-2 border-ink bg-paper p-4" data-testid="needs-offer">
+              <p className="font-semibold">
+                {offer.source === "claude" ? "Claude thinks it needs" : "It usually needs"}: <span className="font-normal">{offered}</span>
+              </p>
+              <div className="flex flex-wrap items-center gap-3">
+                <button type="button" onClick={take} className={`min-h-11 rounded-full border-2 border-ink bg-ink px-4 py-1.5 text-sm font-bold text-paper ${focusRing}`}>
+                  {needs.trim() === "" ? "Use these" : "Replace with these"}
+                </button>
+                {needs.trim() === "" ? <span className="hidden text-sm text-ink-soft lg:inline">or press Tab in the box</span> : null}
+              </div>
             </div>
-          </div>
-        ) : looking ? (
-          <p className="text-sm text-ink-soft">Looking up what it needs…</p>
-        ) : null}
-      </div>
+          ) : looking ? (
+            <p className="text-sm text-ink-soft">Looking up what it needs…</p>
+          ) : null}
+        </div>
+      </Locked>
       <FormError message={state?.error} />
       <SubmitButton pendingLabel="Putting it up…">Put it to the vote</SubmitButton>
     </form>
   );
 }
 
-/** One more thing the chosen dish needs. */
-export function IngredientForm({ dishId, count }: { dishId: string; count: number }) {
-  const [state, formAction] = useActionState(addIngredientAction.bind(null, dishId), undefined);
+/** More that the chosen dish needs. Several at once, with commas between them. */
+export function IngredientForm({ dishId }: { dishId: string }) {
   return (
-    <form key={count} action={formAction} noValidate className="flex flex-col gap-3">
-      <Field label="Something else it needs" name="name" placeholder="Limes" maxLength={60} defaultValue={state?.values?.name} autoComplete="off" />
-      <FormError message={state?.error} />
-      <SubmitButton pendingLabel="Adding…" variant="secondary">
-        Add
-      </SubmitButton>
-    </form>
+    <QuickAddForm
+      action={addIngredientAction.bind(null, dishId)}
+      name="name"
+      label="Something else it needs"
+      placeholder="Limes, coriander"
+      variant="secondary"
+    />
   );
 }
 
@@ -233,8 +247,8 @@ export function IdeasPanel({ dinnerId }: { dinnerId: string }) {
 
 function Idea({ idea, dinnerId, onAdded }: { idea: DishIdea; dinnerId: string; onAdded: () => void }) {
   return (
-    <li data-testid="idea" className="flex flex-col gap-2 rounded-2xl bg-salmon/30 p-4">
-      <h4 className="type-display text-2xl break-words">{idea.title}</h4>
+    <li data-testid="idea" className="flex flex-col gap-2 rounded-2xl border-2 border-ink/25 bg-paper p-4">
+      <h4 className="text-xl font-bold break-words">{idea.title}</h4>
       <p className="break-words">{idea.ingredients.join(", ")}</p>
       <ActionButton
         align="start"

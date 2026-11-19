@@ -9,12 +9,13 @@ import { INGREDIENT_LENGTH, MAX_DISHES, MAX_INGREDIENTS, minutesOf, parseIngredi
 import {
   addDinner,
   addDish,
-  addIngredient,
+  addIngredients,
   avoidsOfThoseComing,
   chooseDish,
   getDinner,
   recentDishTitles,
   removeDish,
+  removeIngredient,
   saveRules,
   setGoing,
   setAtHome,
@@ -148,7 +149,8 @@ export async function ideasAction(dinnerId: string): Promise<IdeasState> {
   const found = await getDinner(household.id, dinnerId);
   if (!found) return { error: "That dinner is gone." };
   const [coming, recent] = await Promise.all([
-    avoidsOfThoseComing(household.id, found.going),
+    // The person asking counts too, whether or not they have said they are in yet.
+    avoidsOfThoseComing(household.id, [...found.going, user.id]),
     recentDishTitles(household.id, dayInZone(new Date(), household.timeZone)),
   ]);
   const { ideas, source } = await suggestDishes({
@@ -178,7 +180,7 @@ export async function needsAction(dinnerId: string, title: string): Promise<Need
   if (!allowed) return undefined;
   const found = await getDinner(household.id, dinnerId);
   if (!found) return undefined;
-  const coming = await avoidsOfThoseComing(household.id, found.going);
+  const coming = await avoidsOfThoseComing(household.id, [...found.going, user.id]);
   const needs = await suggestNeeds({ title, avoids: coming.avoids, language: "en" });
   return needs ?? undefined;
 }
@@ -203,18 +205,32 @@ export async function chooseAction(dinnerId: string, dishId: string | null): Pro
   if (!isId(dinnerId) || (dishId !== null && !isId(dishId))) return { error: "That dish is gone." };
   const result = await chooseDish(household.id, user.id, dinnerId, dishId);
   refresh();
+  if (result === "not-in") return { error: "Say you're in first. Whoever is eating decides what is cooked." };
   return result === "gone" ? { error: "That dish is gone." } : { saved: true };
 }
 
 export async function addIngredientAction(dishId: string, _previous: DinnerState, form: FormData): Promise<DinnerState> {
   const { user, household } = await requireExtra("dinner");
-  const name = String(form.get("name") ?? "").replace(/\s+/g, " ").trim();
-  if (!name) return { error: "Write what is needed." };
-  if (name.length > INGREDIENT_LENGTH) return { error: `Keep it under ${INGREDIENT_LENGTH} characters.`, values: { name } };
+  const name = String(form.get("name") ?? "");
+  // Several at once, separated by commas, the way the suggest form takes them.
+  const names = parseIngredients(name);
+  if (names.length === 0) return { error: "Write what is needed." };
+  if (name.split(/[\n,;]+/).some((part) => part.trim().length > INGREDIENT_LENGTH)) {
+    return { error: `Keep each one under ${INGREDIENT_LENGTH} characters.`, values: { name } };
+  }
   if (!isId(dishId)) return { error: "That dish is gone." };
-  const result = await addIngredient(household.id, user.id, dishId, name);
+  const result = await addIngredients(household.id, user.id, dishId, names);
   if (result === "full") return { error: `A dish holds ${MAX_INGREDIENTS} ingredients.`, values: { name } };
   if (result === "gone") return { error: "That dish is gone." };
+  refresh();
+  if (result === 0) return { error: names.length === 1 ? `${names[0]} is already listed.` : "Those are already listed.", values: { name } };
+  return { saved: true };
+}
+
+/** Take an ingredient off a dish, for one that was added by mistake. */
+export async function removeIngredientAction(ingredientId: string): Promise<DinnerState> {
+  const { household } = await requireExtra("dinner");
+  if (isId(ingredientId)) await removeIngredient(household.id, ingredientId);
   refresh();
   return { saved: true };
 }

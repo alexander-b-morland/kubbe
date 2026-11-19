@@ -9,7 +9,7 @@ const tilt = ["-rotate-1", "rotate-[0.7deg]", "-rotate-[0.4deg]", "rotate-1"];
 export type StickyNote = { id: string; body: string; isTask: boolean; done: boolean; fresh?: boolean };
 
 /**
- * One note on the whiteboard: a yellow sticky for something to know, a pink one for
+ * One note on the whiteboard: a yellow sticky for something to know, a pale blue one for
  * something to do. The author's face sits in the corner.
  */
 export function Sticky({
@@ -19,6 +19,7 @@ export function Sticky({
   line,
   children,
   small = false,
+  anchor = false,
 }: {
   note: StickyNote;
   index: number;
@@ -28,12 +29,15 @@ export function Sticky({
   /** Buttons, on the full board. */
   children?: ReactNode;
   small?: boolean;
+  /** Give the note an address a link can point at. Only on the board itself. */
+  anchor?: boolean;
 }) {
   return (
     <li
+      id={anchor ? note.id : undefined}
       data-testid="note"
       data-state={!note.isTask ? "note" : note.done ? "done" : "open"}
-      className={`flex flex-col gap-3 rounded-sm p-4 shadow-[2px_3px_0_0_rgba(30,42,68,0.25)] ${note.isTask ? "bg-blush" : "bg-note"} ${tilt[index % tilt.length]}`}
+      className={`flex flex-col gap-3 rounded-sm p-4 shadow-[2px_3px_0_0_rgba(30,42,68,0.25)] ${note.isTask ? "bg-todo" : "bg-note"} ${tilt[index % tilt.length]}`}
     >
       <p className={`${small ? "line-clamp-4 text-base" : "text-lg"} font-semibold break-words whitespace-pre-line ${note.done ? "text-ink-soft" : ""}`}>
         {note.done ? <Struck draw={note.fresh}>{note.body}</Struck> : note.body}

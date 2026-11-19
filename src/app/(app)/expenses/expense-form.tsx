@@ -1,10 +1,10 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { SplitFields } from "@/components/money/split-fields";
-import { Field, FormError, Saved, selectLook, SubmitButton } from "@/components/ui/form";
+import { Field, FormError, Locked, Saved, selectLook, SubmitButton } from "@/components/ui/form";
 import { formatAmount } from "@/lib/money";
-import { addExpenseAction, updateExpenseAction } from "./actions";
+import { addExpenseAction, updateExpenseAction, type ExpenseState } from "./actions";
 
 type Person = { userId: string; name: string };
 
@@ -15,21 +15,26 @@ export function ExpenseForm({
   people,
   me,
   currency,
-  count,
   existing,
 }: {
   people: Person[];
   me: string;
   currency: string;
-  /** Changes after each new expense, so the empty form starts over. */
-  count?: number;
   existing?: Existing;
 }) {
-  const [state, formAction] = useActionState(existing ? updateExpenseAction.bind(null, existing.id) : addExpenseAction, undefined);
+  // After a new expense is added, the parts start empty again. Counting our own saves,
+  // not the list's length: someone else's expense must not wipe a form being filled in.
+  const [round, setRound] = useState(0);
+  const [state, formAction] = useActionState(async (previous: ExpenseState, form: FormData) => {
+    const result = await (existing ? updateExpenseAction.bind(null, existing.id) : addExpenseAction)(previous, form);
+    if (result?.saved && !existing) setRound((value) => value + 1);
+    return result;
+  }, undefined);
   // Someone who paid but has moved out stays selectable while correcting their expense.
   const payers = existing && !people.some((person) => person.userId === existing.paidBy) ? [...people, { userId: existing.paidBy, name: "Someone who moved out" }] : people;
   return (
-    <form key={existing ? JSON.stringify(existing) : count} action={formAction} noValidate className="flex flex-col gap-4">
+    <form key={existing ? JSON.stringify(existing) : "new"} action={formAction} noValidate className="flex flex-col gap-4">
+      <Locked>
       <Field
         label="What was it for"
         name="description"
@@ -55,7 +60,8 @@ export function ExpenseForm({
           ))}
         </select>
       </label>
-      <SplitFields people={people} currency={currency} initial={existing?.shares} />
+      <SplitFields key={round} people={people} currency={currency} initial={existing?.shares} />
+      </Locked>
       <FormError message={state?.error} />
       <Saved show={Boolean(existing) && state?.saved} />
       <SubmitButton pendingLabel={existing ? "Saving…" : "Adding…"} variant={existing ? "secondary" : "primary"}>
