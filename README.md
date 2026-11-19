@@ -35,6 +35,8 @@ The server enforces all of it. If two people press Book on the same slot at the 
 
 **Calendar.** One month for the whole household: everyone's bookings, cleaning turns, dinners and happenings, each in its area's colour, with the faces of who is in or in charge. Pick a day to see it in full, with what you answered, or a person to see only theirs.
 
+**English and Norwegian.** One switch turns the whole app, error messages included, to Norwegian (bokmål) or back. It is on the front page before you sign in and under You afterwards, and the choice follows your account to another phone. Dinner ideas from Claude come in the language you read.
+
 **The other areas.** A household switches each on or off.
 
 - **Dinner.** Plan a dinner on a day, or pick fixed dinner days. Whoever plans one says whether they are in; everyone else answers for themselves. Anyone suggests dishes and votes for what they would eat, someone volunteers to cook and someone to clean up, and then you decide. The top of the screen always says where the dinner stands. Deciding puts what needs buying on the shopping list, and each ingredient is either "we have it" or taken by someone who will buy it.
@@ -74,6 +76,7 @@ A few decisions worth knowing about:
 - **The shopping list follows the dinner.** Every change to a dinner ends by making the list match it: what the chosen dish needs and nobody has at home is on the list, and nothing else from that dinner is. What is already bought stays.
 - **Claude is sent as little as possible.** How many are eating, what they wrote under "I don't eat", and the names of dishes. No names of people. Whatever comes back is cut to size and only stored when someone uses it. Asking is capped per person, per household and for the whole app.
 - **One list of areas.** `src/lib/areas.ts` gives each of the eight areas its name, address, drawing and colour, and the tiles, headers and calendar all read from it.
+- **Two languages from one text.** The English text in the code is the key to the Norwegian one, so a screen reads as plain English in the source. A test reads the source, finds every text the app can show, and fails if one has no Norwegian.
 - **Money is whole numbers.** Amounts are stored in the smallest unit and split so the parts always add up.
 - **Changes to who lives where are atomic.** They lock the household first, so two people acting at once cannot, for example, both be the last admin to leave.
 
@@ -178,7 +181,7 @@ To run the browser tests against a deployed site instead of your machine, set `E
 ## How it was checked
 
 - **Unit tests** cover the booking rules (the slot grid, the daily cap, two in a row, the booking horizon, both clock-change days), the cleaning rota, the status lines, splitting money and settling up, dinner days and the cookbook, the "Yours to do" list, join codes, colours and the redirect guard.
-- **Browser tests** run whole stories at phone size with two or three people at once: signing up and joining by invite link, two roommates pressing Book on the same slot at the same moment, an admin changing the rules, washing then drying, the cleaning rota, removing someone, leaving, the noticeboard, shopping that turns into expenses (split evenly and unevenly, and corrected), a happening answered from Home and found on the calendar, and a dinner from first idea to shopping list. One more walks through a lived-in flat and screenshots every screen on a phone and on a wide screen, and checks that nothing sticks out sideways on a 320-pixel phone.
+- **Browser tests** run whole stories at phone size with two or three people at once: signing up and joining by invite link, two roommates pressing Book on the same slot at the same moment, an admin changing the rules, washing then drying, the cleaning rota, removing someone, leaving, the noticeboard, shopping that turns into expenses (split evenly and unevenly, and corrected), a happening answered from Home and found on the calendar, and a dinner from first idea to shopping list. One signs up, starts a household, books, cleans and plans a dinner entirely in Norwegian, then checks the choice followed the account to a fresh browser. One more walks through a lived-in flat and screenshots every screen on a phone and on a wide screen, and checks that nothing sticks out sideways on a 320-pixel phone.
 - **Ten test roommates.** Ten AI agents were given accounts in two flats of five and told to live there for a while on phones and laptops: book, cook, shop, argue about money, and write down everything that confused or annoyed them. Their two admins gathered about 190 findings. Nearly all are fixed; the ideas that were asked for but not built are in `CLAUDE.md` under "Open items". What they confirmed is worth as much: the money always added up to the øre, no one could see another household, and pressing twice never did a thing twice.
 - **Two independent reviews**, one for security and correctness and one for the experience of using it, were done on the first version (booking and cleaning). Neither found a way for one household to see or change another's data. Most of what they did find is fixed; what is left is listed under "Not done yet".
 
@@ -200,8 +203,8 @@ The look is deliberate, and recorded in [CLAUDE.md](CLAUDE.md):
 - **Repeating bookings.** For example the same shower slot every weekday.
 - **A separate database for local work and tests.**
 - **An admin cancelling someone else's booking,** for the roommate who booked and then left town.
+- **The rest of Norwegian.** The browser tab titles and the built-in cookbook are still English, and the Norwegian has not been read through by a native speaker yet.
 - **Known limits.** Signing up tells you whether an email already has an account. Join codes are six characters and do not expire, though guessing them is rate limited and an admin can replace one at any time. Clock-change days are only verified for Europe/Oslo with the default opening hours.
-- **Norwegian.** The interface is in English, with the text kept close to the screens so it can be translated.
 
 ## Background
 

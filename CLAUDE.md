@@ -85,6 +85,7 @@ Package manager is npm. Keep this list current as scripts are added.
 - `src/components/app-nav.tsx`: the navigation, a bar at the bottom on a phone and a column on the left from `lg` up.
 - `src/lib/calendar.ts` (pure: what each day holds, month sheets), `src/lib/calendar-service.ts` (loads a stretch of days), `src/components/calendar/agenda.tsx` (`AgendaItem`, and `AnswerButtons` for "I'm in" and "Can't").
 - `src/components/avatar`: the drawn avatars, and `Person` and `Faces` for showing who something belongs to. `src/components/board/sticky.tsx`: a note on the whiteboard. `src/components/ui/strike.tsx`: `Struck`, the pen line through something done.
+- `src/lib/i18n`: the two languages. `index.ts` (the translator, `m`), `nb.ts` (the Norwegian table), `server.ts` (`getT`, the cookie, the saved choice), `client.tsx` (`useT`, `LocaleProvider`), `actions.ts` (the switch), `keys.ts` (finds every text in the source, for the test). `src/components/language-switch.tsx` is the switch.
 - `design/logo/generate.mjs`: source of the logo, the logo data file and the app icons.
 
 ## Rules that must hold
@@ -209,6 +210,23 @@ Standing brief:
 - Line-drawing animation (SVG strokes that draw themselves) is the signature. Use it in the logo, empty states, and confirmations only. Motion elsewhere stays minimal.
 - Respect `prefers-reduced-motion`: show the finished drawing with no animation.
 
+## Two languages
+
+English and Norwegian (bokmål), since 2026-11-19. One switch changes the whole app: on the front page, on sign-in and sign-up, and under You.
+
+- **The English text is the key.** Write `t("Who's in")` or `` t`${count} to buy` ``; the Norwegian table in `src/lib/i18n/nb.ts` maps `"Who's in"` and `"{0} to buy"`. A text the table lacks comes out in English.
+- **Every text a person reads goes through `t`.** In a server component or action: `const t = await getT()`. In a client component: `const t = useT()`. A pure function that words something takes `t` as its last argument, defaulting to English (`describeDue(today, lastDay, t)`), so its tests stay plain.
+- **A text written where no reader is known** (a list of areas, a schema's message) is marked `m("Shower")` and translated where it is shown, `t(area.name)`.
+- **Errors from server actions stay English in the action.** `FormError` and `ActionButton` say them in the reader's language with `t.loose(message)`, which also recognises a sentence with values in it ("Oat milk is already on the list."). Only where several messages are joined does the action translate them itself.
+- **A sentence is one text.** Write `` t`Done, last ${weeks} weeks` ``, not three pieces around a value: the word order differs. Plurals are two texts, chosen in code (`` count === 1 ? t("1 note") : t`${count} notes` ``). Never put an untranslated word inside a translated sentence.
+- **`npm test` fails if a text has no Norwegian.** `nb.test.ts` reads the source, lists every text, and names the file and line of any the table lacks, and any the table holds that the app no longer shows. Add the Norwegian in the same change as the English.
+- **Dates** come from `describeDay(day, t)` and `shortDate(day, t)`, which use the reader's language for weekdays and months.
+- **Words that are settled in Norwegian:** a household is "kollektiv", a roommate "romkamerat", a slot "tid", a cleaning turn "tur", being in for something "er med". The areas are Dusj, Klesvask, Rengjøring, Middag, Handleliste, Utgifter, Hva skjer and Oppslagstavle.
+- **The choice** lives in the `kubbe-locale` cookie, so it works signed out, and on `profile.locale`, so signing in on another phone brings it along.
+- **Claude answers in the reader's language** (`language` in `suggestDishes` and `suggestNeeds`). The built-in cookbook is English only, so the dish form does not offer from it to a Norwegian reader; it asks the server instead.
+- **Names given at creation are data.** A new household's "Dusj" and "Vaskemaskin" are named in the language of whoever starts it and stay that way for everyone. So do the descriptions of expenses made from the shopping list.
+- Not translated: the titles in the browser tab, the text in the web app manifest, and the built-in cookbook.
+
 ## Working agreements
 
 - Small commits with clear messages, one concern each.
@@ -253,7 +271,7 @@ He tested the second round and sent one long message. Tick each off as it ships.
 - [x] **Wide screens** use the space.
 - [x] **Claude Sonnet 5.5** as the model. His limits stand: 20 a day per person, 40 per household, 300 for the app.
 - [x] **Ten test roommates** in two flats of five, as sub-agents on Claude Opus 5.5, using the app and reporting through their two admins. Done 2026-11-18 and 19: about 190 findings, fixed except what is listed under "Open items" as from the test roommates.
-- [ ] **Norwegian:** one switch for the whole app, and Claude's ideas in Norwegian too.
+- [x] **Norwegian:** one switch for the whole app, and Claude's ideas in Norwegian too.
 - [ ] **Reminders.** He asked how; web push needs no domain. Not built yet.
 
 ## Open items
@@ -269,7 +287,8 @@ Needs the owner:
 
 Can be built any time:
 
-- Reminders (web push), repeating bookings, Norwegian.
+- Reminders (web push), repeating bookings.
+- Norwegian for the browser tab titles and the built-in cookbook. Have a Norwegian speaker read the whole app once: the table was written in one go and checked only in screenshots.
 - From the test roommates, asked for but not built:
   - A way to see what changed since you last looked (who booked, who answered, what was added).
   - Paying back part of what you owe, and a list of what is between you and one other person.
