@@ -32,7 +32,7 @@ test("Claude suggests dishes and what a dish needs", async ({ page }) => {
 
   // Someone at the table does not eat meat or fish: the ideas must respect that.
   await page.goto("/profile");
-  await page.getByLabel("What you don't eat").fill("Vegetarian");
+  await page.locator('input[name="avoids"]').fill("Vegetarian");
   await page.getByRole("button", { name: "Save" }).click();
   await expect(page.getByText("Saved")).toBeVisible();
 
@@ -52,4 +52,18 @@ test("Claude suggests dishes and what a dish needs", async ({ page }) => {
   await expect(seen(page, "idea")).toHaveCount(3, { timeout: 60_000 });
   await expect(seen(page, "ideas-source")).toHaveAttribute("data-source", "claude");
   for (const idea of await seen(page, "idea").allInnerTexts()) console.log("Idea:", idea.replace(/\s+/g, " "));
+
+  // --- In Norwegian, Claude answers in Norwegian ---
+  const dinner = page.url();
+  await page.goto("/profile");
+  await page.getByTestId("language").getByRole("button", { name: "Norsk" }).click();
+  await expect(page.getByRole("heading", { name: "Kontoen din" })).toBeVisible();
+  await page.goto(dinner);
+  await page.getByLabel("Foreslå en rett").fill("Lapskaus");
+  const tilbud = seen(page, "needs-offer");
+  await expect(tilbud).toContainText("Claude tror den trenger", { timeout: 40_000 });
+  console.log("Hva som trengs:", (await tilbud.innerText()).replace(/\s+/g, " "));
+  // Norwegian words for what a stew needs, not English ones.
+  await expect(tilbud).toContainText(/potet|gulrot|løk|kålrot/i);
+  await expect(tilbud).not.toContainText(/potato|carrot|onion/i);
 });
