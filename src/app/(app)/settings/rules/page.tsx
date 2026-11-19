@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { BackLink, type Back } from "@/components/area/area-header";
+import { TabHeader, type Back } from "@/components/area/area-header";
 import { RoomArt } from "@/components/illustrations/room-art";
 import { ActionButton } from "@/components/ui/action-button";
 import { listResources } from "@/lib/booking/service";
@@ -35,17 +35,17 @@ export default async function RulesPage({ searchParams }: PageProps<"/settings/r
   const open = typeof params.open === "string" ? params.open : undefined;
 
   return (
-    <main className="mx-auto flex w-full max-w-md flex-col gap-8 p-6 pt-5 lg:max-w-3xl">
-      <BackLink {...back} />
-      <header className="flex flex-col gap-1">
-        <p className="font-semibold text-ink-soft break-words">{household.name}</p>
-        <h1 className="type-display text-6xl">Booking rules</h1>
-        <p className="pt-2 text-ink-soft">
+    <main className="mx-auto flex w-full max-w-md flex-col lg:max-w-3xl lg:pt-6">
+      <TabHeader art="people" name="Booking rules" eyebrow={household.name} back={back}>
+        Booking rules
+      </TabHeader>
+
+      <div className="flex flex-col gap-8 p-6">
+        <p className="text-ink-soft">
           {admin
             ? "Tap a shower or machine to change it. Changes apply to new bookings; slots already booked stay as they are."
             : "Only an admin can change these."}
         </p>
-      </header>
 
       {groups.map((group) => {
         const mine = resources.filter((resource) => resource.kind === group.kind);
@@ -64,6 +64,8 @@ export default async function RulesPage({ searchParams }: PageProps<"/settings/r
                     <ResourceForm
                       key={resource.id}
                       resource={resource}
+                      // The daily limit is one person's across all of a kind, so say so when there are several.
+                      shared={mine.filter((other) => other.enabled).length > 1 ? group.title.toLowerCase() : undefined}
                       open={resource.id === open}
                       slotLengths={SLOT_LENGTHS}
                       action={updateResourceAction.bind(null, resource.id)}
@@ -72,11 +74,14 @@ export default async function RulesPage({ searchParams }: PageProps<"/settings/r
                     />
                   ))}
                 </div>
-                <div className="pt-1" data-testid={`add-${group.kind}`}>
-                  <ActionButton align="start" doneLabel="Added, with the same rules." action={addResourceAction.bind(null, group.kind)}>
-                    + Add another {group.one}
-                  </ActionButton>
-                </div>
+                {/* A second one is only worth adding once the first is in use. */}
+                {mine.some((resource) => resource.enabled) ? (
+                  <div className="pt-1" data-testid={`add-${group.kind}`}>
+                    <ActionButton align="start" doneLabel="Added, with the same rules." action={addResourceAction.bind(null, group.kind)}>
+                      + Add another {group.one}
+                    </ActionButton>
+                  </div>
+                ) : null}
               </>
             ) : (
               <ul className="flex flex-col">
@@ -97,6 +102,7 @@ export default async function RulesPage({ searchParams }: PageProps<"/settings/r
           </section>
         );
       })}
+      </div>
     </main>
   );
 }

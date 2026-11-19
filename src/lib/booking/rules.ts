@@ -21,7 +21,8 @@ export type Refusal =
   | "too-far-ahead"
   | "taken"
   | "daily-limit"
-  | "back-to-back";
+  | "back-to-back"
+  | "own-overlap";
 
 /** Every slot of a day, in order. Slots that would run past closing time are left out. */
 export function slotsForDay(day: string, rules: ResourceRules, timeZone: string): Slot[] {
@@ -54,10 +55,16 @@ type Check = {
    */
   dayBookings: { userId: string; startsAt: Date; endsAt: Date }[];
   userId: string;
+  /**
+   * This person's bookings of the household's other showers (or other washers, or other
+   * dryers) around the slot. The daily limit and "not two in a row" are about the
+   * person, so they count across all of a kind: a second shower is not a second ration.
+   */
+  ownElsewhere?: Slot[];
 };
 
 /** Why this person cannot book this slot, or null when they can. */
-export function refusalFor({ slot, rules, timeZone, now, dayBookings, userId }: Check): Refusal | null {
+export function refusalFor({ slot, rules, timeZone, now, dayBookings, userId, ownElsewhere = [] }: Check): Refusal | null {
   const day = dayInZone(slot.startsAt, timeZone);
   const onGrid = slotsForDay(day, rules, timeZone).some(
     (candidate) =>
@@ -72,8 +79,10 @@ export function refusalFor({ slot, rules, timeZone, now, dayBookings, userId }: 
 
   const overlaps = (other: Slot) => other.startsAt < slot.endsAt && other.endsAt > slot.startsAt;
   if (dayBookings.some(overlaps)) return "taken";
+  // Nobody is in two showers at once.
+  if (ownElsewhere.some(overlaps)) return "own-overlap";
 
-  const mine = dayBookings.filter((booking) => booking.userId === userId);
+  const mine: Slot[] = [...dayBookings.filter((booking) => booking.userId === userId), ...ownElsewhere];
   const mineThatDay = mine.filter((booking) => dayInZone(booking.startsAt, timeZone) === day);
   if (mineThatDay.length >= rules.maxPerDay) return "daily-limit";
 

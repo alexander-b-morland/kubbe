@@ -1,4 +1,4 @@
-import { and, asc, eq, gt, gte, lt, sql } from "drizzle-orm";
+import { and, asc, eq, gt, gte, lt, ne, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { booking, membership, resource, user, type Resource } from "@/db/schema";
 import { addDays, dayInZone, instantInZone } from "@/lib/time";
@@ -82,6 +82,44 @@ export async function listDayBookings(resourceId: string, householdId: string, d
     .orderBy(asc(booking.startsAt));
 }
 
+/**
+ * A person's bookings of the household's other resources of one kind, in a stretch of
+ * time. Used so the daily limit counts across all showers, not per shower.
+ */
+export async function listOwnElsewhere(
+  executor: Pick<typeof db, "select">,
+  input: { householdId: string; userId: string; kind: Resource["kind"]; exceptResourceId: string; from: Date; to: Date },
+) {
+  return executor
+    .select({ startsAt: booking.startsAt, endsAt: booking.endsAt })
+    .from(booking)
+    .innerJoin(resource, eq(booking.resourceId, resource.id))
+    .where(
+      and(
+        eq(booking.householdId, input.householdId),
+        eq(booking.userId, input.userId),
+        eq(resource.kind, input.kind),
+        ne(booking.resourceId, input.exceptResourceId),
+        gte(booking.startsAt, input.from),
+        lt(booking.startsAt, input.to),
+      ),
+    );
+}
+
+/** The same, for one day in the household's zone: what a booking screen needs for its hints. */
+export async function listOwnElsewhereOn(householdId: string, userId: string, found: Resource, day: string, timeZone: string) {
+  const [from, to] = dayRange(day, timeZone);
+  const margin = 24 * 3_600_000;
+  return listOwnElsewhere(db, {
+    householdId,
+    userId,
+    kind: found.kind,
+    exceptResourceId: found.id,
+    from: new Date(from.getTime() - margin),
+    to: new Date(to.getTime() + margin),
+  });
+}
+
 /** A person's bookings that have not ended yet, soonest first. */
 export async function listMyUpcoming(householdId: string, userId: string, now: Date) {
   return db
@@ -124,9 +162,9 @@ export async function bookSlot(input: {
   if (found.householdId !== householdId || !found.enabled) return { ok: false, reason: "not-found" };
   try {
     return await db.transaction(async (tx): Promise<BookResult> => {
-      // One attempt at a time per person and resource, so two quick taps cannot
-      // both slip under the daily limit.
-      await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`${userId}:${resourceId}`}, 0))`);
+      // One attempt at a time per person and kind of thing, so two quick taps, even on
+      // two different showers, cannot both slip under the daily limit.
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`${userId}:${householdId}:${found.kind}`}, 0))`);
 
       const slot = { startsAt, endsAt: new Date(startsAt.getTime() + found.slotMinutes * 60_000) };
       const [from, to] = dayRange(dayInZone(startsAt, timeZone), timeZone);
@@ -143,7 +181,15 @@ export async function bookSlot(input: {
           ),
         );
 
-      const refusal = refusalFor({ slot, rules: found, timeZone, now, dayBookings, userId });
+      const ownElsewhere = await listOwnElsewhere(tx, {
+        householdId,
+        userId,
+        kind: found.kind,
+        exceptResourceId: resourceId,
+        from: new Date(from.getTime() - 24 * 3_600_000),
+        to: new Date(to.getTime() + 24 * 3_600_000),
+      });
+      const refusal = refusalFor({ slot, rules: found, timeZone, now, dayBookings, userId, ownElsewhere });
       if (refusal) return { ok: false, reason: refusal };
 
       await tx.insert(booking).values({ resourceId, householdId, userId, ...slot });

@@ -12,6 +12,7 @@ const refusalMessage: Record<Refusal | "not-found", string> = {
   taken: "Someone just took that slot. Pick another one.",
   "back-to-back": "That's straight before or after a slot you have. Leave a gap so others get a turn.",
   "daily-limit": "You've used all your slots for that day. Cancel one to take this.",
+  "own-overlap": "You already have one at that time. Cancel it to take this instead.",
   over: "That slot is over. Pick a later one.",
   "too-far-ahead": "That day isn't open for booking yet. Pick an earlier day.",
   "not-a-slot": "The slot times just changed. Pick from the updated list.",
@@ -26,6 +27,7 @@ function refresh() {
   revalidatePath("/shower");
   revalidatePath("/laundry");
   revalidatePath("/home");
+  revalidatePath("/calendar");
 }
 
 /** Book one slot of a resource. Bind the resource id on the server: `bookResource.bind(null, id)`. */

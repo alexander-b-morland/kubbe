@@ -1,13 +1,13 @@
 import Link from "next/link";
 import type { CSSProperties, ReactNode } from "react";
-import { AreaHeader } from "@/components/area/area-header";
+import { AreaHeader, areaStyle } from "@/components/area/area-header";
 import { AutoRefresh } from "@/components/booking/auto-refresh";
 import { SlotList, type SlotRow } from "@/components/booking/slot-list";
 import type { Room } from "@/components/illustrations/room-art";
 import type { Resource } from "@/db/schema";
 import { bookResource, cancelResourceBooking } from "@/lib/booking/actions";
 import { refusalFor, slotsForDay } from "@/lib/booking/rules";
-import { listDayBookings } from "@/lib/booking/service";
+import { listDayBookings, listOwnElsewhereOn } from "@/lib/booking/service";
 import { clockLabel, describeNow, describeSlotLength } from "@/lib/booking/status";
 import { addDays, clockTime, dayInZone, describeDay, isDay } from "@/lib/time";
 
@@ -44,6 +44,7 @@ const focusRing = "outline-none focus-visible:ring-4 focus-visible:ring-fjord";
 /** The whole booking screen for one resource: header, day picker and slots. */
 export async function BookingScreen(props: Props) {
   const { basePath, query = {}, room, label, theme, resource, household, userId } = props;
+  const noun = resource.kind === "shower" ? "shower" : resource.kind === "washer" ? "wash" : "dryer slot";
   const timeZone = household.timeZone;
   const now = new Date();
   const today = dayInZone(now, timeZone);
@@ -52,7 +53,10 @@ export async function BookingScreen(props: Props) {
   const day = isDay(requested) && requested >= today && requested <= lastDay ? requested : today;
   const isToday = day === today;
 
-  const bookings = await listDayBookings(resource.id, household.id, day, timeZone);
+  const [bookings, ownElsewhere] = await Promise.all([
+    listDayBookings(resource.id, household.id, day, timeZone),
+    listOwnElsewhereOn(household.id, userId, resource, day, timeZone),
+  ]);
   const upcoming = slotsForDay(day, resource, timeZone).filter((slot) => slot.endsAt > now);
 
   const rows: SlotRow[] = upcoming.map((slot) => {
@@ -66,10 +70,12 @@ export async function BookingScreen(props: Props) {
     }
     if (booked) return { key, time, state: "taken", name: booked.name, colour: booked.colour, underWay };
 
-    const refusal = refusalFor({ slot, rules: resource, timeZone, now, dayBookings: bookings, userId });
+    const refusal = refusalFor({ slot, rules: resource, timeZone, now, dayBookings: bookings, userId, ownElsewhere });
     if (refusal === "back-to-back") return { key, time, state: "blocked", reason: "Leave a gap next to your slot" };
+    if (refusal === "own-overlap") return { key, time, state: "blocked", reason: `You have another ${noun} then` };
     if (refusal === "daily-limit") {
-      return { key, time, state: "blocked", reason: `You've booked your ${resource.maxPerDay} for ${isToday ? "today" : "this day"}` };
+      // Said once above the list, not on every row.
+      return { key, time, state: "blocked", reason: "" };
     }
     return { key, time, state: "free", underWay };
   });
@@ -88,6 +94,7 @@ export async function BookingScreen(props: Props) {
     );
   }
   rows.sort((a, b) => a.key.localeCompare(b.key));
+  const atLimit = rows.some((row) => row.state === "blocked" && row.reason === "");
 
   // The headline says what matters right now: who has it, or how long it is free.
   const describe = describeDay(day);
@@ -104,7 +111,7 @@ export async function BookingScreen(props: Props) {
   const days = Array.from({ length: resource.bookAheadDays + 1 }, (_, index) => addDays(today, index));
   const rules = [
     `${describeSlotLength(resource.slotMinutes)} slots`,
-    `up to ${resource.maxPerDay} a day`,
+    `up to ${resource.maxPerDay} a day each`,
     resource.allowBackToBack ? null : "not two in a row",
   ]
     .filter(Boolean)
@@ -112,7 +119,7 @@ export async function BookingScreen(props: Props) {
   const canBookTomorrow = resource.bookAheadDays > 0;
 
   return (
-    <main className="mx-auto flex w-full max-w-md flex-col lg:max-w-3xl lg:pt-6" style={{ "--pen": theme.pen } as CSSProperties}>
+    <main className="mx-auto flex w-full max-w-md flex-col lg:max-w-3xl lg:pt-6" style={areaStyle(room, { "--pen": theme.pen } as CSSProperties)}>
       <AutoRefresh />
 
       <AreaHeader area={room} eyebrow={`${label}, ${isToday ? "today" : `${describe.dayOfMonth} ${describe.monthShort}`}`} extra={props.headerExtra}>
@@ -147,6 +154,11 @@ export async function BookingScreen(props: Props) {
             </Link>
           ) : null}
         </p>
+        {atLimit ? (
+          <p className="mx-3 rounded-2xl bg-ink px-4 py-3 font-semibold text-paper" data-testid="at-limit">
+            You&apos;ve booked your {resource.maxPerDay} for {isToday ? "today" : "this day"}. Cancel one to take another.
+          </p>
+        ) : null}
         {rows.length > 0 ? (
           <SlotList
             key={`${resource.id}-${day}`}

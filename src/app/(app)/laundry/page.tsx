@@ -25,6 +25,7 @@ export default async function LaundryPage({ searchParams }: PageProps<"/laundry"
 
   const active = machines.find((machine) => machine.id === params.machine) ?? machines[0];
   const dryers = machines.filter((machine) => machine.kind === "dryer");
+  const washers = machines.filter((machine) => machine.kind === "washer");
   const day = typeof params.day === "string" ? params.day : undefined;
 
   return (
@@ -50,6 +51,8 @@ export default async function LaundryPage({ searchParams }: PageProps<"/laundry"
       {({ day: shownDay, now }) =>
         active.kind === "washer" && dryers.length > 0 ? (
           <DryerSuggestion washer={active} dryers={dryers} household={household} userId={user.id} day={shownDay} now={now} />
+        ) : active.kind === "dryer" && washers.length > 0 ? (
+          <WashNote washers={washers} household={household} userId={user.id} day={shownDay} now={now} />
         ) : active.kind === "washer" && membership.role === "admin" ? (
           <p className="px-3 pb-1 text-sm text-ink-soft">
             Have a dryer too?{" "}
@@ -61,6 +64,23 @@ export default async function LaundryPage({ searchParams }: PageProps<"/laundry"
         ) : null
       }
     </BookingScreen>
+  );
+}
+
+/** On a dryer's sheet: when your wash that day ends, so you know which slot to take. */
+async function WashNote(props: { washers: Resource[]; household: { id: string; timeZone: string }; userId: string; day: string; now: Date }) {
+  const { washers, household, userId, day, now } = props;
+  const booked = await Promise.all(washers.map((washer) => listDayBookings(washer.id, household.id, day, household.timeZone)));
+  const mine = booked
+    .flat()
+    .filter((wash) => wash.userId === userId && wash.endsAt > new Date(now.getTime() - 3 * 3_600_000))
+    .sort((a, b) => a.endsAt.getTime() - b.endsAt.getTime());
+  if (mine.length === 0) return null;
+  const ends = mine.map((wash) => clockTime(wash.endsAt, household.timeZone));
+  return (
+    <p className="mx-3 mb-2 rounded-2xl border-2 border-ink p-4 font-semibold" data-testid="wash-note">
+      {mine.length === 1 ? `Your wash ends at ${ends[0]}.` : `Your washes end at ${ends.slice(0, -1).join(", ")} and ${ends.at(-1)}.`} Pick a slot after it.
+    </p>
   );
 }
 

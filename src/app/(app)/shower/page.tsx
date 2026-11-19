@@ -26,7 +26,7 @@ export default async function ShowerPage({ searchParams }: PageProps<"/shower">)
       query={active === showers[0] ? {} : { shower: active.id }}
       room="shower"
       label={active.name}
-      theme={{ mine: "bg-fjord/15", pen: "var(--color-fjord)" }}
+      theme={{ mine: "bg-fjord/25", pen: "var(--color-fjord)" }}
       manageHref={membership.role === "admin" ? `/settings/rules?from=shower&open=${active.id}#${active.id}` : undefined}
       resource={active}
       household={household}

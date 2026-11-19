@@ -1,4 +1,4 @@
-import { clockTime, dayInZone, describeDay, instantInZone } from "@/lib/time";
+import { clockTime, dayInZone, daysBetween, describeDay, instantInZone } from "@/lib/time";
 import { slotsForDay, type ResourceRules } from "./rules";
 
 type BookedSlot = { userId: string; name: string; startsAt: Date; endsAt: Date };
@@ -34,7 +34,7 @@ export function describeNow(input: {
   return nearlyClosed ? `Free until ${clockTime(closes, timeZone)}` : "Free all day";
 }
 
-/** "07:00 today", "07:00 tomorrow", "07:00 on Thursday". */
+/** "07:00 today", "07:00 tomorrow", "07:00 on Thursday", and further off "07:00 on Sat 28 Nov". */
 export function describeWhen(startsAt: Date, now: Date, timeZone: string): string {
   const time = clockTime(startsAt, timeZone);
   const day = dayInZone(startsAt, timeZone);
@@ -42,7 +42,10 @@ export function describeWhen(startsAt: Date, now: Date, timeZone: string): strin
   if (day === today) return `${time} today`;
   const tomorrow = dayInZone(new Date(instantInZone(today, 0, timeZone).getTime() + 36 * 3_600_000), timeZone);
   if (day === tomorrow) return `${time} tomorrow`;
-  return `${time} on ${describeDay(day).weekday}`;
+  const parts = describeDay(day);
+  // Beyond a week, a weekday alone would be taken for the coming one.
+  if (daysBetween(today, day) > 6) return `${time} on ${parts.weekdayShort} ${parts.dayOfMonth} ${parts.monthShort}`;
+  return `${time} on ${parts.weekday}`;
 }
 
 /** "20-minute" or "2-hour": the one way a slot length is written, wherever it shows. */

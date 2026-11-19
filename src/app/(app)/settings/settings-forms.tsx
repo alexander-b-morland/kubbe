@@ -39,8 +39,11 @@ export function ResourceForm({
   action,
   remove,
   open = false,
+  shared,
 }: {
   resource: ResourceFormValues;
+  /** "showers", when there are several: the daily limit counts across all of them. */
+  shared?: string;
   slotLengths: readonly number[];
   action: Action;
   /** Present only when there is another of the same kind, so this one may go. */
@@ -68,9 +71,9 @@ export function ResourceForm({
           <label className="flex flex-col gap-1">
             <span className="flex items-center gap-3 text-lg font-semibold">
               <input type="checkbox" name="enabled" defaultChecked={resource.enabled} className="size-6 accent-ink" />
-              Switched on
+              Can be booked
             </span>
-            <span className="text-sm text-ink-soft">Switch off if your home doesn&apos;t have one. It then can&apos;t be booked.</span>
+            <span className="text-sm text-ink-soft">Untick if your home doesn&apos;t have one, or it is broken. Nobody can book it then.</span>
           </label>
           <label className="flex flex-col gap-1.5">
             <span className="text-sm font-semibold">Slot length</span>
@@ -102,6 +105,7 @@ export function ResourceForm({
           </div>
           <Field
             label="Slots per person a day"
+            hint={shared ? `Counted across all your ${shared}, not for each.` : undefined}
             name="maxPerDay"
             type="number"
             inputMode="numeric"
@@ -181,7 +185,9 @@ export function ExtrasForm({
 }) {
   const [state, formAction] = useActionState(action, undefined);
   return (
-    <SavableForm action={formAction} state={state} resetKey={enabled.join(",")}>
+    // Like the time zone below it: a tick saves itself. A change that needs a button
+    // you have to scroll to gets lost when someone walks away.
+    <SavableForm action={formAction} state={state} resetKey={enabled.join(",")} autoSave>
       {extras.map((extra) => (
         <label key={extra.key} className="flex flex-col gap-1">
           <span className="flex items-center gap-3 text-lg font-semibold">
