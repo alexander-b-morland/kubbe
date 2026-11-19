@@ -2,13 +2,25 @@ import { Avatar } from "./avatar";
 
 export type PersonLike = { userId: string; name: string; colour: string; avatar: string | null | undefined };
 
-/** Someone's avatar and name on one line. The reader is called "You". */
-export function Person({ person, me, size = "size-7", className = "" }: { person: PersonLike | undefined; me?: string; size?: string; className?: string }) {
-  if (!person) return <span className={`text-ink-soft ${className}`}>Someone who moved out</span>;
+/** Someone's avatar and name on one line. The reader is called "You", or "you" in the middle of a sentence. */
+export function Person({
+  person,
+  me,
+  size = "size-7",
+  className = "",
+  inSentence = false,
+}: {
+  person: PersonLike | undefined;
+  me?: string;
+  size?: string;
+  className?: string;
+  inSentence?: boolean;
+}) {
+  if (!person) return <span className={`text-ink-soft ${className}`}>{inSentence ? "someone who moved out" : "Someone who moved out"}</span>;
   return (
     <span className={`inline-flex min-w-0 items-center gap-2 ${className}`}>
       <Avatar avatar={person.avatar} colour={person.colour} className={size} />
-      <span className="min-w-0 break-words">{person.userId === me ? "You" : person.name}</span>
+      <span className="min-w-0 break-words">{person.userId === me ? (inSentence ? "you" : "You") : person.name}</span>
     </span>
   );
 }

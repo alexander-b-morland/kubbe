@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, type ComponentProps, type ReactNode } from "react";
+import { useRef, useState, type ComponentProps, type FormEvent, type ReactNode } from "react";
 import { useFormStatus } from "react-dom";
 
-export const focusRing = "outline-none focus-visible:ring-4 focus-visible:ring-fjord";
+// The gap of paper between the ring and what it surrounds keeps it visible on dark buttons too.
+export const focusRing = "outline-none focus-visible:ring-4 focus-visible:ring-fjord focus-visible:ring-offset-2 focus-visible:ring-offset-paper";
 
 /** The look of a select, sized to sit beside a text field. */
 export const selectLook = `h-12 rounded-xl border-2 border-ink bg-white/70 px-3 text-lg ${focusRing}`;
@@ -74,7 +75,7 @@ export function SubmitButton({
 }) {
   const { pending } = useFormStatus();
   const look =
-    variant === "primary" ? "bg-ink text-paper" : "border-2 border-ink bg-transparent text-ink";
+    variant === "primary" ? "area-button" : "border-2 border-ink bg-transparent text-ink";
   return (
     <button
       type="submit"
@@ -86,6 +87,116 @@ export function SubmitButton({
     >
       {pending ? pendingLabel : children}
     </button>
+  );
+}
+
+/**
+ * The fields of a form, held still while it is being saved. Without this, what someone
+ * types during a slow save is wiped when the form starts over, and they never know.
+ */
+export function Locked({ children, className = "contents" }: { children: ReactNode; className?: string }) {
+  const { pending } = useFormStatus();
+  return (
+    <fieldset disabled={pending} className={className}>
+      {children}
+    </fieldset>
+  );
+}
+
+type QuickResult = { error?: string } | undefined;
+
+/**
+ * One field and a button, for adding things to a list one after another. The field
+ * empties the moment you press Add, so the next thing can be typed straight away, and
+ * what was sent waits its turn. Nothing typed is ever thrown away: if the server says
+ * no, the text comes back with the reason.
+ */
+export function QuickAddForm({
+  action,
+  name,
+  label,
+  placeholder,
+  button = "Add",
+  variant = "primary",
+}: {
+  action: (previous: undefined, form: FormData) => Promise<QuickResult>;
+  name: string;
+  label: string;
+  placeholder?: string;
+  button?: string;
+  variant?: "primary" | "secondary";
+}) {
+  const [value, setValue] = useState("");
+  const [error, setError] = useState<string>();
+  const [waiting, setWaiting] = useState(0);
+  const queue = useRef<Promise<void>>(Promise.resolve());
+  const input = useRef<HTMLInputElement>(null);
+
+  function submit(event: FormEvent) {
+    event.preventDefault();
+    const text = value;
+    setValue("");
+    setError(undefined);
+    setWaiting((count) => count + 1);
+    input.current?.focus();
+    queue.current = queue.current.then(async () => {
+      const form = new FormData();
+      form.set(name, text);
+      let problem: string | undefined;
+      try {
+        problem = (await action(undefined, form))?.error;
+      } catch {
+        problem = "Couldn't reach Kubbe. Check your connection and try again.";
+      }
+      if (problem) {
+        setError(problem);
+        // Give the text back, unless something new has been typed since.
+        setValue((current) => (current === "" ? text : current));
+      }
+      setWaiting((count) => count - 1);
+    });
+  }
+
+  const look = variant === "primary" ? "area-button" : "border-2 border-ink bg-transparent text-ink";
+  return (
+    <form onSubmit={submit} noValidate className="flex flex-col gap-3">
+      <label className="flex flex-col gap-1.5">
+        <span className="text-sm font-semibold">{label}</span>
+        <input
+          ref={input}
+          name={name}
+          value={value}
+          onChange={(event) => {
+            setValue(event.target.value);
+            if (error) setError(undefined);
+          }}
+          placeholder={placeholder}
+          autoComplete="off"
+          className={`h-14 w-full rounded-xl border-2 border-ink bg-white/70 px-4 text-lg placeholder:text-ink-soft ${focusRing}`}
+        />
+      </label>
+      <FormError message={error} />
+      <button type="submit" className={`h-14 w-full rounded-full px-6 text-lg font-bold transition-transform active:scale-[0.98] ${look} ${focusRing}`}>
+        {button}
+      </button>
+      <p role="status" className="min-h-5 text-sm font-semibold text-ink-soft">
+        {waiting > 0 ? (waiting === 1 ? "Adding…" : `Adding ${waiting}…`) : ""}
+      </p>
+    </form>
+  );
+}
+
+/**
+ * How much room is left in a text box, said once it is nearly full. Without it, a
+ * long note is simply refused, or worse, cut.
+ */
+export function Remaining({ used, max }: { used: number; max: number }) {
+  const left = max - used;
+  if (left > max * 0.2) return null;
+  return (
+    <span role="status" className={`text-sm font-semibold ${left < 0 ? "text-barn" : "text-ink-soft"}`}>
+      {left >= 0 ? (left === 1 ? "1 character left" : `${left} characters left`) : `${-left} too many. Shorten it to save.`}
+    </span>
   );
 }
 

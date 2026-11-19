@@ -14,12 +14,13 @@
   --color-ochre: #d2a24c;
   --color-spruce: #476b52;
   --color-barn: #a6402f;
-  --color-salmon: #e3a583;
-  --color-sage: #a9c4a2;
-  --color-heather: #b8a9d4;
-  --color-blush: #e2a5b8;
-  --color-sky: #a3c6da;
+  --color-salmon: #d4805c;
+  --color-sage: #8db07c;
+  --color-heather: #a48bc9;
+  --color-blush: #d97f98;
+  --color-sky: #78afcb;
   --color-note: #f1df9a;
+  --color-todo: #c9e0ec;
 }
 
 @theme inline {
@@ -41,6 +42,32 @@
     color: var(--color-ink);
     font-family: var(--font-sans);
   }
+}
+
+/*
+ * The main button on a screen. Inside an area it takes the area's colour, so the colour
+ * does not stop at the header; anywhere else it is ink. The ink edge keeps it reading
+ * as something to press on every colour.
+ */
+.area-button {
+  background-color: var(--area-bg, var(--color-ink));
+  color: var(--area-fg, var(--color-paper));
+  border: 2px solid var(--color-ink);
+}
+
+/* Tick boxes and round picks get the same clear ring as everything else. */
+input[type="checkbox"]:focus-visible,
+input[type="radio"]:focus-visible {
+  outline: 3px solid var(--color-fjord);
+  outline-offset: 2px;
+}
+
+/* A note or a happening that a link pointed at stands out for a moment. */
+:target:not([data-quiet-target]) {
+  outline: 3px solid var(--color-ink);
+  outline-offset: 4px;
+  border-radius: 0.75rem;
+  scroll-margin-top: 6rem;
 }
 
 /* A tick that draws itself, for "Saved" and "Done". */

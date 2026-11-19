@@ -18,6 +18,8 @@ type Props = {
   variant?: "primary" | "secondary";
   /** Save as soon as something is picked, with no button at all. For a single select. */
   autoSave?: boolean;
+  /** Keep the Save button at the bottom of the screen: for a form longer than the screen. */
+  sticky?: boolean;
 };
 
 const read = (form: HTMLFormElement | null) =>
@@ -31,7 +33,7 @@ export function SavableForm({ resetKey, ...props }: Props) {
   return <Fields key={resetKey} {...props} />;
 }
 
-function Fields({ action, state, children, saveLabel = "Save", variant = "secondary", autoSave = false }: Omit<Props, "resetKey">) {
+function Fields({ action, state, children, saveLabel = "Save", variant = "secondary", autoSave = false, sticky = false }: Omit<Props, "resetKey">) {
   const form = useRef<HTMLFormElement>(null);
   const stored = useRef("");
   const [changed, setChanged] = useState(false);
@@ -62,9 +64,18 @@ function Fields({ action, state, children, saveLabel = "Save", variant = "second
       <FormError message={state?.error} />
       <Saved show={state?.saved && !changed} />
       {changed && !autoSave ? (
-        <SubmitButton pendingLabel="Saving…" variant={variant}>
-          {saveLabel}
-        </SubmitButton>
+        sticky ? (
+          // Above the navigation bar on a phone, at the foot of the window on a laptop.
+          <div className="sticky bottom-[calc(5.5rem+env(safe-area-inset-bottom))] z-[5] rounded-full bg-paper shadow-[0_0_0_6px_var(--color-paper)] lg:bottom-6" data-testid="sticky-save">
+            <SubmitButton pendingLabel="Saving…" variant={variant}>
+              {saveLabel}
+            </SubmitButton>
+          </div>
+        ) : (
+          <SubmitButton pendingLabel="Saving…" variant={variant}>
+            {saveLabel}
+          </SubmitButton>
+        )
       ) : null}
     </form>
   );

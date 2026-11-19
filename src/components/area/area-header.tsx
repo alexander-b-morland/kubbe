@@ -1,6 +1,6 @@
 import Link from "next/link";
-import type { ReactNode } from "react";
-import { RoomArt } from "@/components/illustrations/room-art";
+import type { CSSProperties, ReactNode } from "react";
+import { RoomArt, type Art } from "@/components/illustrations/room-art";
 import { areaOf, type AreaKey } from "@/lib/areas";
 
 export type Back = { href: string; label: string };
@@ -23,10 +23,49 @@ export function BackLink({ href, label, ring = "focus-visible:ring-fjord" }: Bac
   );
 }
 
+/** The area's colour as CSS variables, for the element that holds its screen. */
+export function areaStyle(area: AreaKey, more?: CSSProperties): CSSProperties {
+  return { ...areaOf(area).vars, ...more } as CSSProperties;
+}
+
+type BandProps = {
+  band: string;
+  ring: string;
+  art: Art;
+  /** Read out before the headline, so the heading makes sense on its own: "Shower". */
+  name: string;
+  eyebrow: string;
+  children: ReactNode;
+  back?: Back;
+  extra?: ReactNode;
+};
+
 /**
- * The top of an area's screen: a band in the area's colour with the way back, a small
- * line, the headline that says what matters right now, and the area's drawing.
+ * A band across the top of a screen: the way back, a small line, the headline that says
+ * what matters right now, and a drawing. The small line and the headline are one
+ * heading, so someone who hears only the heading still knows which screen this is.
  */
+function Band({ band, ring, art, name, eyebrow, children, back, extra }: BandProps) {
+  return (
+    <header className={`flex flex-col gap-3 p-6 pt-5 lg:rounded-3xl ${band}`}>
+      {back ? <BackLink {...back} ring={ring} /> : null}
+      <div className="flex items-start justify-between gap-3">
+        <h1 className="flex min-w-0 flex-col gap-1 pt-1">
+          {eyebrow.toLowerCase().startsWith(name.toLowerCase()) ? null : <span className="sr-only">{name}. </span>}
+          <span className="font-sans text-base font-semibold">{eyebrow}</span>
+          <span className="sr-only">: </span>
+          <span className="type-display line-clamp-3 text-5xl break-words min-[380px]:text-6xl" data-testid="headline">
+            {children}
+          </span>
+        </h1>
+        <RoomArt room={art} animate className="size-20 shrink-0 min-[380px]:size-24" />
+      </div>
+      {extra}
+    </header>
+  );
+}
+
+/** The top of an area's screen, in the area's colour. */
 export function AreaHeader({
   area,
   eyebrow,
@@ -43,29 +82,32 @@ export function AreaHeader({
 }) {
   const look = areaOf(area);
   return (
-    <header className={`flex flex-col gap-3 p-6 pt-5 lg:rounded-3xl ${look.band}`}>
-      <BackLink {...back} ring={look.ring} />
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex min-w-0 flex-col gap-1 pt-1">
-          <p className="font-semibold">{eyebrow}</p>
-          <h1 className="type-display text-6xl break-words" data-testid="headline">
-            {children}
-          </h1>
-        </div>
-        <RoomArt room={look.art} animate className="size-24 shrink-0" />
-      </div>
-      {extra}
-    </header>
+    <Band band={look.band} ring={look.ring} art={look.art} name={look.name} eyebrow={eyebrow} back={back} extra={extra}>
+      {children}
+    </Band>
   );
 }
 
-/** A whole screen for an area: the header band, then the content with room around it. */
+/** The top of a screen that belongs to no area (Calendar, Household, You): the same band, in ink. */
+export function TabHeader({ art, name, eyebrow, children, back, extra }: { art: Art; name: string; eyebrow: string; children: ReactNode; back?: Back; extra?: ReactNode }) {
+  return (
+    <Band band="bg-ink text-paper" ring="focus-visible:ring-ochre" art={art} name={name} eyebrow={eyebrow} back={back} extra={extra}>
+      {children}
+    </Band>
+  );
+}
+
+/**
+ * A whole screen for an area: the header band, then the content with room around it.
+ * With `aside`, a wide screen puts that beside the content instead of below it.
+ */
 export function AreaPage({
   area,
   eyebrow,
   title,
   back,
   headerExtra,
+  aside,
   children,
 }: {
   area: AreaKey;
@@ -73,14 +115,22 @@ export function AreaPage({
   title: ReactNode;
   back?: Back;
   headerExtra?: ReactNode;
+  aside?: ReactNode;
   children: ReactNode;
 }) {
   return (
-    <main className="mx-auto flex w-full max-w-md flex-col lg:max-w-3xl lg:pt-6">
+    <main className={`mx-auto flex w-full max-w-md flex-col lg:pt-6 ${aside ? "lg:max-w-6xl" : "lg:max-w-3xl"}`} style={areaStyle(area)}>
       <AreaHeader area={area} eyebrow={eyebrow} back={back} extra={headerExtra}>
         {title}
       </AreaHeader>
-      <div className="flex flex-col gap-8 p-6">{children}</div>
+      {aside ? (
+        <div className="flex flex-col gap-8 p-6 lg:grid lg:grid-cols-[1.5fr_1fr] lg:items-start lg:gap-10">
+          <div className="flex min-w-0 flex-col gap-8">{children}</div>
+          <div className="flex min-w-0 flex-col gap-8">{aside}</div>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-8 p-6">{children}</div>
+      )}
     </main>
   );
 }

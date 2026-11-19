@@ -10,12 +10,36 @@ export function parseAmount(input: string): number | null {
   return amount > 0 ? amount : null;
 }
 
-/** "349 kr" or "349.50 kr". */
+/**
+ * Why a text is not an amount, for saying what to fix. Null when it is one.
+ * "zero" also covers an empty box.
+ */
+export function amountProblem(input: string): "empty" | "zero" | "negative" | "decimals" | "too-big" | "not-a-number" | null {
+  const text = input.trim().replace(/\s/g, "").replace(",", ".");
+  if (text === "") return "empty";
+  if (/^-/.test(text)) return "negative";
+  if (!/^\d+(\.\d*)?$/.test(text)) return "not-a-number";
+  if (/\.\d{3,}$/.test(text)) return "decimals";
+  if (text.split(".")[0].length > 7) return "too-big";
+  return Number(text) > 0 ? null : "zero";
+}
+
+/** The sentence for each problem, ending in what to do. */
+export const AMOUNT_MESSAGES: Record<NonNullable<ReturnType<typeof amountProblem>>, string> = {
+  empty: "Enter an amount, like 349 or 349,50.",
+  zero: "The amount must be more than 0.",
+  negative: "The amount can't be negative. Enter what was paid.",
+  decimals: "Use at most two decimals, like 349,50.",
+  "too-big": "That is more than Kubbe keeps track of. Enter an amount under 10 million.",
+  "not-a-number": "Enter an amount in numbers, like 349 or 349,50.",
+};
+
+/** "349 kr", "349,50 kr" or "24 000 kr": a comma for decimals, as the amount is typed, and a space between thousands. */
 export function formatAmount(amount: number, currency: string): string {
   const absolute = Math.abs(amount);
-  const whole = Math.floor(absolute / 100);
+  const whole = String(Math.floor(absolute / 100)).replace(/\B(?=(\d{3})+(?!\d))/g, "\u00a0");
   const rest = absolute % 100;
-  return `${whole}${rest ? `.${String(rest).padStart(2, "0")}` : ""} ${currency}`;
+  return `${whole}${rest ? `,${String(rest).padStart(2, "0")}` : ""} ${currency}`.trim();
 }
 
 /** Split an amount between people as evenly as whole units allow. The first ones get the odd units. */

@@ -16,14 +16,19 @@ export function SplitFields({
   currency = "kr",
   legend = "Split between",
   initial,
+  ticked,
 }: {
   people: Person[];
   currency?: string;
   legend?: string;
   /** Each person's part of an expense being corrected. */
   initial?: Record<string, number>;
+  /** Who is ticked to begin with, when it is not everyone. */
+  ticked?: readonly string[];
 }) {
-  const uneven = initial ? new Set(Object.values(initial)).size > 1 : false;
+  // An even split can differ by one øre between people: that is still an even split.
+  const parts0 = Object.values(initial ?? {});
+  const uneven = parts0.length > 0 && Math.max(...parts0) - Math.min(...parts0) > 1;
   const [mode, setMode] = useState<"even" | "amounts">(uneven ? "amounts" : "even");
   const [parts, setParts] = useState<Record<string, string>>(() =>
     Object.fromEntries(people.map((person) => [person.userId, initial?.[person.userId] ? formatAmount(initial[person.userId], "").trim() : ""])),
@@ -43,6 +48,7 @@ export function SplitFields({
 
   const shared = Object.values(parts).reduce((sum, text) => sum + (parseAmount(text) ?? 0), 0);
   const left = total === null ? null : total - shared;
+  const negative = Object.values(parts).some((text) => text.trim().startsWith("-"));
 
   return (
     <fieldset ref={fieldset} className="flex flex-col gap-3">
@@ -61,7 +67,7 @@ export function SplitFields({
         <div className="flex flex-wrap gap-x-5 gap-y-2">
           {people.map((person) => (
             <label key={person.userId} className="flex items-center gap-2 text-lg font-semibold">
-              <input type="checkbox" name="sharedBy" value={person.userId} defaultChecked={initial ? Boolean(initial[person.userId]) : true} className="size-6 accent-ink" />
+              <input type="checkbox" name="sharedBy" value={person.userId} defaultChecked={initial ? Boolean(initial[person.userId]) : ticked ? ticked.includes(person.userId) : true} className="size-6 accent-ink" />
               {person.name}
             </label>
           ))}
@@ -87,8 +93,10 @@ export function SplitFields({
               </li>
             ))}
           </ul>
-          <p role="status" className={`text-sm font-semibold ${left !== null && left !== 0 ? "text-barn" : "text-ink-soft"}`} data-testid="split-left">
-            {left === null
+          <p role="status" className={`text-sm font-semibold ${negative || (left !== null && left !== 0) ? "text-barn" : "text-ink-soft"}`} data-testid="split-left">
+            {negative
+              ? "A part can't be less than nothing."
+              : left === null
               ? "Enter the amount above, then each person's part."
               : left === 0
                 ? "The parts add up."

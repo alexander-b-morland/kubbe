@@ -17,8 +17,10 @@ describe("reading an amount", () => {
 describe("writing an amount", () => {
   it("drops the decimals when there are none", () => {
     expect(formatAmount(34900, "kr")).toBe("349 kr");
-    expect(formatAmount(34950, "kr")).toBe("349.50 kr");
-    expect(formatAmount(5, "kr")).toBe("0.05 kr");
+    expect(formatAmount(34950, "kr")).toBe("349,50 kr");
+    expect(formatAmount(5, "kr")).toBe("0,05 kr");
+    expect(formatAmount(2400000, "kr")).toBe("24\u00a0000 kr");
+    expect(formatAmount(3334, "")).toBe("33,34");
   });
 
   it("writes the size of a negative amount", () => {

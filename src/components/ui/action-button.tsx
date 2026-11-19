@@ -2,10 +2,10 @@
 
 import { useActionState, useEffect, useRef, useState, type ReactNode } from "react";
 
-type Result = { error?: string; saved?: boolean } | undefined;
+type Result = { error?: string; saved?: boolean; message?: string } | undefined;
 
 const base =
-  "min-h-11 rounded-full border-2 py-1.5 text-sm font-bold outline-none transition-transform focus-visible:ring-4 focus-visible:ring-fjord active:scale-[0.97]";
+  "min-h-11 rounded-full border-2 py-1.5 text-sm font-bold outline-none transition-transform focus-visible:ring-4 focus-visible:ring-fjord focus-visible:ring-offset-2 focus-visible:ring-offset-paper active:scale-[0.97]";
 
 /**
  * A small button that runs one server action and shows what went wrong, if anything.
@@ -19,7 +19,8 @@ export function ActionButton({
   look = "outline",
   pendingLabel = "Working…",
   doneLabel,
-  label,
+  label: fullLabel,
+  about,
   align = "end",
   action,
 }: {
@@ -32,9 +33,16 @@ export function ActionButton({
   doneLabel?: string;
   /** Accessible name, when the visible text alone does not say what it acts on. */
   label?: string;
+  /**
+   * What the button acts on. The spoken name becomes the visible words, then this:
+   * "Bought: Oat milk". Starting with the visible words is what lets someone say the
+   * words they see to press it.
+   */
+  about?: string;
   align?: "start" | "end";
   action: () => Promise<Result>;
 }) {
+  const label = fullLabel ?? (about && typeof children === "string" ? `${children}: ${about}` : undefined);
   const [state, formAction, pending] = useActionState<Result>(action, undefined);
   const [asking, setAsking] = useState(false);
   const question = useRef<HTMLButtonElement>(null);
@@ -46,10 +54,10 @@ export function ActionButton({
 
   const colours =
     look === "filled"
-      ? "border-ink bg-ink px-4 text-paper"
+      ? "area-button px-4 whitespace-nowrap"
       : look === "link"
         ? "rounded border-transparent text-base underline underline-offset-4"
-        : "border-ink px-4";
+        : "border-ink px-4 whitespace-nowrap";
   const edge = align === "end" ? "items-end" : "items-start";
 
   return (
@@ -101,9 +109,9 @@ export function ActionButton({
           {state.error}
         </p>
       ) : null}
-      {state?.saved && doneLabel ? (
-        <p role="status" className="text-sm font-bold text-spruce">
-          {doneLabel}
+      {state?.saved && (state.message ?? doneLabel) ? (
+        <p role="status" className="max-w-80 text-sm font-bold text-spruce">
+          {state.message ?? doneLabel}
         </p>
       ) : null}
     </form>

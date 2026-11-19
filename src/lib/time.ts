@@ -89,6 +89,12 @@ export function describeDay(day: string, locale = "en-GB") {
   };
 }
 
+/** "Mon 23 Nov": a day far enough off that the weekday alone would not say which. */
+export function shortDate(day: string, locale = "en-GB"): string {
+  const parts = describeDay(day, locale);
+  return `${parts.weekdayShort} ${parts.dayOfMonth} ${parts.monthShort}`;
+}
+
 /** Does this text name a time zone this runtime knows? */
 export function isTimeZone(value: unknown): value is string {
   if (typeof value !== "string" || value.length === 0) return false;
