@@ -34,7 +34,6 @@ async function twoRoommates(browser: Browser) {
   await knut.goto(`/join/${code}`);
   await knut.getByRole("link", { name: "Create account" }).click();
   await signUp(knut, "Knut", "knut");
-  await knut.getByRole("button", { name: "Join Kollektivet" }).click();
   await expect(knut).toHaveURL(/\/home$/);
   return { ida, knut };
 }
@@ -98,24 +97,26 @@ test("the noticeboard holds notes and to-dos", async ({ browser }) => {
   await knut.reload();
   await expect(seen(knut, "todo")).toContainText("Buy a new shower curtain");
   await expect(seen(knut, "board-preview")).toContainText("Landlord is coming Tuesday at 10.");
-  await expect(seen(knut, "band-board")).toContainText("1 to do");
+  await expect(seen(knut, "band-board")).toContainText("1 for you");
   await seen(knut, "todo").getByRole("link", { name: /shower curtain/ }).click();
-  await expect(knut).toHaveURL(/\/board$/);
+  // The link lands on the note itself.
+  await expect(knut).toHaveURL(/\/board#[0-9a-f-]{36}$/);
   const curtain = notes(knut).filter({ hasText: "shower curtain" });
   await expect(curtain).toContainText("For you");
   // He did not write the other note and is not an admin, so he cannot take it down.
-  await expect(notes(knut).filter({ hasText: "Landlord" }).getByRole("button", { name: "Take this note down" })).toHaveCount(0);
-  await curtain.getByRole("button", { name: "Mark as done" }).click();
+  await expect(notes(knut).filter({ hasText: "Landlord" }).getByRole("button", { name: /^Take down/ })).toHaveCount(0);
+  await curtain.getByRole("button", { name: "Done: Buy a new shower curtain" }).click();
   await expect(curtain).toHaveAttribute("data-state", "done");
   await expect(curtain).toContainText("Done by you");
-  await expect(headline(knut)).toHaveText("All sorted");
+  // Nothing is left to do, so the headline counts what is up.
+  await expect(headline(knut)).toHaveText("1 note");
   await back(knut, /\/home$/);
   await expect(seen(knut, "todo")).toContainText("Nothing waiting on you");
 
   // Ida takes her note down. It asks first.
   await ida.reload();
   const landlord = notes(ida).filter({ hasText: "Landlord" });
-  await landlord.getByRole("button", { name: "Take this note down" }).click();
+  await landlord.getByRole("button", { name: "Take down: Landlord is coming Tuesday at 10." }).click();
   await expect(landlord).toBeVisible();
   await landlord.getByRole("button", { name: "Take it down?" }).click();
   await expect(notes(ida).filter({ hasText: "Landlord" })).toHaveCount(0);
@@ -138,17 +139,17 @@ test("shopping leads to expenses, and expenses to being square", async ({ browse
 
   // --- Knut says he will buy the milk, then buys both ---
   await openArea(knut, "shopping");
-  await knut.getByRole("button", { name: "I'll buy Oat milk" }).click();
+  await knut.getByRole("button", { name: "I'll buy it: Oat milk" }).click();
   await expect(items(knut).filter({ hasText: "Oat milk" })).toContainText("You'll buy it.");
   await ida.reload();
   await expect(items(ida).filter({ hasText: "Oat milk" })).toContainText("Knut will buy it.");
   // What someone has taken is theirs: nobody else is offered it.
-  await expect(ida.getByRole("button", { name: "I'll buy Oat milk" })).toHaveCount(0);
+  await expect(ida.getByRole("button", { name: "I'll buy it: Oat milk" })).toHaveCount(0);
   await ida.screenshot(shot("m1-shopping"));
 
-  await knut.getByRole("button", { name: "Got Oat milk" }).click();
+  await knut.getByRole("button", { name: "Bought: Oat milk" }).click();
   await expect(items(knut)).toHaveCount(1);
-  await knut.getByRole("button", { name: "Got Bread" }).click();
+  await knut.getByRole("button", { name: "Bought: Bread" }).click();
   await expect(headline(knut)).toHaveText("Nothing to buy");
   const bag = seen(knut, "bag");
   await expect(bag.getByRole("heading")).toHaveText("You got 2 things");
@@ -185,13 +186,13 @@ test("shopping leads to expenses, and expenses to being square", async ({ browse
   const settle = seen(ida, "settle");
   await expect(settle).toContainText("You pay Knut 50 kr");
   await ida.screenshot(shot("m3-expenses"));
-  await settle.getByRole("button", { name: "Paid", exact: true }).click();
+  await settle.getByRole("button", { name: "Paid: You pay Knut 50 kr" }).click();
   await settle.getByRole("button", { name: "Mark 50 kr as paid?" }).click();
   await expect(headline(ida)).toHaveText("All square");
 
   // --- Knut still has the debt on his screen. Marking it paid again records nothing. ---
   await expect(headline(knut)).toHaveText("You're owed 50 kr");
-  await seen(knut, "settle").getByRole("button", { name: "Paid", exact: true }).click();
+  await seen(knut, "settle").getByRole("button", { name: "Paid: Ida pays you 50 kr" }).click();
   await knut.getByRole("button", { name: "Mark 50 kr as paid?" }).click();
   await expect(headline(knut)).toHaveText("All square");
   await ida.reload();
@@ -199,13 +200,13 @@ test("shopping leads to expenses, and expenses to being square", async ({ browse
 
   // --- An expense that never was on the list, split evenly ---
   const add = seen(ida, "add-expense");
-  await add.getByText("Add an expense").click();
+  if (!(await add.getByLabel("What was it for").isVisible())) await add.getByText("Add an expense").click();
   await add.getByLabel("What was it for").fill("Toilet paper");
   await add.getByLabel("Amount", { exact: true }).fill("99,50");
   await add.getByRole("button", { name: "Add expense" }).click();
-  await expect(headline(ida)).toHaveText("You're owed 49.75 kr");
+  await expect(headline(ida)).toHaveText("You're owed 49,75 kr");
   await knut.reload();
-  await expect(headline(knut)).toHaveText("You owe 49.75 kr");
+  await expect(headline(knut)).toHaveText("You owe 49,75 kr");
 
   // --- One split unevenly: the parts must add up. The form is still open for the next one. ---
   await add.getByLabel("What was it for").fill("Pizza on Friday");
@@ -220,7 +221,7 @@ test("shopping leads to expenses, and expenses to being square", async ({ browse
   await expect(add.getByTestId("split-left")).toHaveText("The parts add up.");
   await ida.screenshot(shot("m4-uneven"));
   await add.getByRole("button", { name: "Add expense" }).click();
-  await expect(headline(ida)).toHaveText("You're owed 249.75 kr");
+  await expect(headline(ida)).toHaveText("You're owed 249,75 kr");
   const pizza = seen(ida, "expense").filter({ hasText: "Pizza on Friday" });
   await expect(pizza).toContainText("You 100 kr, Knut 200 kr");
 
@@ -229,10 +230,14 @@ test("shopping leads to expenses, and expenses to being square", async ({ browse
   await pizza.getByLabel("Ida's part").fill("200");
   await pizza.getByLabel("Knut's part").fill("100");
   await pizza.getByRole("button", { name: "Save", exact: true }).click();
-  await expect(headline(ida)).toHaveText("You're owed 149.75 kr");
+  await expect(headline(ida)).toHaveText("You're owed 149,75 kr");
   // Knut did not pay for it or enter it, so it is not his to change.
   await knut.reload();
-  await expect(headline(knut)).toHaveText("You owe 149.75 kr");
+  await expect(headline(knut)).toHaveText("You owe 149,75 kr");
+  // What he owes is also a line among his things to do.
+  await knut.goto("/home");
+  await expect(seen(knut, "todo")).toContainText("Pay Ida 149,75 kr");
+  await knut.goto("/expenses");
   await expect(seen(knut, "expense").filter({ hasText: "Pizza on Friday" }).locator("summary")).toHaveCount(0);
 });
 
@@ -254,7 +259,7 @@ test("a happening collects who is in, from Home and the calendar too", async ({ 
   await ida.getByLabel("Time").fill("19:30");
   await ida.getByLabel("Where").fill("Our living room");
   await ida.getByRole("button", { name: "Suggest it" }).click();
-  await expect(headline(ida)).toHaveText("Film night");
+  await expect(headline(ida)).toHaveText("1 thing planned");
   await expect(cards(ida)).toHaveCount(1);
   // Whoever suggests it is in.
   await expect(cards(ida).first()).toHaveAttribute("data-reply", "in");
@@ -262,7 +267,7 @@ test("a happening collects who is in, from Home and the calendar too", async ({ 
 
   // --- Knut is asked on Home, and answers right there ---
   await knut.reload();
-  await expect(seen(knut, "todo")).toContainText("Film night. Are you in?");
+  await expect(seen(knut, "todo")).toContainText("Are you in? Film night");
   await expect(seen(knut, "band-happenings")).toContainText("Film night");
   await knut.screenshot(shot("h0-home-asked"));
   await seen(knut, "todo").getByRole("button", { name: "I'm in for Film night" }).click();
@@ -281,12 +286,14 @@ test("a happening collects who is in, from Home and the calendar too", async ({ 
   await expect(film).toContainText("19:30");
   await expect(film).toContainText("Our living room");
   await expect(film.getByTestId("answer")).toHaveCount(0);
+  // He has answered, and the day says what.
+  await expect(film.getByTestId("my-answer")).toHaveText("You're in");
   await knut.screenshot(shot("h2-calendar"));
   // One person's month: Ida is in it too, and nobody else's things are.
   await seen(knut, "who").getByRole("link", { name: "Ida" }).click();
   await expect(seen(knut, "agenda-item").filter({ hasText: "Film night" })).toBeVisible();
   await film.getByRole("link").click();
-  await expect(knut).toHaveURL(/\/happenings$/);
+  await expect(knut).toHaveURL(/\/happenings#[0-9a-f-]{36}$/);
 
   await expect(cards(knut).first()).toHaveAttribute("data-reply", "in");
   await expect(cards(knut).first()).toContainText("You and Ida are in");
@@ -359,7 +366,7 @@ test("a dinner goes from ideas to a shopping list", async ({ browser }) => {
 
   // --- Knut is asked on Home whether he is in, and finds the dinner ---
   await knut.reload();
-  await expect(seen(knut, "todo")).toContainText("Dinner. Are you in?");
+  await expect(seen(knut, "todo")).toContainText("Are you in? Dinner");
   await openArea(knut, "dinner");
   await expect(headline(knut)).toHaveText("What's for dinner?");
   const card = seen(knut, "dinner").first();
@@ -375,14 +382,14 @@ test("a dinner goes from ideas to a shopping list", async ({ browser }) => {
   await knut.getByRole("button", { name: "Vote for Tacos" }).click();
   await expect(dishes(knut).filter({ hasText: "Tacos" })).toContainText("2 votes");
   await expect(dishes(knut).filter({ hasText: "Tacos" })).toContainText("In the lead");
-  await knut.getByRole("button", { name: "I'll cook this dinner" }).click();
+  await knut.getByRole("button", { name: "I'll cook: this dinner" }).click();
   await expect(seen(knut, "duty-cook")).toContainText("You");
 
   // --- Ida cleans up, and they decide on tacos ---
   await ida.reload();
   await expect(seen(ida, "duty-cook")).toContainText("Knut");
   await expect(seen(ida, "duty-cook").getByRole("button")).toHaveCount(0);
-  await ida.getByRole("button", { name: "I'll clean up after this dinner" }).click();
+  await ida.getByRole("button", { name: "I'll clean up: this dinner" }).click();
   await expect(seen(ida, "duty-cleaner")).toContainText("You");
   await ida.getByRole("button", { name: "Decide on Tacos" }).click();
   await expect(headline(ida)).toHaveText("Tacos");
@@ -395,9 +402,9 @@ test("a dinner goes from ideas to a shopping list", async ({ browser }) => {
   await expect(seen(ida, "needs")).toContainText("3 things to buy, 3 that nobody has taken.");
 
   // --- Salsa is in the cupboard. Ida takes the tortillas. ---
-  await ida.getByRole("button", { name: "We have Salsa" }).click();
+  await ida.getByRole("button", { name: "We have it: Salsa" }).click();
   await expect(ingredient(ida, "Salsa")).toHaveAttribute("data-state", "home");
-  await ida.getByRole("button", { name: "I'll buy Tortillas" }).click();
+  await ida.getByRole("button", { name: "I'll buy it: Tortillas" }).click();
   await expect(ingredient(ida, "Tortillas")).toContainText("You'll buy it.");
   await expect(seen(ida, "needs")).toContainText("2 things to buy, 1 that nobody has taken.");
   await ida.screenshot(shot("d2-dinner-settled"));
@@ -413,6 +420,8 @@ test("a dinner goes from ideas to a shopping list", async ({ browser }) => {
   await ida.screenshot(shot("d4-home-yours"));
   await knut.goto("/home");
   await expect(seen(knut, "todo")).toContainText("Cook Tacos");
+  // The cook is told what nobody has said they will buy.
+  await expect(seen(knut, "todo")).toContainText("1 thing nobody is buying yet");
 
   // --- The calendar has the dinner on its day, with who cooks ---
   await nav(ida, "Calendar").click();
@@ -432,13 +441,13 @@ test("a dinner goes from ideas to a shopping list", async ({ browser }) => {
   await knut.goto("/shopping");
   const items = seen(knut, "item");
   await expect(items).toHaveCount(2);
-  await expect(items.filter({ hasText: "Tortillas" })).toContainText("For a dinner. Ida will buy it.");
+  await expect(items.filter({ hasText: "Tortillas" })).toContainText("(Tacos). Ida will buy it.");
   await expect(items.filter({ hasText: "Salsa" })).toHaveCount(0);
-  await knut.getByRole("button", { name: "Got Minced beef" }).click();
+  await knut.getByRole("button", { name: "Bought: Minced beef" }).click();
   await expect(items).toHaveCount(1);
   await ida.reload();
   await expect(ingredient(ida, "Minced beef")).toHaveAttribute("data-state", "bought");
-  await expect(ingredient(ida, "Minced beef")).toContainText("Knut got it.");
+  await expect(ingredient(ida, "Minced beef")).toContainText("Knut bought it.");
 
   // --- Ida cannot come after all, so she no longer cleans up. Then she can. ---
   await ida.getByRole("button", { name: "I'm not coming to this dinner" }).click();

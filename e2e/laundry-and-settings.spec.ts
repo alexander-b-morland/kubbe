@@ -96,9 +96,12 @@ test("an admin sets the rules, then washes and dries", async ({ browser }) => {
   const dryer = ida.getByTestId("resource-dryer");
   await dryer.locator("summary").click();
   await expect(dryer.getByRole("button", { name: "Save", exact: true })).toHaveCount(0);
-  await dryer.getByLabel("Switched on").check();
+  // A second dryer is only offered once the first is in use.
+  await expect(ida.getByTestId("add-dryer")).toHaveCount(0);
+  await dryer.getByLabel("Can be booked").check();
   await dryer.getByRole("button", { name: "Save", exact: true }).click();
   await expect(dryer.getByRole("status")).toHaveText("Saved");
+  await expect(ida.getByTestId("add-dryer")).toBeVisible();
 
   const shower = ida.getByTestId("resource-shower");
   await shower.locator("summary").click();
@@ -129,7 +132,7 @@ test("an admin sets the rules, then washes and dries", async ({ browser }) => {
   await expect(which.getByRole("link", { name: "Shower 2" })).toHaveAttribute("aria-current", "page");
   await tomorrow(ida);
   await ida.getByRole("button", { name: "Book 06:30" }).click();
-  await expect(ida.getByRole("button", { name: "Cancel 06:30" })).toBeVisible();
+  await expect(ida.getByRole("button", { name: "Cancel 06:30", exact: true })).toBeVisible();
   await openRules(ida);
   await second.locator("summary").click();
   await second.getByRole("button", { name: "Remove Shower 2", exact: true }).click();
@@ -151,7 +154,7 @@ test("an admin sets the rules, then washes and dries", async ({ browser }) => {
   await tomorrow(ida);
   await expect(ida.getByRole("navigation", { name: "Machine" }).getByRole("link")).toHaveText(["Washing machine", "Dryer"]);
   await ida.getByRole("button", { name: "Book 09:00" }).click();
-  await expect(ida.getByRole("button", { name: "Cancel 09:00" })).toBeVisible();
+  await expect(ida.getByRole("button", { name: "Cancel 09:00", exact: true })).toBeVisible();
   const suggestion = ida.getByTestId("dryer-suggestion");
   await expect(suggestion).toContainText("Your wash ends at 11:00. Want the dryer after it?");
   await ida.screenshot(shot("l2-laundry"));
@@ -162,6 +165,8 @@ test("an admin sets the rules, then washes and dries", async ({ browser }) => {
 
   await ida.getByRole("navigation", { name: "Machine" }).getByRole("link", { name: "Dryer" }).click();
   await expect(slot(ida, "11:00")).toHaveAttribute("data-state", "mine");
+  // The dryer's own sheet says when the wash is out.
+  await expect(ida.getByTestId("wash-note").filter({ visible: true })).toContainText("Your wash ends at 11:00.");
   await ida.screenshot(shot("l3-dryer"));
 
   // --- People: a member cannot change rules; the last admin cannot leave ---
@@ -172,7 +177,6 @@ test("an admin sets the rules, then washes and dries", async ({ browser }) => {
   await expect(knut.getByRole("heading", { level: 1 })).toHaveText("You're invited to Kollektivet");
   await knut.getByRole("link", { name: "Create account" }).click();
   await signUp(knut, "Knut", "knut");
-  await knut.getByRole("button", { name: "Join Kollektivet" }).click();
   await expect(knut).toHaveURL(/\/home$/);
   await openRules(knut);
   await expect(knut.getByText("Only an admin can change these.")).toBeVisible();
@@ -186,7 +190,9 @@ test("an admin sets the rules, then washes and dries", async ({ browser }) => {
   await expect(ida.getByTestId("leave").getByRole("alert")).toContainText("You're the only admin");
 
   await openHousehold(ida);
+  // Handing out admin rights asks first.
   await ida.getByTestId("member-Knut").getByRole("button", { name: "Make Knut admin" }).click();
+  await ida.getByTestId("member-Knut").getByRole("button", { name: /^Make Knut an admin\?/ }).click();
   await expect(ida.getByTestId("member-Knut").getByText("Admin", { exact: true })).toBeVisible();
   await openRules(knut);
   await expect(knut.getByTestId("resource-shower")).toBeVisible();
@@ -194,13 +200,23 @@ test("an admin sets the rules, then washes and dries", async ({ browser }) => {
   // --- You: change your name; replace the join code ---
   // --- Your profile: a name, a drawn avatar, a bio and a fun answer ---
   await nav(knut, "You").click();
-  await expect(knut.getByRole("heading", { level: 1 })).toHaveText("You");
+  await expect(knut.getByTestId("headline").filter({ visible: true })).toHaveText("Knut");
+  await expect(knut.getByRole("heading", { level: 1 })).toContainText("an admin of Kollektivet");
   await expect(knut.getByRole("button", { name: "Save", exact: true })).toHaveCount(0);
+  // Ida's colour is marked as hers, and cannot be picked while others are free.
+  await expect(knut.locator("label[data-taken]")).toHaveCount(1);
+  await expect(knut.locator("label[data-taken]")).toContainText("Ida");
+  await expect(knut.locator("label[data-taken] input")).toBeDisabled();
   await knut.getByLabel("Your name").filter({ visible: true }).fill("Knut B");
   await knut.getByLabel("Ghost").check({ force: true });
   await knut.getByLabel("About you").fill("Plays the trombone. Trades dishes for coffee.");
   await knut.getByRole("radio", { name: "Night owl" }).check({ force: true });
   await knut.getByLabel("My signature dish").fill("Taco, every Friday");
+  // The name shows in the preview as it is typed, and a tap fills in a common diet.
+  await expect(knut.getByTestId("preview")).toContainText("Knut B");
+  await knut.getByRole("button", { name: "Vegetarian", exact: true }).click();
+  await knut.getByRole("button", { name: "Nuts", exact: true }).click();
+  await expect(knut.locator('input[name="avoids"]')).toHaveValue("Vegetarian, Nuts");
   await knut.getByRole("button", { name: "Save", exact: true }).click();
   await expect(knut.getByRole("status")).toHaveText("Saved");
   await knut.screenshot(shot("p1-profile-edit"));
@@ -212,6 +228,7 @@ test("an admin sets the rules, then washes and dries", async ({ browser }) => {
   await expect(ida.getByText("Plays the trombone. Trades dishes for coffee.")).toBeVisible();
   await expect(ida.getByText("Taco, every Friday")).toBeVisible();
   await expect(ida.getByText("Picked: Night owl")).toBeVisible();
+  await expect(ida.getByText("Doesn't eat: Vegetarian, Nuts")).toBeVisible();
   // The way back is at the top of the page.
   await ida.getByTestId("back").filter({ visible: true }).click();
   await expect(ida).toHaveURL(/\/settings$/);
@@ -243,12 +260,11 @@ test("an admin sets the rules, then washes and dries", async ({ browser }) => {
   await per.goto(`/join/${newCode}`);
   await per.getByRole("link", { name: "Create account" }).click();
   await signUp(per, "Per", "per");
-  await per.getByRole("button", { name: "Join Kollektivet" }).click();
   await expect(per).toHaveURL(/\/home$/);
   await knut.reload();
   const perRow = knut.getByTestId("member-Per");
   await perRow.getByRole("button", { name: "Remove Per", exact: true }).click();
-  await perRow.getByRole("button", { name: "Remove Per and cancel their bookings?" }).click();
+  await perRow.getByRole("button", { name: "Remove Per from Kollektivet and cancel their bookings?" }).click();
   await expect(knut.getByTestId("member-Per")).toHaveCount(0);
   await expect(knut.getByTestId("join-code").filter({ visible: true })).not.toHaveText(`${newCode.slice(0, 3)} ${newCode.slice(3)}`);
   await per.goto(`/join/${newCode}`);

@@ -72,10 +72,10 @@ test("create a household, invite a roommate by link, sign back in", async ({ bro
   await knut.getByRole("link", { name: "Create account" }).click();
   await expect(knut).toHaveURL(/\/sign-up\?next=/);
   await expect(knut.getByRole("heading", { level: 1 })).toHaveText("Create your account");
-  await signUp(knut, "Knut", "knut");
-  await expect(knut.getByRole("heading", { level: 1 })).toHaveText("Join Kollektivet?");
+  // The sign-up screen says which household the account is for, and joins it without asking again.
+  await expect(knut.getByTestId("invited-to")).toContainText("Kollektivet");
   await knut.screenshot({ path: "test-shots/4-join.png", fullPage: true, caret: "initial", animations: "disabled" });
-  await knut.getByRole("button", { name: "Join Kollektivet" }).click();
+  await signUp(knut, "Knut", "knut");
   await expect(knut).toHaveURL(/\/home$/);
   await expect(knut.getByRole("heading", { level: 1 })).toHaveText("Hi Knut");
   // Once there are two of you, the invite card makes way for what is going on.
@@ -99,7 +99,8 @@ test("create a household, invite a roommate by link, sign back in", async ({ bro
 
   // --- Knut signs out and back in ---
   await main.getByRole("link", { name: "You", exact: true }).click();
-  await expect(knut.getByRole("heading", { level: 1 })).toHaveText("You");
+  await expect(knut.getByTestId("headline").filter({ visible: true })).toHaveText("Knut");
+  await expect(knut.getByRole("heading", { level: 1 })).toContainText("living in Kollektivet");
   await knut.getByRole("button", { name: "Sign out" }).click();
   await expect(knut).toHaveURL(/\/$/);
   await knut.goto("/home");
@@ -118,6 +119,9 @@ test("create a household, invite a roommate by link, sign back in", async ({ bro
   // An email can only have one account.
   const third = await (await browser.newContext()).newPage();
   await third.goto("/sign-up");
+  // Everything that is missing is listed at once.
+  await third.getByRole("button", { name: "Create account" }).click();
+  await expect(third.getByTestId("form-error")).toHaveText("Enter your name. Enter a valid email address. Use at least 8 characters for your password.");
   await signUp(third, "Imposter", "ida");
   await expect(third.getByTestId("form-error")).toContainText("already has an account");
 
@@ -133,4 +137,6 @@ test("create a household, invite a roommate by link, sign back in", async ({ bro
   const lost = await (await browser.newContext()).newPage();
   await lost.goto("/join/ZZZZZZ");
   await expect(lost.getByRole("heading", { level: 1 })).toHaveText("That link doesn't work");
+  // Someone new can still get started.
+  await expect(lost.getByRole("link", { name: "Create account" })).toBeVisible();
 });

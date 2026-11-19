@@ -52,8 +52,8 @@ test("a tour of a lived-in flat", async ({ browser }) => {
   const knut = await (await browser.newContext()).newPage();
   await knut.goto(`/join/${code}`);
   await knut.getByRole("link", { name: "Create account" }).click();
+  await knut.screenshot(shot("01b-sign-up-invited"));
   await signUp(knut, "Knut", "knut");
-  await knut.getByRole("button", { name: "Join Kollektivet" }).click();
   await expect(knut).toHaveURL(/\/home$/);
 
   // --- A profile with something on it ---
@@ -65,7 +65,7 @@ test("a tour of a lived-in flat", async ({ browser }) => {
   await knut.getByRole("radio", { name: "Does the dishes" }).check({ force: true });
   await knut.getByLabel("My signature dish").fill("Pasta with whatever is left");
   await knut.getByLabel("The song I play too loud").fill("Take On Me");
-  await knut.getByLabel("What you don't eat").fill("Fish");
+  await knut.locator('input[name="avoids"]').fill("Fish");
   await knut.getByRole("button", { name: "Save" }).click();
   await expect(knut.getByText("Saved")).toBeVisible();
   await knut.screenshot(shot("02-you"));
@@ -116,7 +116,7 @@ test("a tour of a lived-in flat", async ({ browser }) => {
   await knut.getByRole("button", { name: "I'm in for this dinner" }).click();
   await expect(seen(knut, "whos-in")).toHaveAttribute("data-me", "in");
   await knut.getByRole("button", { name: "Vote for Tacos" }).click();
-  await knut.getByRole("button", { name: "I'll cook this dinner" }).click();
+  await knut.getByRole("button", { name: "I'll cook: this dinner" }).click();
   await expect(seen(knut, "duty-cook")).toContainText("You");
 
   await ida.reload();
@@ -160,7 +160,7 @@ test("a tour of a lived-in flat", async ({ browser }) => {
     await expect(seen(ida, "item").filter({ hasText: thing })).toBeVisible();
   }
   await knut.goto("/shopping");
-  await knut.getByRole("button", { name: "Got Oat milk" }).click();
+  await knut.getByRole("button", { name: "Bought: Oat milk" }).click();
   await expect(seen(knut, "bag")).toContainText("You got 1 thing");
   await knut.screenshot(shot("12-shopping"));
   const bag = seen(knut, "bag");
@@ -209,9 +209,31 @@ test("a tour of a lived-in flat", async ({ browser }) => {
   await expect(ida.getByRole("heading", { level: 1, name: "Knut" })).toBeVisible();
   await ida.screenshot(shot("25-roommate"));
 
+  // --- The smallest phones: nothing may stick out sideways ---
+  await knut.setViewportSize({ width: 320, height: 640 });
+  for (const [name, path] of [["home", "/home"], ["calendar", "/calendar"], ["cleaning", "/cleaning"], ["dinner", dinnerUrl]] as const) {
+    await knut.goto(path);
+    await expect(knut.getByRole("heading", { level: 1 }).filter({ visible: true })).toBeVisible();
+    await knut.waitForTimeout(400);
+    await knut.screenshot(shot(`26-narrow-${name}`));
+    expect(await knut.evaluate(() => document.documentElement.scrollWidth - window.innerWidth), `${name} is wider than a 320 px screen`).toBeLessThanOrEqual(0);
+  }
+
   // --- The same on a wide screen ---
   await ida.setViewportSize({ width: 1360, height: 900 });
-  for (const [name, path] of [["home", "/home"], ["calendar", `/calendar?day=${inThreeDays}`], ["dinner", dinnerUrl], ["board", "/board"], ["shower", "/shower"], ["expenses", "/expenses"]] as const) {
+  const wide = [
+    ["home", "/home"],
+    ["calendar", `/calendar?day=${inThreeDays}`],
+    ["dinner", dinnerUrl],
+    ["board", "/board"],
+    ["shower", "/shower"],
+    ["expenses", "/expenses"],
+    ["cleaning", "/cleaning"],
+    ["shopping", "/shopping"],
+    ["household", "/settings"],
+    ["you", "/profile"],
+  ] as const;
+  for (const [name, path] of wide) {
     await ida.goto(path);
     await expect(ida.getByRole("heading", { level: 1 }).filter({ visible: true })).toBeVisible();
     await ida.waitForTimeout(400);

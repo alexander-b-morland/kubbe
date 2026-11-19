@@ -74,13 +74,14 @@ Package manager is npm. Keep this list current as scripts are added.
 - `src/lib/booking`: `rules.ts` (pure rules), `service.ts` (database), `actions.ts` (server actions), `status.ts` ("Free until 07:30"), `defaults.ts`.
 - `src/lib/cleaning`: `rota.ts` (pure rota maths), `service.ts` (database). Turns are computed, never stored; only "done" and "taken over" are stored.
 - `src/components/booking`: `BookingScreen` and `SlotList`, shared by shower and laundry. A new bookable thing should reuse them.
-- `src/components/ui`: `Field`, `SubmitButton`, `FormError`, `ActionButton`, `SavableForm` (a Save button only once something changed). Forms post to server actions and get errors back through `useActionState`.
+- `src/components/ui`: `Field`, `SubmitButton`, `FormError`, `ActionButton`, `SavableForm` (a Save button only once something changed; `sticky` keeps it in view on a long form), `QuickAddForm` (one box and a button, for adding to a list again and again), `Locked` (fields that cannot be changed while their form is being sent), `Remaining` (characters left). Forms post to server actions and get errors back through `useActionState`.
+- `src/components/money/split-fields.tsx`: `SplitFields`, "Evenly" or "An amount each", shared by expenses and what was paid for the shopping.
 - `src/lib/extras.ts`, `src/lib/extras-guard.ts`: the parts under Flat. Their screens and actions start with `requireExtra(key)`, which is `requireHousehold()` plus a check that the household has that part switched on.
 - `src/lib/dinner`: `plan.ts` (pure rules), `service.ts` (database), `ideas.ts` (Claude, falling back to `cookbook.ts`).
 - `src/lib/shopping.ts` (list and expenses), `src/lib/money.ts` (pure: split, balances, settle up), `src/lib/board.ts`, `src/lib/happenings.ts`, `src/lib/profile.ts`.
 - `src/lib/dashboard.ts`: `buildToDos`, the pure function behind "Yours to do" on Home. A new part of the app that gives people something to do adds its lines there.
 - `src/lib/areas.ts`: the eight areas, each with its name, address, drawing and colour. Anything that lists or colours areas reads from here.
-- `src/components/area/area-header.tsx`: `AreaPage` and `AreaHeader`, the coloured band at the top of every area's screen, and `BackLink`, the way back that every screen below a tab starts with.
+- `src/components/area/area-header.tsx`: `AreaPage` and `AreaHeader`, the coloured band at the top of every area's screen; `TabHeader`, the same band in ink for Calendar, Household, the rules and You; `areaStyle`, the area's colour as CSS variables; and `BackLink`, the way back that every screen below a tab starts with.
 - `src/components/app-nav.tsx`: the navigation, a bar at the bottom on a phone and a column on the left from `lg` up.
 - `src/lib/calendar.ts` (pure: what each day holds, month sheets), `src/lib/calendar-service.ts` (loads a stretch of days), `src/components/calendar/agenda.tsx` (`AgendaItem`, and `AnswerButtons` for "I'm in" and "Can't").
 - `src/components/avatar`: the drawn avatars, and `Person` and `Faces` for showing who something belongs to. `src/components/board/sticky.tsx`: a note on the whiteboard. `src/components/ui/strike.tsx`: `Struck`, the pen line through something done.
@@ -90,12 +91,14 @@ Package manager is npm. Keep this list current as scripts are added.
 
 - **Tenancy.** Every query is scoped to the caller's household on the server. Never trust a household id sent by the client.
 - **Booking rules live on the server.** Slot length, no back-to-back, and the daily cap are enforced in one module inside a transaction. The UI may mirror them for hints, but the server decides.
+- **The daily cap and "two in a row" are per person across a kind.** With two showers, three slots a day means three in all, and a slot on one shower blocks the same time on the other. `bookSlot` locks on person, household and kind, and passes the person's bookings on the other ones of that kind as `ownElsewhere`.
 - **No double booking.** The database rejects overlapping bookings for the same resource with a constraint, as the last line of defence.
 - **Time.** Store timestamps in UTC. Each household has a time zone, and all slot maths happens in that zone.
 - **Secrets.** Never commit `.env` files, keys, or tokens. No fallback secrets in code: a missing secret is a startup error. Only `.env.example` with empty values is committed.
 - **Who lives where changes under a lock.** Joining, leaving, removing someone and changing a role each start with `lockHousehold(tx, id)` inside one transaction. Without it, two people pressing at once can both pass a check only one should (the last two admins both leaving).
 - **Removing someone replaces the join code.** They know the old one.
 - **Cleaning turns under way do not move.** Before anything that shifts the rotation (someone joins or leaves, a room is removed), call `pinCurrentTurns(tx, householdId, today)` in the same transaction.
+- **A rota starts on the day the admin picks.** Until then its row has `startsOn` set: it says when it starts, has no buttons, and counts as nobody's turn on Home and in the headline. Changing the start day or the rhythm starts its turns over.
 - **An action applies to what was on screen.** Cleaning actions carry the period the person was looking at and do nothing if a new one has started. Booking actions carry the exact slot start.
 - **Guessable things are rate limited.** Sign-in, sign-up, join attempts and invite-link lookups go through `allowAttempt` in `src/lib/rate-limit.ts`. The limits are active in production only.
 - **Redirects after signing in go through `safeNextPath`,** which accepts only an invite link. Never redirect to a path taken from the URL any other way.
@@ -107,6 +110,8 @@ Package manager is npm. Keep this list current as scripts are added.
 - **Ticks and claims belong to whoever made them.** `setBought` and `setClaim` never overwrite another person's tick or claim.
 - **Someone who leaves is released.** `removeMember` calls `releaseDinnerDuties` so they no longer cook, clean up or hold a shopping claim.
 - **Server actions validate every argument,** including ones bound on the server such as a member id or a role. They arrive from the browser like any other input.
+- **An account made from an invitation joins that household at once.** `signUp` does it, counted against the same join limits. The invitation screen is still what someone with an account sees.
+- **Two roommates do not share a colour while a free one is left.** `setMemberColour` refuses it; joining hands out the first free colour and an avatar nobody there has.
 
 ## Design
 
@@ -120,27 +125,32 @@ Approved 2026-11-15, except the logo, which is still being drawn. Reworked 2026-
 |---|---|---|
 | `paper` | `#F5F4EF` | Background |
 | `ink` | `#1E2A44` | Text and drawn lines (never pure black) |
-| `ink-soft` | `#6B7385` | Secondary text |
+| `ink-soft` | `#586072` | Secondary text |
 | `fjord` | `#2E5270` | Shower |
 | `ochre` | `#D2A24C` | Laundry |
 | `spruce` | `#476B52` | Cleaning |
 | `barn` | `#A6402F` | Happening right now, warnings |
-| `salmon` | `#E3A583` | Dinner |
-| `sage` | `#A9C4A2` | Shopping |
-| `heather` | `#B8A9D4` | Expenses |
-| `blush` | `#E2A5B8` | Happenings, and a to-do on the whiteboard |
-| `sky` | `#A3C6DA` | Noticeboard |
+| `salmon` | `#D4805C` | Dinner |
+| `sage` | `#8DB07C` | Shopping |
+| `heather` | `#A48BC9` | Expenses |
+| `blush` | `#D97F98` | Happenings |
+| `sky` | `#78AFCB` | Noticeboard |
 | `note` | `#F1DF9A` | A note on the whiteboard |
+| `todo` | `#C9E0EC` | A to-do on the whiteboard |
 
-On `fjord` and `spruce` use `paper` for text and lines; on every other area colour use `ink`. Inside an area, panels use a wash of its colour (`bg-salmon/30`). The classes for each area come from `src/lib/areas.ts`.
+The five extras' colours were deepened on 2026-11-19: the test roommates found the first, paler set washed out. On `fjord` and `spruce` use `paper` for text and lines; on every other area colour use `ink`. Inside an area, panels use a wash of its colour (`bg-salmon/30`). The classes for each area come from `src/lib/areas.ts`.
+
+**The main button of a screen wears the area's colour.** `areaStyle(area)` on the screen's `<main>` sets `--area-bg` and `--area-fg`; the `.area-button` class (what `SubmitButton` and a `filled` `ActionButton` use) reads them, with an ink border. Outside an area it falls back to ink.
 
 **Finding your way.** Decided 2026-11-18, replacing the five tabs the owner said made no sense.
 
 - Four tabs: Home, Calendar, Household, You. Shower, laundry and cleaning are not tabs: they are areas like dinner and shopping, and all eight are tiles on Home.
 - Every screen below a tab starts with `BackLink`, top left, saying where it leads. The owner got stuck on screens without one.
-- Home is the one dashboard: what is yours to do (with the answer buttons for invitations right there), money both ways, a tile per area saying what matters now, the week ahead, and the notes on the board.
+- Every screen starts with a band: an area's screens in its colour (`AreaPage`), the screens that belong to no area (Calendar, Household, the rules, You) in ink (`TabHeader`). Home is the exception: it greets by name.
+- Home is the one dashboard: what is yours to do (with the answer buttons for invitations right there), money both ways, a tile per area saying what matters now, the week ahead, and the notes on the board. On a phone they come in the order they need you: to-do, money, the week, the tiles, the board.
+- "Yours to do" is sorted by what falls due first. Dinner invitations are asked two at a time; the rest are one line with a count.
 - What an admin can change is reachable from where it is used: "Change the rules" on the shower and laundry screens.
-- From `lg` up the navigation is a column on the left, Home and Calendar use two columns, and other screens widen to `max-w-3xl`.
+- From `lg` up the navigation is a column on the left. Home, Calendar and every area screen with something to put beside its list (`AreaPage`'s `aside`) use two columns; other screens widen to `max-w-3xl`.
 - People show as their drawn avatar on their colour wherever something is theirs: who is in, who cooks, who is buying, whose note.
 
 **Type.** Times and headlines use the `type-display` utility (Archivo, condensed, weight 800). Everything else is Schibsted Grotesk.
@@ -151,7 +161,9 @@ The three room drawings are the `RoomArt` component (`src/components/illustratio
 
 **Booking a slot** looks like signing a paper sheet: tapping a free slot draws a pen circle around the time, then a squiggle under your name. Cancelling runs it backwards.
 
-**Free slots must look tappable.** A free slot shows a filled `ink` "Book" button. That is enough: no dotted or dashed outline around the time before booking (tried and rejected). The pen circle appears only when the slot is booked. Never rely on the word "Free" alone.
+**Free slots must look tappable.** A free slot shows a filled "Book" button in the area's colour. That is enough: no dotted or dashed outline around the time before booking (tried and rejected). The pen circle appears only when the slot is booked. Never rely on the word "Free" alone.
+
+**Booking answers at once, cancelling asks first.** A press on Book shows "Booking…" on the row straight away, and the row goes back with a reason if the server refuses. Cancel turns into "Keep it" and "Cancel 07:00?": one slip of the thumb must not give a slot away.
 
 **Logo.** The house mascot: a carved wooden hand holding a trout. It must read clearly as a wooden hand and feel real and three-dimensional, not stiff or flat. Two earlier attempts built from simple geometric blocks were rejected for exactly that.
 
@@ -167,11 +179,15 @@ The three room drawings are the `RoomArt` component (`src/components/illustratio
 
 **Do not stack conflicting Tailwind classes.** `text-lg text-3xl` does not resolve to the last one; the order in the built CSS decides, and it put `text-lg` last. Give a component a named look to choose between instead (see `Field`).
 
+**Ids that links point at exist once.** A note on the board and a happening have their id as an anchor (`/board#<id>`), and `:target` outlines what a link landed on. Only the full screen sets the id, never a preview of the same thing on Home, because of the next point.
+
 **The previous screen stays in the page, hidden.** Next.js keeps the screen you navigated from mounted but hidden. Tests must therefore look only at visible elements (`.filter({ visible: true })`), and wait for a navigation to really finish (for example the day link getting `aria-current`) before pressing anything on the new screen.
 
 **Never swap a button's type in place.** A button that turns from "ask" into "confirm" must be two elements with different `key`s. Reusing one element makes the first press also submit the form. See `ActionButton`.
 
-**Forms after saving.** The browser resets a form to its old defaults after a server action, and selects and checkboxes do not pick up new ones. Give the form a `key` made of the saved values.
+**Forms after saving.** The browser resets a form to its old defaults after a server action, and selects and checkboxes do not pick up new ones. Give the form a `key` made of the saved values. Never a `key` made of how many things there are: a roommate adding something would then wipe what is being typed. A form that adds to a list holds its text in state and empties it when its own save succeeds (`QuickAddForm`, `DishForm`, `NoteForm`).
+
+**A button says what it acts on.** In a list, give `ActionButton` `about`: the spoken name becomes the visible words and then the thing, "Bought: Oat milk". It starts with what is on the button, so someone using voice control can say what they see.
 
 **Screenshots.** The browser tests save phone-sized screenshots of every screen to `test-shots/` (ignored by git). Look at them after changing a screen.
 
@@ -181,7 +197,7 @@ The three room drawings are the `RoomArt` component (`src/components/illustratio
 
 **Wording that is settled.** "Two in a row" (not "back to back"). Slot lengths through `describeSlotLength`: "20-minute slots", "2-hour slots". A blocked slot says "Leave a gap next to your slot". Buttons that save say "Save". The sentence on the front page is the owner's own wording: do not rewrite it.
 
-**Confirming.** Anything that removes or replaces goes through `ActionButton` with `confirm` worded as what will happen ("Remove Knut and cancel their bookings?"). It shows a "Keep as it is" button beside the question.
+**Confirming.** Anything that removes or replaces goes through `ActionButton` with `confirm` worded as what will happen ("Remove Knut and cancel their bookings?"). It shows a "Keep as it is" button beside the question. An action whose result would not show on the screen returns a `message` saying what it did ("Dealt out again. 1 turn changed hands.").
 
 **No CSS Modules.** The Tailwind rule in `next.config.ts` treats every `.css` file as global, so `*.module.css` imports come back empty and the styles silently do not apply. Use Tailwind utilities, or a plain `.css` file with prefixed class names (see `src/components/logo/kubbe-logo.css`).
 
@@ -236,7 +252,7 @@ He tested the second round and sent one long message. Tick each off as it ships.
 - [x] **Cleaning:** pick the day a rota starts.
 - [x] **Wide screens** use the space.
 - [x] **Claude Sonnet 5.5** as the model. His limits stand: 20 a day per person, 40 per household, 300 for the app.
-- [ ] **Ten test roommates** in two flats of five, as sub-agents on Claude Opus 5.5, using the app and reporting through their two admins. Then fix everything they find.
+- [x] **Ten test roommates** in two flats of five, as sub-agents on Claude Opus 5.5, using the app and reporting through their two admins. Done 2026-11-18 and 19: about 190 findings, fixed except what is listed under "Open items" as from the test roommates.
 - [ ] **Norwegian:** one switch for the whole app, and Claude's ideas in Norwegian too.
 - [ ] **Reminders.** He asked how; web push needs no domain. Not built yet.
 
@@ -254,6 +270,17 @@ Needs the owner:
 Can be built any time:
 
 - Reminders (web push), repeating bookings, Norwegian.
+- From the test roommates, asked for but not built:
+  - A way to see what changed since you last looked (who booked, who answered, what was added).
+  - Paying back part of what you owe, and a list of what is between you and one other person.
+  - A warning when a happening is suggested on top of a dinner or the other way round.
+  - Changing a dinner's time once it is planned, and amounts on ingredients ("2 cans").
+  - Replies or a thumbs-up on a note on the board.
+  - A week view of the calendar, and moving between days with the arrow keys.
+  - A drawing of its own for the dryer, and drawings on the empty states of the extras.
+  - Redrawing the small icons in the same hand as the logo.
+  - A real "not found" status for a roommate or dinner that does not exist (the screen is right, the status code is 200).
+  - Moving the keyboard focus to what changed after an action, and tying a form's error to the field it is about.
 - A security and correctness review of the extras was done 2026-11-16 and its findings fixed, except one:
   - Deleting a user account would cascade away the expenses they paid and unbalance the books. No screen deletes accounts yet: change those foreign keys to `restrict` before adding one.
 - Dinners: a different time per fixed day (the table allows it, the form sets one time for all), removing a single ingredient, and a note on a dinner ("bring a friend").

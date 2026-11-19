@@ -71,7 +71,6 @@ test("rooms go round between roommates, and turns can be done or taken over", as
   await expect(knut.getByRole("heading", { level: 1 })).toHaveText("You're invited to Kollektivet");
   await knut.getByRole("link", { name: "Create account" }).click();
   await signUp(knut, "Knut", "knut");
-  await knut.getByRole("button", { name: "Join Kollektivet" }).click();
   await expect(knut).toHaveURL(/\/home$/);
   await openArea(knut, "cleaning");
   await expect(headline(knut)).toHaveText("Nothing for you now");
@@ -85,7 +84,7 @@ test("rooms go round between roommates, and turns can be done or taken over", as
   const redeal = ida.getByTestId("redeal");
   await redeal.getByRole("button", { name: "Deal turns out again" }).click();
   await redeal.getByRole("button", { name: "Deal this round's turns out again?" }).click();
-  await expect(redeal.getByRole("status")).toHaveText("Dealt out again.");
+  await expect(redeal.getByRole("status")).toHaveText("Dealt out again. 1 turn changed hands.");
   await knut.reload();
   await expect(headline(knut)).toHaveText("Your turn: Kitchen");
   await expect(knut.getByTestId("redeal")).toHaveCount(0);
@@ -102,17 +101,18 @@ test("rooms go round between roommates, and turns can be done or taken over", as
   await expect(turn(ida, "Bathroom")).toHaveAttribute("data-state", "done");
   await expect(turn(ida, "Bathroom")).toContainText("Done by you");
   await expect(headline(ida)).toHaveText("Nothing for you now");
-  await ida.getByRole("button", { name: "Not done: Bathroom" }).click();
+  await ida.getByRole("button", { name: "Undo: Bathroom" }).click();
   await expect(turn(ida, "Bathroom")).toHaveAttribute("data-state", "mine");
   await ida.getByRole("button", { name: "Done: Bathroom" }).click();
   await expect(turn(ida, "Bathroom")).toHaveAttribute("data-state", "done");
 
   // --- Taking a turn over, and giving it back ---
-  await ida.getByRole("button", { name: "Take over Kitchen" }).click();
+  await ida.getByRole("button", { name: "I'll take it: Kitchen" }).click();
   await expect(turn(ida, "Kitchen")).toHaveAttribute("data-state", "mine");
+  await expect(turn(ida, "Kitchen")).toContainText("You took this over from Knut.");
   await knut.reload();
   await expect(headline(knut)).toHaveText("Nothing for you now");
-  await ida.getByRole("button", { name: "Give back Kitchen" }).click();
+  await ida.getByRole("button", { name: "Give it back: Kitchen" }).click();
   await expect(turn(ida, "Kitchen")).toHaveAttribute("data-state", "theirs");
 
   // --- When everything is done ---
@@ -122,7 +122,8 @@ test("rooms go round between roommates, and turns can be done or taken over", as
   await ida.reload();
   await expect(headline(ida)).toHaveText("All clean");
   await expect(turn(ida, "Kitchen")).toContainText("Done by Knut");
-  await expect(ida.getByRole("region", { name: "Turns done, last 8 weeks" })).toContainText("You1 turn done");
+  // The tally counts the work, not only the turns.
+  await expect(ida.getByTestId("tally").filter({ visible: true })).toContainText("1 turn, about 30 min");
   await ida.screenshot(shot("c3-all-clean"));
 
   // --- An admin changes and removes rooms ---
@@ -149,5 +150,15 @@ test("rooms go round between roommates, and turns can be done or taken over", as
   await rooms.getByRole("button", { name: "Add", exact: true }).click();
   await expect(turn(ida, "Empty the dishwasher")).toContainText("about 5 min");
   await expect(rooms.locator("summary", { hasText: "Empty the dishwasher" })).toContainText("Every day");
+  // --- A rota can start on a day of the admin's choosing. Until then it is nobody's to do ---
+  await rooms.getByLabel("Room or chore").fill("Hallway");
+  // The form for a new one comes after the forms of the ones there are.
+  const start = rooms.locator('input[name="startDay"]').last();
+  const [year, month, day] = (await start.inputValue()).split("-").map(Number);
+  await start.fill(new Date(Date.UTC(year, month - 1, day + 1)).toISOString().slice(0, 10));
+  await rooms.getByRole("button", { name: "Add", exact: true }).click();
+  await expect(turn(ida, "Hallway")).toHaveAttribute("data-state", "waiting");
+  await expect(turn(ida, "Hallway")).toContainText("Starts tomorrow");
+  await expect(turn(ida, "Hallway").getByRole("button")).toHaveCount(0);
   await ida.screenshot(shot("c4-chores"));
 });
