@@ -21,6 +21,8 @@ export type CalendarItem = {
   mine: boolean;
   /** The reader has not said whether they are in. */
   ask?: { kind: "dinner" | "happening"; id: string };
+  /** What the reader answered, when it is an invitation they have answered. */
+  answer?: { kind: "dinner" | "happening"; id: string; going: boolean };
   /** A cleaning turn that is ticked off. */
   done?: boolean;
   /**
@@ -45,6 +47,8 @@ export type CalendarInput = {
     notGoing: readonly string[];
   }[];
   happenings: readonly { id: string; title: string; day: string; time: number; place: string; going: readonly string[]; notGoing: readonly string[] }[];
+  /** Fixed dinner days too far off to have a dinner of their own yet. */
+  fixedDinners?: readonly { day: string; time: number }[];
   turns: readonly { areaId: string; name: string; day: string; assigneeId: string | null; done: boolean; routine?: boolean }[];
 };
 
@@ -82,6 +86,21 @@ export function buildCalendar(input: CalendarInput): CalendarItem[] {
       people: [...dinner.going],
       mine: dinner.going.includes(me) || dinner.cookId === me,
       ask: answered ? undefined : { kind: "dinner", id: dinner.id },
+      answer: answered ? { kind: "dinner", id: dinner.id, going: dinner.going.includes(me) } : undefined,
+    });
+  }
+
+  for (const fixed of input.fixedDinners ?? []) {
+    items.push({
+      key: `fixed-${fixed.day}`,
+      day: fixed.day,
+      time: fixed.time,
+      area: "dinner",
+      title: "Dinner",
+      detail: "A fixed dinner day. It opens for answers two weeks ahead.",
+      href: "/dinner",
+      people: [],
+      mine: false,
     });
   }
 
@@ -94,10 +113,11 @@ export function buildCalendar(input: CalendarInput): CalendarItem[] {
       area: "happenings",
       title: happening.title,
       detail: happening.place,
-      href: "/happenings",
+      href: `/happenings#${happening.id}`,
       people: [...happening.going],
       mine: happening.going.includes(me),
       ask: answered ? undefined : { kind: "happening", id: happening.id },
+      answer: answered ? { kind: "happening", id: happening.id, going: happening.going.includes(me) } : undefined,
     });
   }
 

@@ -1,7 +1,8 @@
 import { listBookingsBetween } from "@/lib/booking/service";
 import { buildCalendar, type CalendarItem } from "@/lib/calendar";
 import { listTurnsBetween } from "@/lib/cleaning/service";
-import { listDinnersBetween, listUpcomingDinners } from "@/lib/dinner/service";
+import { LOOK_AHEAD_DAYS, weekdayOf } from "@/lib/dinner/plan";
+import { listDinnersBetween, listRules, listUpcomingDinners } from "@/lib/dinner/service";
 import { hasExtra } from "@/lib/extras";
 import { listBetween } from "@/lib/happenings";
 import { addDays, dayInZone, instantInZone, minutesInZone } from "@/lib/time";
@@ -24,14 +25,23 @@ export async function loadCalendar(input: {
   const to = instantInZone(addDays(toDay, 1), 0, zone);
   const dinnersOn = hasExtra(household, "dinner");
 
-  const [bookings, turns, happenings, ahead, before] = await Promise.all([
+  const [bookings, turns, happenings, ahead, before, rules] = await Promise.all([
     listBookingsBetween(household.id, from, to),
     listTurnsBetween(household.id, fromDay, toDay),
     hasExtra(household, "happenings") ? listBetween(household.id, from, to) : [],
     // From today on, fixed dinner days are filled in as they are looked at.
     dinnersOn && toDay >= today ? listUpcomingDinners(household.id, today) : [],
     dinnersOn && fromDay < today ? listDinnersBetween(household.id, fromDay, addDays(today, -1) < toDay ? addDays(today, -1) : toDay) : [],
+    dinnersOn ? listRules(household.id) : [],
   ]);
+
+  // A fixed dinner day gets its dinner two weeks ahead. Further off, the calendar still shows the day is taken.
+  const fixedDinners: { day: string; time: number }[] = [];
+  const firstFar = addDays(today, LOOK_AHEAD_DAYS);
+  for (let day = firstFar > fromDay ? firstFar : fromDay; rules.length > 0 && day <= toDay; day = addDays(day, 1)) {
+    const rule = rules.find((found) => found.weekday === weekdayOf(day));
+    if (rule && !ahead.some((dinner) => dinner.day === day)) fixedDinners.push({ day, time: rule.time });
+  }
 
   return buildCalendar({
     me: input.me,
@@ -56,5 +66,6 @@ export async function loadCalendar(input: {
       notGoing: happening.notGoing,
     })),
     turns,
+    fixedDinners,
   });
 }

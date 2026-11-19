@@ -56,10 +56,26 @@ export function AgendaItem({
           <span className={`text-lg font-semibold break-words ${item.done ? "text-ink-soft line-through" : ""}`}>{item.title}</span>
           {item.detail ? <span className="break-words text-ink-soft">{item.detail}</span> : null}
         </Link>
-        {faces.length > 0 || (item.ask && answers) ? (
+        {faces.length > 0 || item.answer || (item.ask && answers) ? (
           <div className="flex flex-wrap items-center gap-3">
             <Faces people={faces} size="size-7" />
             {item.ask && answers ? <AnswerButtons ask={item.ask} title={item.title} /> : null}
+            {item.answer ? (
+              <span data-testid="my-answer" className={`rounded-full border-2 border-ink px-3 py-0.5 text-sm font-bold ${item.answer.going ? "bg-ink text-paper" : ""}`}>
+                {item.answer.going ? "You're in" : "You can't"}
+              </span>
+            ) : null}
+            {item.answer && !item.answer.going ? (
+              // Saying yes after a no takes nothing from anyone, so it is one press. Leaving is done on its own screen.
+              <ActionButton
+                look="link"
+                align="start"
+                about={item.title}
+                action={(item.answer.kind === "dinner" ? goingAction : replyAction).bind(null, item.answer.id, true)}
+              >
+                I&apos;m in after all
+              </ActionButton>
+            ) : null}
           </div>
         ) : null}
       </div>

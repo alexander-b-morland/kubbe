@@ -23,7 +23,7 @@ import { formatJoinCode } from "@/lib/join-code";
 import { balances, formatAmount, mySettlements, settleUp } from "@/lib/money";
 import { requireHousehold } from "@/lib/session";
 import { listExpenses, listToBuy } from "@/lib/shopping";
-import { addDays, dayInZone, describeDay, minutesInZone } from "@/lib/time";
+import { addDays, dayInZone, daysBetween, describeDay, minutesInZone, shortDate } from "@/lib/time";
 import { ShareCode } from "./share-code";
 
 // This screen depends on who is signed in, so it is rendered per request.
@@ -50,7 +50,7 @@ export default async function HomePage() {
     getRota(household.id, today),
     on("board") ? listNotes(household.id, now) : [],
     on("happenings") ? listUpcoming(household.id, now) : [],
-    on("dinner") ? listUpcomingDinners(household.id, today) : [],
+    on("dinner") ? listUpcomingDinners(household.id, today, minutesInZone(now, timeZone)) : [],
     on("shopping") || on("dinner") ? listToBuy(household.id) : [],
     on("expenses") ? listExpenses(household.id) : [],
   ]);
@@ -79,25 +79,32 @@ export default async function HomePage() {
   };
 
   // ---- what each area's tile says
-  const myTurns = rota.filter((row) => row.assignee?.userId === user.id && !row.done);
+  // A rota whose first turn has not begun is nobody's to do yet.
+  const running = rota.filter((row) => !row.startsOn);
+  const myTurns = running.filter((row) => row.assignee?.userId === user.id && !row.done);
+  const firstStart = rota.map((row) => row.startsOn).filter((day) => day !== null).sort()[0];
   const cleaning: Tile =
     rota.length === 0
       ? { status: "No turns yet", detail: membership.role === "admin" ? "Add the rooms and chores you share" : "An admin hasn't added any yet" }
+      : running.length === 0 && firstStart
+        ? { status: "Not started yet", detail: `First turn ${daysBetween(today, firstStart) === 1 ? "tomorrow" : shortDate(firstStart)}` }
       : myTurns.length === 1
         ? { status: `Your turn: ${myTurns[0].name}`, detail: describeDue(today, myTurns[0].lastDay) }
         : myTurns.length > 1
           ? { status: `${myTurns.length} turns are yours`, detail: myTurns.map((turn) => turn.name).join(", ") }
-          : rota.every((row) => row.done)
+          : running.every((row) => row.done)
             ? { status: "All clean" }
             : { status: "Nothing for you now" };
 
   const nextDinner = dinners.find((dinner) => !dinner.cancelled);
-  const nextHappening = happenings[0];
+  // What you said no to is not what is next for you.
+  const nextHappening = happenings.find((happening) => !happening.notGoing.includes(user.id));
   const net = balances(expenses);
   const balance = net.get(user.id) ?? 0;
   const { owe, owed } = mySettlements(settleUp(net), user.id);
   const openNotes = notes.filter((note) => !note.doneAt);
   const openTasks = openNotes.filter((note) => note.isTask).length;
+  const myTasks = openNotes.filter((note) => note.isTask && note.assigneeId === user.id);
 
   const tiles: Record<AreaKey, Tile> = {
     shower: { status: describeNowAcross(showerLines), detail: showers.length > 0 ? nextOf(["shower"]) : undefined },
@@ -118,21 +125,31 @@ export default async function HomePage() {
     happenings: nextHappening
       ? { status: nextHappening.title, detail: describeWhen(nextHappening.startsAt, now, timeZone) }
       : { status: "Nothing planned", detail: "Suggest something" },
-    board: { status: openNotes.length === 0 ? "Empty" : openTasks > 0 ? `${openTasks} to do` : openNotes.length === 1 ? "1 note" : `${openNotes.length} notes` },
+    board: {
+      status: openNotes.length === 0 ? "Empty" : myTasks.length > 0 ? `${myTasks.length} for you` : openTasks > 0 ? `${openTasks} to do` : openNotes.length === 1 ? "1 note" : `${openNotes.length} notes`,
+      detail: openNotes.length > 0 && (myTasks.length > 0 || openTasks > 0) ? (openNotes.length === 1 ? "1 note up" : `${openNotes.length} notes up`) : undefined,
+    },
   };
 
   // ---- what is yours to do
   const toDos = buildToDos({
     me: user.id,
     today,
+    nowMinutes: minutesInZone(now, timeZone),
+    owe: on("expenses") ? owe.map((transfer) => ({ to: transfer.to, name: nameOf(transfer.to), amount: money(transfer.amount) })) : [],
     turns: myTurns.map((turn) => ({ id: turn.areaId, name: turn.name, lastDay: turn.lastDay })),
     dinners,
     buying: toBuy.filter((item) => item.claimedBy === user.id).map((item) => item.name),
     buyingHref: on("shopping") ? "/shopping" : "/dinner",
-    tasks: openNotes.filter((note) => note.isTask && note.assigneeId === user.id).map((note) => ({ id: note.id, body: note.body })),
+    tasks: myTasks.map((note) => ({ id: note.id, body: note.body })),
     unanswered: happenings
       .filter((happening) => !happening.going.includes(user.id) && !happening.notGoing.includes(user.id))
-      .map((happening) => ({ id: happening.id, title: happening.title, when: describeWhen(happening.startsAt, now, timeZone) })),
+      .map((happening) => ({
+        id: happening.id,
+        title: happening.title,
+        when: describeWhen(happening.startsAt, now, timeZone),
+        day: dayInZone(happening.startsAt, timeZone),
+      })),
   });
 
   // ---- the week ahead, from what is already loaded
@@ -184,7 +201,7 @@ export default async function HomePage() {
           </h2>
           <p className="text-ink-soft">
             Send them the link, or the code{" "}
-            <span className="type-display text-2xl tracking-widest text-ink" data-testid="join-code">
+            <span className="type-display text-2xl tracking-widest whitespace-nowrap text-ink" data-testid="join-code">
               {formatJoinCode(household.joinCode)}
             </span>
           </p>
@@ -192,10 +209,11 @@ export default async function HomePage() {
         </section>
       ) : null}
 
+      {/* On a phone the order is what needs you first: to-do, money, the week, then the flat and the board. */}
       <div className="flex flex-col gap-8 lg:grid lg:grid-cols-[1.7fr_1fr] lg:items-start lg:gap-10">
-        <div className="flex flex-col gap-8">
+        <div className="contents lg:flex lg:flex-col lg:gap-8">
           {members.length > 1 || toDos.length > 0 ? (
-            <section aria-labelledby="todo-heading" className="flex flex-col gap-1" data-testid="todo">
+            <section aria-labelledby="todo-heading" className="order-1 flex flex-col gap-1 lg:order-none" data-testid="todo">
               <h2 id="todo-heading" className="type-display text-3xl">
                 {toDos.length === 0 ? "Nothing waiting on you" : "Yours to do"}
               </h2>
@@ -230,25 +248,25 @@ export default async function HomePage() {
             </section>
           ) : null}
 
-          <section aria-labelledby="areas-heading" className="flex flex-col gap-3">
+          <section aria-labelledby="areas-heading" className="order-4 flex flex-col gap-3 lg:order-none">
             <h2 id="areas-heading" className="type-display text-3xl">
               The flat right now
             </h2>
-            <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+            <ul className="grid grid-cols-1 gap-3 min-[360px]:grid-cols-2 sm:grid-cols-3">
               {areasFor(household).map((area, index) => {
                 const tile = tiles[area.key];
                 return (
-                  <li key={area.key}>
+                  <li key={area.key} className="min-w-0">
                     <Link
                       href={area.href}
                       data-testid={`band-${area.key}`}
-                      className={`flex h-full min-h-40 flex-col gap-2 rounded-2xl p-4 outline-none transition-transform focus-visible:ring-4 active:scale-[0.98] ${area.band} ${area.ring}`}
+                      className={`flex h-full flex-col gap-2 rounded-2xl p-4 min-[360px]:min-h-40 outline-none transition-transform focus-visible:ring-4 active:scale-[0.98] ${area.band} ${area.ring}`}
                     >
                       <span className="flex items-start justify-between gap-2">
                         <span className="font-semibold">{area.name}</span>
                         <RoomArt room={area.art} animate delay={0.1 + index * 0.12} className="size-11 shrink-0" />
                       </span>
-                      <span className="type-display mt-auto text-2xl break-words">{tile.status}</span>
+                      <span className="type-display mt-1 text-2xl break-words">{tile.status}</span>
                       {tile.detail ? <span className="text-sm font-semibold break-words">{tile.detail}</span> : null}
                     </Link>
                   </li>
@@ -258,9 +276,9 @@ export default async function HomePage() {
           </section>
         </div>
 
-        <div className="flex flex-col gap-8">
+        <div className="contents lg:flex lg:flex-col lg:gap-8">
           {owe.length > 0 || owed.length > 0 ? (
-            <section aria-labelledby="money-heading" className="flex flex-col gap-3 rounded-3xl bg-heather/30 p-5" data-testid="money">
+            <section aria-labelledby="money-heading" className="order-2 flex flex-col gap-3 rounded-3xl bg-heather/30 p-5 lg:order-none" data-testid="money">
               <h2 id="money-heading" className="type-display text-3xl">
                 Money
               </h2>
@@ -296,7 +314,7 @@ export default async function HomePage() {
             </section>
           ) : null}
 
-          <section aria-labelledby="week-heading" className="flex flex-col gap-1" data-testid="week">
+          <section aria-labelledby="week-heading" className="order-3 flex flex-col gap-1 lg:order-none" data-testid="week">
             <h2 id="week-heading" className="type-display text-3xl">
               This week
             </h2>
@@ -315,12 +333,12 @@ export default async function HomePage() {
           </section>
 
           {on("board") ? (
-            <section aria-labelledby="board-heading" className="flex flex-col gap-3" data-testid="board-preview">
+            <section aria-labelledby="board-heading" className="order-5 flex flex-col gap-3 lg:order-none" data-testid="board-preview">
               <h2 id="board-heading" className="type-display text-3xl">
                 On the board
               </h2>
               {openNotes.length > 0 ? (
-                <ul className="grid grid-cols-2 gap-3 rounded-2xl border-4 border-ink bg-white p-3">
+                <ul className="grid grid-cols-2 items-start gap-3 rounded-2xl border-4 border-ink bg-white p-3">
                   {openNotes.slice(0, 4).map((note, index) => (
                     <Sticky
                       key={note.id}

@@ -26,6 +26,19 @@ describe("buildCalendar", () => {
     expect(buildCalendar({ ...empty, happenings: [happening] })[0]).toMatchObject({ ask: { kind: "happening", id: "h" }, people: ["knut"], mine: false });
   });
 
+  it("shows a fixed dinner day that is too far off to answer", () => {
+    const [item] = buildCalendar({ ...empty, fixedDinners: [{ day: "2026-12-10", time: 1080 }] });
+    expect(item).toMatchObject({ title: "Dinner", area: "dinner", href: "/dinner", day: "2026-12-10", time: 1080, mine: false });
+    expect(item.ask).toBeUndefined();
+  });
+
+  it("says what the reader answered", () => {
+    const happening = { id: "h", title: "Film night", day: "2026-11-20", time: 1170, place: "", going: [] as string[], notGoing: ["ida"] };
+    expect(buildCalendar({ ...empty, happenings: [happening] })[0]).toMatchObject({ answer: { kind: "happening", id: "h", going: false }, href: "/happenings#h" });
+    expect(buildCalendar({ ...empty, happenings: [{ ...happening, going: ["ida"], notGoing: [] }] })[0].answer).toMatchObject({ going: true });
+    expect(buildCalendar({ ...empty, happenings: [{ ...happening, notGoing: [] }] })[0].answer).toBeUndefined();
+  });
+
   it("leaves out a dinner that was called off", () => {
     const dinner = { id: "d", day: "2026-11-19", time: 1110, cancelled: true, cookId: null, chosenTitle: null, going: [], notGoing: [] };
     expect(buildCalendar({ ...empty, dinners: [dinner] })).toEqual([]);

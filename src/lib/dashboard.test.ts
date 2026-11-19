@@ -19,7 +19,9 @@ describe("buildToDos", () => {
 
   it("asks whether you are in for a dinner you have not answered, with the answer at hand", () => {
     const [ask] = buildToDos({ ...nothing, dinners: [{ ...dinner, going: [], chosenTitle: "Tacos" }] });
-    expect(ask).toMatchObject({ what: "Dinner: Tacos. Are you in?", detail: "Thursday 19 Nov at 18:30", ask: { kind: "dinner", id: "d1", title: "dinner (Tacos)" } });
+    expect(ask).toMatchObject({ what: "Are you in? Dinner Thursday 19 Nov", detail: "18:30, Tacos", ask: { kind: "dinner", id: "d1", title: "dinner (Tacos)" } });
+    const [open] = buildToDos({ ...nothing, dinners: [{ ...dinner, going: [], day: "2026-11-17" }] });
+    expect(open).toMatchObject({ what: "Are you in? Dinner tomorrow", detail: "18:30, not decided what yet" });
     // Saying no is an answer too.
     expect(whats({ dinners: [{ ...dinner, going: [], notGoing: ["me"] }] })).toEqual([]);
   });
@@ -32,7 +34,7 @@ describe("buildToDos", () => {
 
   it("leaves out dinners that are called off, far away, or someone else's", () => {
     expect(whats({ dinners: [{ ...dinner, cookId: "me", cancelled: true }] })).toEqual([]);
-    expect(whats({ dinners: [{ ...dinner, cookId: "me", day: "2026-11-23" }] })).toEqual([]);
+    expect(whats({ dinners: [{ ...dinner, cookId: "me", day: "2026-11-30" }] })).toEqual([]);
     expect(whats({ dinners: [{ ...dinner, cookId: "ida" }] })).toEqual([]);
   });
 
@@ -58,7 +60,45 @@ describe("buildToDos", () => {
 
   it("lists plans to answer", () => {
     const [item] = buildToDos({ ...nothing, unanswered: [{ id: "h", title: "Film night", when: "19:30 on Monday" }] });
-    expect(item).toMatchObject({ what: "Film night. Are you in?", href: "/happenings", ask: { kind: "happening", id: "h", title: "Film night" } });
+    expect(item).toMatchObject({ what: "Are you in? Film night", href: "/happenings#h", ask: { kind: "happening", id: "h", title: "Film night" } });
+  });
+
+  it("asks about the next two dinners and counts the rest", () => {
+    const days = ["2026-11-17", "2026-11-18", "2026-11-19", "2026-11-20"];
+    const items = buildToDos({ ...nothing, dinners: days.map((day, index) => ({ ...dinner, id: `d${index}`, day, going: [] })) });
+    expect(items.map((item) => item.what)).toEqual(["Are you in? Dinner tomorrow", "Are you in? Dinner Wednesday 18 Nov", "2 more dinners to answer"]);
+    expect(items[2]).toMatchObject({ href: "/dinner", detail: "From Thursday 19 Nov." });
+    expect(items[2].ask).toBeUndefined();
+  });
+
+  it("does not ask about a dinner that has been eaten", () => {
+    const tonight = { ...dinner, day: "2026-11-16", going: [] };
+    expect(whats({ dinners: [tonight], nowMinutes: 1200 })).toEqual([]);
+    expect(whats({ dinners: [tonight], nowMinutes: 900 })).toEqual(["Are you in? Dinner today"]);
+    // Cleaning up comes after the dinner, so it stays.
+    expect(whats({ dinners: [{ ...tonight, going: ["me"], cleanerId: "me" }], nowMinutes: 1200 })).toEqual(["Clean up after dinner"]);
+  });
+
+  it("tells the cook what nobody is buying", () => {
+    const [cook] = buildToDos({ ...nothing, dinners: [{ ...dinner, cookId: "me", chosenTitle: "Tacos", untaken: 3 }] });
+    expect(cook.detail).toBe("Thursday 19 Nov at 18:30. 3 things nobody is buying yet.");
+  });
+
+  it("lists who to pay", () => {
+    const [pay] = buildToDos({ ...nothing, owe: [{ to: "knut", name: "Knut", amount: "50 kr" }] });
+    expect(pay).toMatchObject({ what: "Pay Knut 50 kr", href: "/expenses", area: "expenses" });
+  });
+
+  it("puts what is due first at the top", () => {
+    const items = buildToDos({
+      ...nothing,
+      turns: [{ id: "a", name: "Kitchen", lastDay: "2026-11-21" }, { id: "b", name: "Trash", lastDay: "2026-11-16" }],
+      dinners: [{ ...dinner, cookId: "me", day: "2026-11-17" }],
+      tasks: [{ id: "t", body: "Fix the lamp" }],
+      unanswered: [{ id: "h", title: "Film night", when: "19:30 today", day: "2026-11-16" }],
+    });
+    // Today's invitation and turn, tomorrow's dinner, the undated to-do, then the turn with days left.
+    expect(items.map((item) => item.what)).toEqual(["Are you in? Film night", "Trash", "Cook dinner", "Fix the lamp", "Kitchen"]);
   });
 
   it("gives every line its own key", () => {
