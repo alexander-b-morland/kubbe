@@ -1,6 +1,6 @@
 import { and, count, eq, ne } from "drizzle-orm";
 import { db, type Transaction } from "@/db";
-import { booking, household, membership, resource } from "@/db/schema";
+import { booking, household, membership, removalNotice, resource } from "@/db/schema";
 import { DEFAULT_RESOURCES } from "@/lib/booking/defaults";
 import { pinCurrentTurns } from "@/lib/cleaning/service";
 import { releaseDinnerDuties } from "@/lib/dinner/service";
@@ -185,7 +185,7 @@ export async function setMemberRole(householdId: string, userId: string, role: "
  * With `replaceCode`, the join code is replaced in the same step. An admin removing
  * someone else needs that: the person who was removed knows the old code.
  */
-export async function removeMember(householdId: string, userId: string, options: { replaceCode: boolean }): Promise<MemberChange> {
+export async function removeMember(householdId: string, userId: string, options: { replaceCode: boolean; tellThem?: boolean }): Promise<MemberChange> {
   const result = await db.transaction(async (tx): Promise<MemberChange> => {
     const locked = await lockHousehold(tx, householdId);
     if (!locked) return { ok: false, reason: "not-found" };
@@ -211,6 +211,14 @@ export async function removeMember(householdId: string, userId: string, options:
     await tx.delete(booking).where(and(eq(booking.householdId, householdId), eq(booking.userId, userId)));
     await releaseDinnerDuties(tx, householdId, userId);
     await tx.delete(membership).where(and(eq(membership.householdId, householdId), eq(membership.userId, userId)));
+    // Removed by an admin, they would otherwise land on the start screen without knowing why.
+    if (options.tellThem) {
+      const [named] = await tx.select({ name: household.name }).from(household).where(eq(household.id, householdId));
+      await tx
+        .insert(removalNotice)
+        .values({ userId, householdName: named.name })
+        .onConflictDoUpdate({ target: removalNotice.userId, set: { householdName: named.name, createdAt: new Date() } });
+    }
     return { ok: true };
   });
 

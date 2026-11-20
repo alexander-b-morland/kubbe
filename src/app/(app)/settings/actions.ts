@@ -155,7 +155,7 @@ export async function removeMemberAction(userId: string): Promise<SettingsState>
   const leaving = target.data === user.id;
   if (!leaving && membership.role !== "admin") return { error: adminsOnly };
   // When an admin removes someone, the join code is replaced too: that person knows the old one.
-  const result = await removeMember(household.id, target.data, { replaceCode: !leaving });
+  const result = await removeMember(household.id, target.data, { replaceCode: !leaving, tellThem: !leaving });
   if (!result.ok) {
     return { error: result.reason === "last-admin" ? "You're the only admin. Make someone else admin before you leave." : notHere };
   }

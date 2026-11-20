@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { signOut } from "@/app/(auth)/actions";
+import { getRemovalNotice } from "@/lib/households";
 import { getHouseholdFor, requireUser } from "@/lib/session";
 import { CreateHouseholdForm, JoinHouseholdForm } from "./onboarding-forms";
 import { getT } from "@/lib/i18n/server";
@@ -15,9 +16,15 @@ export default async function OnboardingPage({ searchParams }: PageProps<"/onboa
   const user = await requireUser();
   const left = (await searchParams).left === "1";
   if (await getHouseholdFor(user.id)) redirect("/home");
+  const removed = left ? null : await getRemovalNotice(user.id);
 
   return (
     <main className="mx-auto flex min-h-dvh max-w-md flex-col gap-10 p-6 pt-10">
+      {removed ? (
+        <p role="status" className="rounded-xl border-2 border-barn px-4 py-3 font-semibold" data-testid="removed">
+          {t`An admin removed you from ${removed.householdName}. Your bookings there are cancelled. Start a new household or join another below.`}
+        </p>
+      ) : null}
       {left ? (
         <p role="status" className="rounded-xl border-2 border-ink px-4 py-3 font-semibold">
           {t("You've left your household. Start a new one or join another below.")}

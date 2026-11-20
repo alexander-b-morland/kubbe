@@ -1,6 +1,6 @@
 import { count, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { household, membership, profile, resource, user } from "@/db/schema";
+import { household, membership, profile, resource, user, removalNotice } from "@/db/schema";
 import { defaultResourcesFor } from "@/lib/booking/defaults";
 import { en, type Translate } from "@/lib/i18n";
 import { generateJoinCode } from "@/lib/join-code";
@@ -58,6 +58,7 @@ export async function createHousehold(
           .insert(membership)
           .values({ householdId: created.id, userId, role: "admin", colour: MEMBER_COLOURS[0] });
         await tx.insert(resource).values(defaultResourcesFor(created.id, t));
+        await tx.delete(removalNotice).where(eq(removalNotice.userId, userId));
       });
       return { ok: true };
     } catch (error) {
@@ -116,12 +117,19 @@ export async function joinHousehold(userId: string, code: string): Promise<JoinR
       const taken = members.map((member) => member.avatar ?? DEFAULT_AVATAR);
       const avatar = AVATAR_NAMES.find((name) => !taken.includes(name)) ?? DEFAULT_AVATAR;
       await tx.insert(profile).values({ userId, avatar }).onConflictDoNothing();
+      await tx.delete(removalNotice).where(eq(removalNotice.userId, userId));
       return { ok: true };
     });
   } catch (error) {
     if (isUniqueViolation(error, "membership")) return { ok: false, reason: "already-member" };
     throw error;
   }
+}
+
+/** Why someone landed on the start screen, if an admin removed them from a household. */
+export async function getRemovalNotice(userId: string) {
+  const [found] = await db.select({ householdName: removalNotice.householdName }).from(removalNotice).where(eq(removalNotice.userId, userId));
+  return found ?? null;
 }
 
 /** Everyone in a household: admins first, then in the order they joined. */
