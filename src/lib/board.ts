@@ -1,6 +1,6 @@
-import { and, count, desc, eq, gte, isNull, lt, or } from "drizzle-orm";
+import { and, count, desc, eq, gte, inArray, isNull, lt, or } from "drizzle-orm";
 import { db } from "@/db";
-import { membership, note } from "@/db/schema";
+import { membership, note, noteReaction } from "@/db/schema";
 
 // The noticeboard. Callers have already established who is asking and which household
 // they are in (see requireExtra).
@@ -16,8 +16,21 @@ export async function listNotes(householdId: string, now: Date) {
     .from(note)
     .where(and(eq(note.householdId, householdId), or(isNull(note.doneAt), gte(note.doneAt, weekAgo))))
     .orderBy(desc(note.createdAt));
+  const reactions = rows.length
+    ? await db.select().from(noteReaction).where(inArray(noteReaction.noteId, rows.map((row) => row.id)))
+    : [];
   // Open things first, newest first; what is done sinks to the bottom.
-  return rows.sort((a, b) => Number(Boolean(a.doneAt)) - Number(Boolean(b.doneAt)));
+  return rows
+    .map((row) => ({ ...row, likes: reactions.filter((reaction) => reaction.noteId === row.id).map((reaction) => reaction.userId) }))
+    .sort((a, b) => Number(Boolean(a.doneAt)) - Number(Boolean(b.doneAt)));
+}
+
+/** Give a note a thumbs-up, or take it back. Only a note in the caller's household. */
+export async function setReaction(householdId: string, userId: string, noteId: string, on: boolean) {
+  const [found] = await db.select({ id: note.id }).from(note).where(and(eq(note.id, noteId), eq(note.householdId, householdId)));
+  if (!found) return;
+  if (on) await db.insert(noteReaction).values({ noteId, userId }).onConflictDoNothing();
+  else await db.delete(noteReaction).where(and(eq(noteReaction.noteId, noteId), eq(noteReaction.userId, userId)));
 }
 
 async function isMember(householdId: string, userId: string) {

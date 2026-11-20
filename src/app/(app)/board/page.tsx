@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { AreaPage } from "@/components/area/area-header";
 import type { PersonLike } from "@/components/avatar/person";
+import { TakeDown, ThumbsUp } from "@/components/board/note-buttons";
 import { Sticky } from "@/components/board/sticky";
 import { AutoRefresh } from "@/components/booking/auto-refresh";
 import { ActionButton } from "@/components/ui/action-button";
@@ -8,8 +9,9 @@ import { isFresh } from "@/components/ui/strike";
 import { listNotes } from "@/lib/board";
 import { requireExtra } from "@/lib/extras-guard";
 import { listMembers } from "@/lib/households";
+import { listNames } from "@/lib/names";
 import { timeAgo } from "@/lib/time";
-import { removeNoteAction, setNoteDoneAction } from "./actions";
+import { reactAction, removeNoteAction, setNoteDoneAction } from "./actions";
 import { NoteForm } from "./note-form";
 import { getT } from "@/lib/i18n/server";
 
@@ -51,22 +53,30 @@ export default async function BoardPage() {
                     ? assignee.userId === user.id ? t("For you") : t`For ${assignee.name}`
                     : t("For anyone");
               return (
-                <Sticky key={note.id} anchor index={index} author={author} line={line} note={{ id: note.id, body: note.body, isTask: note.isTask, done, fresh: isFresh(note.doneAt, now) }}>
-                  <span className="text-sm">
-                    {author ? (author.userId === user.id ? t("You") : author.name) : t("Someone who moved out")}, {timeAgo(note.createdAt, now, household.timeZone, t)}
-                  </span>
-                  <span className="flex w-full flex-wrap gap-2 pt-1">
-                    {note.isTask ? (
-                      <ActionButton look={done ? "outline" : "filled"} align="start" about={short(note.body)} action={setNoteDoneAction.bind(null, note.id, !done)}>
-                        {done ? t("Undo") : t("Done")}
-                      </ActionButton>
-                    ) : null}
-                    {mayRemove ? (
-                      <ActionButton look="link" align="start" about={short(note.body)} confirm={t("Take it down?")} action={removeNoteAction.bind(null, note.id)}>
-                        {t("Take down")}
-                      </ActionButton>
-                    ) : null}
-                  </span>
+                <Sticky
+                  key={note.id}
+                  anchor
+                  index={index}
+                  author={author}
+                  line={line}
+                  when={`${author ? (author.userId === user.id ? t("You") : author.name) : t("Someone who moved out")}, ${timeAgo(note.createdAt, now, household.timeZone, t)}`}
+                  corner={mayRemove ? <TakeDown about={short(note.body)} action={removeNoteAction.bind(null, note.id)} /> : undefined}
+                  reaction={
+                    <ThumbsUp
+                      count={note.likes.length}
+                      mine={note.likes.includes(user.id)}
+                      who={listNames(note.likes.filter((id) => person.has(id)), user.id, (id) => person.get(id)?.name ?? "", t)}
+                      about={short(note.body)}
+                      action={reactAction.bind(null, note.id)}
+                    />
+                  }
+                  note={{ id: note.id, body: note.body, isTask: note.isTask, done, fresh: isFresh(note.doneAt, now) }}
+                >
+                  {note.isTask ? (
+                    <ActionButton look={done ? "outline" : "filled"} align="start" about={short(note.body)} action={setNoteDoneAction.bind(null, note.id, !done)}>
+                      {done ? t("Undo") : t("Done")}
+                    </ActionButton>
+                  ) : null}
                 </Sticky>
               );
             })}

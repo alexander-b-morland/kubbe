@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { addNote, MAX_NOTES, NOTE_LENGTH, removeNote, setNoteDone } from "@/lib/board";
+import { addNote, MAX_NOTES, NOTE_LENGTH, removeNote, setNoteDone, setReaction } from "@/lib/board";
 import { requireExtra } from "@/lib/extras-guard";
 import type { FormState } from "@/lib/form-state";
 
@@ -36,6 +36,13 @@ export async function addNoteAction(_previous: BoardState, form: FormData): Prom
 export async function setNoteDoneAction(noteId: string, done: boolean): Promise<BoardState> {
   const { user, household } = await requireExtra("board");
   if (idSchema.safeParse(noteId).success) await setNoteDone(household.id, user.id, noteId, done === true);
+  refresh();
+  return { saved: true };
+}
+
+export async function reactAction(noteId: string, on: boolean): Promise<BoardState> {
+  const { user, household } = await requireExtra("board");
+  if (idSchema.safeParse(noteId).success && typeof on === "boolean") await setReaction(household.id, user.id, noteId, on);
   refresh();
   return { saved: true };
 }
