@@ -87,11 +87,11 @@ export const household = pgTable("household", {
   joinCode: text("join_code").notNull().unique(),
   /** IANA zone name. All slot maths happens in this zone. */
   timeZone: text("time_zone").notNull().default("Europe/Oslo"),
-  /** The extras this household has switched on. See src/lib/extras.ts. */
+  /** The areas this household uses, shower and cleaning included. See src/lib/extras.ts. */
   extras: text("extras")
     .array()
     .notNull()
-    .default(sql`'{dinner,happenings,shopping,expenses,board}'::text[]`),
+    .default(sql`'{shower,laundry,cleaning,dinner,happenings,shopping,expenses,board}'::text[]`),
   /** What an amount of money is followed by: "kr". */
   currency: text("currency").notNull().default("kr"),
   createdBy: text("created_by")
@@ -295,6 +295,33 @@ export const note = pgTable(
   },
   (table) => [index("note_household_idx").on(table.householdId, table.createdAt)],
 );
+
+/** A thumbs-up on a note. One per person per note. */
+export const noteReaction = pgTable(
+  "note_reaction",
+  {
+    noteId: uuid("note_id")
+      .notNull()
+      .references(() => note.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    createdAt: createdAt(),
+  },
+  (table) => [primaryKey({ columns: [table.noteId, table.userId] })],
+);
+
+/**
+ * Someone an admin removed from a household. The start screen tells them why they
+ * landed there, until they start or join another.
+ */
+export const removalNotice = pgTable("removal_notice", {
+  userId: text("user_id")
+    .primaryKey()
+    .references(() => user.id, { onDelete: "cascade" }),
+  householdName: text("household_name").notNull(),
+  createdAt: createdAt(),
+});
 
 // ---------------------------------------------------------------------------
 // Money. An expense is paid by one person and shared between some. A settlement

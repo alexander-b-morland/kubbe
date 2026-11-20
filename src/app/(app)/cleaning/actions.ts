@@ -16,7 +16,7 @@ import {
   updateArea,
 } from "@/lib/cleaning/service";
 import type { FormState } from "@/lib/form-state";
-import { requireHousehold } from "@/lib/session";
+import { requireExtra } from "@/lib/extras-guard";
 import { dayInZone, daysBetween, isDay } from "@/lib/time";
 
 export type CleaningState = (FormState & { saved?: boolean; message?: string }) | undefined;
@@ -40,7 +40,7 @@ function refresh() {
 }
 
 async function context() {
-  const found = await requireHousehold();
+  const found = await requireExtra("cleaning");
   return { ...found, today: dayInZone(new Date(), found.household.timeZone) };
 }
 

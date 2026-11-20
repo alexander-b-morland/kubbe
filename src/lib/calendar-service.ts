@@ -29,7 +29,7 @@ export async function loadCalendar(input: {
 
   const [bookings, turns, happenings, ahead, before, rules] = await Promise.all([
     listBookingsBetween(household.id, from, to),
-    listTurnsBetween(household.id, fromDay, toDay),
+    hasExtra(household, "cleaning") ? listTurnsBetween(household.id, fromDay, toDay) : [],
     hasExtra(household, "happenings") ? listBetween(household.id, from, to) : [],
     // From today on, fixed dinner days are filled in as they are looked at.
     dinnersOn && toDay >= today ? listUpcomingDinners(household.id, today) : [],
@@ -48,7 +48,7 @@ export async function loadCalendar(input: {
   return buildCalendar({
     me: input.me,
     nameOf: input.nameOf,
-    bookings: bookings.map((booking) => ({
+    bookings: bookings.filter((booking) => hasExtra(household, booking.kind === "shower" ? "shower" : "laundry")).map((booking) => ({
       id: booking.id,
       userId: booking.userId,
       kind: booking.kind,

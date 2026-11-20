@@ -3,7 +3,7 @@ import { BookingScreen } from "@/components/booking/booking-screen";
 import { NothingToBook } from "@/components/booking/nothing-to-book";
 import { Switcher, switcherItems } from "@/components/booking/switcher";
 import { listEnabled } from "@/lib/booking/service";
-import { requireHousehold } from "@/lib/session";
+import { requireExtra } from "@/lib/extras-guard";
 import { getT } from "@/lib/i18n/server";
 
 // This screen depends on who is signed in, so it is rendered per request.
@@ -13,7 +13,7 @@ export const metadata: Metadata = { title: "Shower" };
 
 export default async function ShowerPage({ searchParams }: PageProps<"/shower">) {
   const t = await getT();
-  const { user, household, membership } = await requireHousehold();
+  const { user, household, membership } = await requireExtra("shower");
   const params = await searchParams;
   const showers = await listEnabled(household.id, ["shower"]);
   if (showers.length === 0) return <NothingToBook what={t("shower")} />;

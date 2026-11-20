@@ -38,15 +38,13 @@ export const AREAS: readonly Area[] = [
   { key: "board", name: m("Noticeboard"), href: "/board", art: "board", band: "bg-sky text-ink", dot: "bg-sky", wash: "bg-sky/30", ring: "focus-visible:ring-ink", vars: inkOn("sky") },
 ];
 
-const always: readonly AreaKey[] = ["shower", "laundry", "cleaning"];
-
 export function areaOf(key: AreaKey): Area {
   return AREAS.find((area) => area.key === key)!;
 }
 
 /** The areas this household uses. */
 export function areasFor(household: { extras: string[] }): Area[] {
-  return AREAS.filter((area) => always.includes(area.key) || hasExtra(household, area.key as ExtraKey));
+  return AREAS.filter((area) => hasExtra(household, area.key as ExtraKey));
 }
 
 /** Every area colour as a hex value, for checks that nothing else looks like one. */

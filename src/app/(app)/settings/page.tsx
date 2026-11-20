@@ -129,7 +129,7 @@ export default async function HouseholdPage() {
             {t("What you use")}
           </h2>
           <p className="text-ink-soft">
-            {t("Each of these has a tile on Home. Ticking or unticking saves at once. Switching one off hides it, and what is in it, for everyone until it is switched on again; nothing is deleted.")}
+            {t("Each of these has a tile on Home. Ticking or unticking saves at once. Switching one off hides it, and what is in it, for everyone until it is switched on again; nothing is deleted. Switching off the shower or laundry does not cancel bookings already made.")}
           </p>
           <ExtrasForm extras={EXTRAS} enabled={household.extras} action={setExtrasAction} />
         </section>
