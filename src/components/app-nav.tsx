@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { RoomArt, type Art } from "@/components/illustrations/room-art";
+import { KubbeLogo } from "@/components/logo/kubbe-logo";
 import { m } from "@/lib/i18n";
 import { useT } from "@/lib/i18n/client";
 
@@ -19,6 +20,45 @@ const tabs: Tab[] = [
 export type NavArea = { key: string; name: string; href: string; art: Art; band: string };
 
 const ring = "outline-none focus-visible:ring-4 focus-visible:ring-fjord focus-visible:ring-inset";
+
+// Whether the areas under Home are open, once the person has said so with the chevron.
+// Kept for this visit, and in the browser for the next one when it lets us.
+type Choice = "open" | "closed";
+const CHOICE_KEY = "kubbe:nav-areas";
+let chosen: Choice | null = null;
+const listeners = new Set<() => void>();
+
+function storedChoice(): Choice | null {
+  if (chosen) return chosen;
+  try {
+    const value = window.localStorage.getItem(CHOICE_KEY);
+    return value === "open" || value === "closed" ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+function choose(choice: Choice) {
+  chosen = choice;
+  try {
+    window.localStorage.setItem(CHOICE_KEY, choice);
+  } catch {
+    // Storage blocked: the choice still holds until the page is reloaded.
+  }
+  listeners.forEach((listener) => listener());
+}
+
+function subscribe(listener: () => void) {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+}
+
+/** The person's choice. The server knows none, so the first render matches it and the stored one follows. */
+function useAreasChoice() {
+  return useSyncExternalStore(subscribe, storedChoice, () => null);
+}
 
 /**
  * The way around the app: a bar at the bottom of a phone, a column down the left of a
@@ -38,18 +78,23 @@ export function AppNav({ areas }: { areas: NavArea[] }) {
   const elsewhere = tabs.find((tab) => tab.under.some(inside));
   const area = areas.find((candidate) => inside(candidate.href));
   const press = (href: string) => () => setPressed({ href, from: pathname });
+  // The areas under Home: open on Home and inside an area, closed on the other tabs,
+  // until the person opens or closes them themselves.
+  const choice = useAreasChoice();
+  const areasOpen = choice ? choice === "open" : !elsewhere;
 
   const tabLink = (tab: Tab) => {
     const here = elsewhere ? tab === elsewhere : tab.href === "/home" && !area;
     // On a phone, Home also stands for the area you opened from it.
     const within = tab.href === "/home" && Boolean(area);
+    const isHome = tab.href === "/home";
     return (
-      <li key={tab.href} className="flex-1 lg:flex-none">
+      <li key={tab.href} className={`flex-1 lg:flex-none ${isHome ? "lg:flex lg:items-center lg:gap-1" : ""}`}>
         <Link
           href={tab.href}
           onClick={press(tab.href)}
           aria-current={here ? "page" : undefined}
-          className={`flex flex-col items-center gap-0.5 pt-2 pb-1.5 text-xs font-semibold ${ring} lg:flex-row lg:gap-3 lg:rounded-2xl lg:px-3 lg:py-2 lg:text-base ${
+          className={`flex flex-col items-center gap-0.5 pt-2 pb-1.5 text-xs font-semibold ${ring} lg:flex-1 lg:flex-row lg:gap-3 lg:rounded-2xl lg:px-3 lg:py-2 lg:text-base ${
             here ? "text-ink lg:bg-ink lg:text-paper" : within ? "text-ink lg:text-ink-soft" : "text-ink-soft"
           }`}
         >
@@ -60,6 +105,21 @@ export function AppNav({ areas }: { areas: NavArea[] }) {
             <path d="M2 5C8 1 12 8 18 4C24 0 28 7 36 3" fill="none" stroke="var(--color-fjord)" strokeWidth="2.6" strokeLinecap="round" />
           </svg>
         </Link>
+        {isHome ? (
+          // On a wide screen, a chevron beside Home opens and closes the areas under it.
+          <button
+            type="button"
+            onClick={() => choose(areasOpen ? "closed" : "open")}
+            aria-expanded={areasOpen}
+            aria-controls="nav-areas"
+            aria-label={areasOpen ? t("Hide the areas") : t("Show the areas")}
+            className={`hidden size-11 shrink-0 items-center justify-center rounded-2xl text-ink lg:flex ${ring}`}
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true" className={`size-5 transition-transform duration-200 motion-reduce:transition-none ${areasOpen ? "rotate-180" : ""}`}>
+              <path d="M5 9C7.500 11.300 9.800 13.600 12 16C14.200 13.600 16.500 11.300 19 9" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </button>
+        ) : null}
       </li>
     );
   };
@@ -69,12 +129,24 @@ export function AppNav({ areas }: { areas: NavArea[] }) {
       aria-label={t("Main")}
       className="fixed inset-x-0 bottom-0 z-10 border-t-2 border-ink bg-paper pb-[env(safe-area-inset-bottom)] lg:inset-x-auto lg:inset-y-0 lg:left-0 lg:w-56 lg:overflow-y-auto lg:border-t-0 lg:border-r-2 lg:pb-6"
     >
-      <p className="type-display hidden px-6 pt-8 pb-6 text-4xl lg:block">{t("Kubbe")}</p>
+      {/* The mascot and the name, as the way home. Drawn still: the column stays put between screens. */}
+      <Link
+        href="/home"
+        onClick={press("/home")}
+        aria-label={t("Kubbe, home")}
+        className={`mx-3 mt-6 mb-4 hidden items-center gap-2 rounded-2xl px-2 py-1 lg:flex ${ring}`}
+      >
+        {/* The logo fills its width, so the box around it sets the size. */}
+        <span className="block w-16 shrink-0">
+          <KubbeLogo label="" />
+        </span>
+        <span className="type-display text-4xl">{t("Kubbe")}</span>
+      </Link>
       <ul className="mx-auto flex max-w-md lg:max-w-none lg:flex-col lg:gap-1 lg:px-3">
         {tabLink(tabs[0])}
-        {/* On a wide screen, every area sits under Home. */}
-        <li className="hidden lg:block">
-          <ul className="flex flex-col gap-0.5 pb-2 pl-3">
+        {/* On a wide screen, the areas sit under Home. */}
+        <li className={areasOpen ? "hidden lg:block" : "hidden"}>
+          <ul id="nav-areas" className="flex flex-col gap-0.5 pb-2 pl-3">
             {areas.map((item) => {
               const here = item === area;
               return (

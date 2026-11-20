@@ -1,7 +1,8 @@
 import type { CSSProperties } from "react";
 import "./room-art.css";
 
-export type Room = "shower" | "laundry" | "cleaning";
+/** What a booking screen can be for. A dryer is laundry with its own drawing. */
+export type Room = "shower" | "laundry" | "dryer" | "cleaning";
 /** Rooms, plus the drawings for navigation and for the other areas of the app. */
 export type Art = Room | "home" | "people" | "flat" | "dinner" | "happening" | "shopping" | "money" | "board" | "calendar" | "you";
 
@@ -86,6 +87,18 @@ const strokes: Record<Art, { d: string; w: number }[]> = {
     { d: "M61 45C75 44 86 55 85 69C85 83 74 93 61 92C47 93 37 82 37 69C36 55 47 45 62 45", w: 5 },
     { d: "M61 53C70 52 78 60 77 69C77 78 70 85 61 84C52 85 45 78 45 69C44 60 51 53 61 53", w: 3.5 },
     { d: "M47 72C51 66 56 77 61 71C66 65 71 77 75 71", w: 3.5 },
+    { d: "M32 103L32 109M90 103L90 109", w: 5 },
+  ],
+  // The washer's body, but one plain door with warm air rising inside it instead of water.
+  dryer: [
+    { d: "M24 17C48 14 74 15 98 16C100 44 100 76 98 102C74 104 48 103 24 102C22 76 23 44 24 17Z", w: 5 },
+    { d: "M24 34C48 33 74 33 98 34", w: 4 },
+    { d: "M34 25L56 25", w: 4 },
+    { d: "M91 25a5 5 0 1 1-10 0a5 5 0 1 1 10 0", w: 3.5 },
+    { d: "M61 44C76 43 87 55 86 69C86 84 75 94 61 93C46 94 36 83 36 69C35 55 46 44 62 44", w: 5 },
+    { d: "M50 81C45 73 56 67 50 57", w: 4 },
+    { d: "M61 83C56 75 67 69 61 59", w: 4 },
+    { d: "M72 81C67 73 78 67 72 57", w: 4 },
     { d: "M32 103L32 109M90 103L90 109", w: 5 },
   ],
   cleaning: [

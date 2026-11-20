@@ -8,7 +8,7 @@ import type { Resource } from "@/db/schema";
 import { bookResource } from "@/lib/booking/actions";
 import { refusalFor, slotsForDay } from "@/lib/booking/rules";
 import { listDayBookings, listEnabled } from "@/lib/booking/service";
-import { requireHousehold } from "@/lib/session";
+import { requireExtra } from "@/lib/extras-guard";
 import { clockTime } from "@/lib/time";
 import { getT } from "@/lib/i18n/server";
 
@@ -19,7 +19,7 @@ export const metadata: Metadata = { title: "Laundry" };
 
 export default async function LaundryPage({ searchParams }: PageProps<"/laundry">) {
   const t = await getT();
-  const { user, household, membership } = await requireHousehold();
+  const { user, household, membership } = await requireExtra("laundry");
   const params = await searchParams;
   // Washing machines first, then dryers. A household can have several of each.
   const machines = await listEnabled(household.id, ["washer", "dryer"]);
@@ -34,7 +34,7 @@ export default async function LaundryPage({ searchParams }: PageProps<"/laundry"
     <BookingScreen
       basePath="/laundry"
       query={active === machines[0] ? {} : { machine: active.id }}
-      room="laundry"
+      room={active.kind === "dryer" ? "dryer" : "laundry"}
       label={active.name}
       theme={{ mine: "bg-ochre/30", pen: "var(--color-ink)" }}
       manageHref={membership.role === "admin" ? `/settings/rules?from=laundry&open=${active.id}#${active.id}` : undefined}

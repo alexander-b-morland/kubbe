@@ -3,10 +3,13 @@
  * the Tailwind rule in next.config.ts handles every .css file as global CSS.
  */
 
-.kubbe-logo {
-  display: block;
-  width: 100%;
-  height: auto;
+/* In the components layer, so a width given where the logo is used (w-24, max-w-72) wins. */
+@layer components {
+  .kubbe-logo {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
 }
 
 .kubbe-logo__shape {

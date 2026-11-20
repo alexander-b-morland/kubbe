@@ -108,7 +108,13 @@ export function SlotList({ rows, mineClassName = "bg-fjord/25", book, cancel }: 
       <p role="status" className="sr-only">
         {said}
       </p>
-      <ol ref={list} className="flex flex-col lg:grid lg:grid-cols-2 lg:gap-x-8">
+      {/* On a wide screen the times run down the first column, then on down the second.
+          The rows only count once the list is a grid; as a column on a phone they are ignored. */}
+      <ol
+        ref={list}
+        className="flex flex-col lg:grid lg:grid-flow-col lg:grid-cols-2 lg:gap-x-8"
+        style={{ gridTemplateRows: `repeat(${Math.max(1, Math.ceil(shown.length / 2))}, auto)` }}
+      >
         {shown.map((row) => {
           const booking = row.waiting === "booking";
           const leaving = row.waiting === "leaving";

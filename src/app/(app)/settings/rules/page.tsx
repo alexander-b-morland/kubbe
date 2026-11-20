@@ -25,7 +25,7 @@ const cameFrom: Record<string, Back> = {
 const groups = [
   { kind: "shower", title: m("Showers"), one: m("shower"), art: "shower", band: "bg-fjord text-paper" },
   { kind: "washer", title: m("Washing machines"), one: m("washing machine"), art: "laundry", band: "bg-ochre text-ink" },
-  { kind: "dryer", title: m("Dryers"), one: m("dryer"), art: "laundry", band: "bg-ochre text-ink" },
+  { kind: "dryer", title: m("Dryers"), one: m("dryer"), art: "dryer", band: "bg-ochre text-ink" },
 ] as const;
 
 export default async function RulesPage({ searchParams }: PageProps<"/settings/rules">) {

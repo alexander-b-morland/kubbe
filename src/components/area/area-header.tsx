@@ -26,9 +26,16 @@ export async function BackLink({ href, label, ring = "focus-visible:ring-fjord" 
   );
 }
 
+/** An area, or a dryer: laundry's colours with a drawing of its own. */
+export type AreaLook = AreaKey | "dryer";
+
+function lookOf(key: AreaLook) {
+  return key === "dryer" ? { ...areaOf("laundry"), art: "dryer" as const } : areaOf(key);
+}
+
 /** The area's colour as CSS variables, for the element that holds its screen. */
-export function areaStyle(area: AreaKey, more?: CSSProperties): CSSProperties {
-  return { ...areaOf(area).vars, ...more } as CSSProperties;
+export function areaStyle(area: AreaLook, more?: CSSProperties): CSSProperties {
+  return { ...lookOf(area).vars, ...more } as CSSProperties;
 }
 
 type BandProps = {
@@ -51,7 +58,8 @@ type BandProps = {
 async function Band({ band, ring, art, name: plainName, eyebrow, children, back, extra }: BandProps) {
   const name = (await getT())(plainName);
   return (
-    <header className={`flex flex-col gap-3 p-6 pt-5 lg:rounded-3xl ${band}`}>
+    // From lg up the band is inset by the same 24px as the content under it, so their edges line up.
+    <header className={`flex flex-col gap-3 p-6 pt-5 lg:mx-6 lg:rounded-3xl ${band}`}>
       {back ? <BackLink {...back} ring={ring} /> : null}
       <div className="flex items-start justify-between gap-3">
         <h1 className="flex min-w-0 flex-col gap-1 pt-1">
@@ -77,14 +85,14 @@ export function AreaHeader({
   back = HOME,
   extra,
 }: {
-  area: AreaKey;
+  area: AreaLook;
   eyebrow: string;
   children: ReactNode;
   back?: Back;
   /** Shown under the headline, for example a switcher between machines. */
   extra?: ReactNode;
 }) {
-  const look = areaOf(area);
+  const look = lookOf(area);
   return (
     <Band band={look.band} ring={look.ring} art={look.art} name={look.name} eyebrow={eyebrow} back={back} extra={extra}>
       {children}

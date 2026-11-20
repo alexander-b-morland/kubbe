@@ -37,7 +37,7 @@ export default async function PersonPage({ params }: PageProps<"/people/[id]">) 
 
   return (
     <main className="mx-auto flex w-full max-w-md flex-col lg:max-w-3xl lg:pt-6">
-      <header className="flex flex-col gap-4 p-6 pt-5 text-paper lg:rounded-3xl" style={{ backgroundColor: person.colour }}>
+      <header className="flex flex-col gap-4 p-6 pt-5 text-paper lg:mx-6 lg:rounded-3xl" style={{ backgroundColor: person.colour }}>
         <BackLink href={self ? "/profile" : "/settings"} label={self ? t("You") : t("Household")} ring="focus-visible:ring-paper" />
         <div className="flex items-center gap-4">
           <Avatar avatar={person.avatar} colour="transparent" className="size-28 border-4 border-paper" />
