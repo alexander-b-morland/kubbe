@@ -2,7 +2,9 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Avatar } from "@/components/avatar/avatar";
 import { Person, type PersonLike } from "@/components/avatar/person";
+import { TakeDown, ThumbsUp } from "@/components/board/note-buttons";
 import { Sticky } from "@/components/board/sticky";
+import { reactAction, removeNoteAction } from "../board/actions";
 import { AutoRefresh } from "@/components/booking/auto-refresh";
 import { AgendaItem, AnswerButtons } from "@/components/calendar/agenda";
 import { RoomArt } from "@/components/illustrations/room-art";
@@ -23,7 +25,8 @@ import { formatJoinCode } from "@/lib/join-code";
 import { balances, formatAmount, mySettlements, settleUp } from "@/lib/money";
 import { requireHousehold } from "@/lib/session";
 import { listExpenses, listToBuy } from "@/lib/shopping";
-import { addDays, dayInZone, daysBetween, describeDay, minutesInZone, shortDate } from "@/lib/time";
+import { listNames } from "@/lib/names";
+import { timeAgo, addDays, dayInZone, daysBetween, describeDay, minutesInZone, shortDate } from "@/lib/time";
 import { ShareCode } from "./share-code";
 import { getT } from "@/lib/i18n/server";
 
@@ -48,8 +51,8 @@ export default async function HomePage() {
   const [resources, members, upcoming, rota, notes, happenings, dinners, toBuy, expenses] = await Promise.all([
     listResources(household.id),
     listMembers(household.id),
-    listMyUpcoming(household.id, user.id, now),
-    getRota(household.id, today),
+    listMyUpcoming(household.id, user.id, now).then((bookings) => bookings.filter((booking) => on(booking.kind === "shower" ? "shower" : "laundry"))),
+    on("cleaning") ? getRota(household.id, today) : [],
     on("board") ? listNotes(household.id, now) : [],
     on("happenings") ? listUpcoming(household.id, now) : [],
     on("dinner") ? listUpcomingDinners(household.id, today, minutesInZone(now, timeZone)) : [],
@@ -60,11 +63,12 @@ export default async function HomePage() {
   const me = people.get(user.id);
   const nameOf = (userId: string) => people.get(userId)?.name ?? t("Someone who moved out");
   const money = (amount: number) => formatAmount(amount, household.currency);
+  const shortNote = (text: string) => (text.length > 40 ? `${text.slice(0, 39).trimEnd()}…` : text);
 
   // With several showers or machines, the tile speaks for all of them.
-  const showers = resources.filter((resource) => resource.kind === "shower" && resource.enabled);
-  const washers = resources.filter((resource) => resource.kind === "washer" && resource.enabled);
-  const machines = washers.length > 0 ? washers : resources.filter((resource) => resource.kind === "dryer" && resource.enabled);
+  const showers = on("shower") ? resources.filter((resource) => resource.kind === "shower" && resource.enabled) : [];
+  const washers = on("laundry") ? resources.filter((resource) => resource.kind === "washer" && resource.enabled) : [];
+  const machines = washers.length > 0 || !on("laundry") ? washers : resources.filter((resource) => resource.kind === "dryer" && resource.enabled);
   const nowLines = async (group: typeof resources) =>
     Promise.all(
       group.map(async (rules) =>
@@ -188,30 +192,29 @@ export default async function HomePage() {
   return (
     <main className="mx-auto flex w-full max-w-md flex-col gap-8 p-6 pt-10 lg:max-w-6xl">
       <AutoRefresh everySeconds={60} />
-      <header className="flex items-center gap-4">
-        <Link href="/profile" aria-label={t("Your profile")} className={`rounded-full ${ring}`}>
-          <Avatar avatar={me?.avatar} colour={me?.colour ?? membership.colour} className="size-16" />
-        </Link>
-        <div className="flex min-w-0 flex-col gap-1">
-          <p className="font-semibold text-ink-soft break-words">{household.name}</p>
-          <h1 className="type-display text-5xl break-words">{t`Hi ${user.name}`}</h1>
+      <header className="flex flex-wrap items-center justify-between gap-x-6 gap-y-4">
+        <div className="flex min-w-0 items-center gap-4">
+          <Link href="/profile" aria-label={t("Your profile")} className={`rounded-full ${ring}`}>
+            <Avatar avatar={me?.avatar} colour={me?.colour ?? membership.colour} className="size-16" />
+          </Link>
+          <div className="flex min-w-0 flex-col gap-1">
+            <p className="font-semibold text-ink-soft break-words">{household.name}</p>
+            <h1 className="type-display text-5xl break-words">{t`Hi ${user.name}`}</h1>
+          </div>
         </div>
+        {members.length === 1 ? (
+          <section aria-labelledby="code-heading" className="flex flex-col items-start gap-1.5 rounded-2xl border-2 border-ink/20 px-4 py-3 sm:items-end sm:text-right" data-testid="invite">
+            <h2 id="code-heading" className="text-sm font-semibold text-ink-soft">
+              {t("Invite your roommates")}
+            </h2>
+            <p className="type-display text-2xl tracking-widest whitespace-nowrap" data-testid="join-code">
+              {formatJoinCode(household.joinCode)}
+            </p>
+            <ShareCode code={household.joinCode} small />
+          </section>
+        ) : null}
       </header>
 
-      {members.length === 1 ? (
-        <section aria-labelledby="code-heading" className="flex flex-col gap-3 rounded-2xl border-2 border-ink p-5">
-          <h2 id="code-heading" className="type-display text-2xl">
-            {t("Invite your roommates")}
-          </h2>
-          <p className="text-ink-soft">
-            {t("Send them the link, or the code")}{" "}
-            <span className="type-display text-2xl tracking-widest whitespace-nowrap text-ink" data-testid="join-code">
-              {formatJoinCode(household.joinCode)}
-            </span>
-          </p>
-          <ShareCode code={household.joinCode} />
-        </section>
-      ) : null}
 
       {/* On a phone the order is what needs you first: to-do, money, the week, then the flat and the board. */}
       <div className="flex flex-col gap-8 lg:grid lg:grid-cols-[1.7fr_1fr] lg:items-start lg:gap-10">
@@ -276,6 +279,23 @@ export default async function HomePage() {
                   </li>
                 );
               })}
+              {/* The calendar as the last tile: from three across, it makes the grid whole. */}
+              <li className="hidden min-w-0 sm:block">
+                <Link
+                  href="/calendar"
+                  data-testid="band-calendar"
+                  className={`flex h-full min-h-40 flex-col gap-2 rounded-2xl bg-ink p-4 text-paper outline-none transition-transform focus-visible:ring-4 focus-visible:ring-ochre active:scale-[0.98]`}
+                >
+                  <span className="flex items-start justify-between gap-2">
+                    <span className="font-semibold">{t("Calendar")}</span>
+                    <RoomArt room="calendar" animate delay={0.1 + areasFor(household).length * 0.12} className="size-11 shrink-0" />
+                  </span>
+                  <span className="type-display mt-1 text-2xl break-words">
+                    {week.length === 0 ? t("Nothing this week") : week.length === 1 ? t("1 thing this week") : t`${week.length} things this week`}
+                  </span>
+                  {week[0] ? <span className="text-sm font-semibold break-words">{t`Next: ${week[0].title}, ${week[0].day === today ? t("today") : week[0].day === addDays(today, 1) ? t("tomorrow") : describeDay(week[0].day, t).weekday}`}</span> : null}
+                </Link>
+              </li>
             </ul>
           </section>
         </div>
@@ -350,6 +370,21 @@ export default async function HomePage() {
                       index={index}
                       author={people.get(note.authorId)}
                       line={note.isTask ? (note.assigneeId ? (note.assigneeId === user.id ? t("For you") : t`For ${nameOf(note.assigneeId)}`) : t("For anyone")) : undefined}
+                      when={timeAgo(note.createdAt, now, timeZone, t)}
+                      corner={
+                        note.authorId === user.id || membership.role === "admin" ? (
+                          <TakeDown about={shortNote(note.body)} action={removeNoteAction.bind(null, note.id)} />
+                        ) : undefined
+                      }
+                      reaction={
+                        <ThumbsUp
+                          count={note.likes.length}
+                          mine={note.likes.includes(user.id)}
+                          who={listNames(note.likes.filter((id) => people.has(id)), user.id, nameOf, t)}
+                          about={shortNote(note.body)}
+                          action={reactAction.bind(null, note.id)}
+                        />
+                      }
                       note={{ id: note.id, body: note.body, isTask: note.isTask, done: false }}
                     />
                   ))}

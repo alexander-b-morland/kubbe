@@ -13,7 +13,7 @@ const labels: Record<Status, string> = {
 };
 
 /** Copies the invite link, then says so on the button for a moment. */
-export function ShareCode({ code }: { code: string }) {
+export function ShareCode({ code, small = false }: { code: string; small?: boolean }) {
   const t = useT();
   const [status, setStatus] = useState<Status>("idle");
 
@@ -37,7 +37,7 @@ export function ShareCode({ code }: { code: string }) {
     <button
       type="button"
       onClick={copyLink}
-      className="min-h-12 rounded-full bg-ink px-6 py-2 font-bold text-paper outline-none transition-transform focus-visible:ring-4 focus-visible:ring-fjord active:scale-[0.98]"
+      className={`rounded-full bg-ink font-bold text-paper outline-none transition-transform focus-visible:ring-4 focus-visible:ring-fjord active:scale-[0.98] ${small ? "min-h-10 px-4 py-1.5 text-sm" : "min-h-12 px-6 py-2"}`}
     >
       <span aria-live="polite">{t(labels[status])}</span>
     </button>
