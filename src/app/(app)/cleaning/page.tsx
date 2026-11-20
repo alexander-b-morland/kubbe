@@ -7,7 +7,7 @@ import { isFresh, Struck } from "@/components/ui/strike";
 import { describeDue, describeInterval } from "@/lib/cleaning/rota";
 import { ESTIMATES, getRota, INTERVALS, listAreas, tally } from "@/lib/cleaning/service";
 import { listMembers } from "@/lib/households";
-import { requireHousehold } from "@/lib/session";
+import { requireExtra } from "@/lib/extras-guard";
 import { dayInZone, daysBetween, shortDate } from "@/lib/time";
 import {
   addAreaAction,
@@ -35,7 +35,7 @@ const startLabel = (today: string, day: string, t: Translate) => (daysBetween(to
 
 export default async function CleaningPage() {
   const t = await getT();
-  const { user, household, membership } = await requireHousehold();
+  const { user, household, membership } = await requireExtra("cleaning");
   const now = new Date();
   const today = dayInZone(now, household.timeZone);
   const since = new Date(now.getTime() - WEEKS_COUNTED * 7 * 86_400_000);
@@ -152,7 +152,8 @@ export default async function CleaningPage() {
           <h2 id="now-heading" className="sr-only">
             {t("Turns now")}
           </h2>
-          <ul className="flex flex-col">
+          {/* A small gap, so two turns of yours (rounded panels) never touch. */}
+          <ul className="flex flex-col gap-1.5">
             {rota.map((row) => {
               const yours = row.assignee?.userId === user.id;
               const who = row.assignee ? people.get(row.assignee.userId) : undefined;
