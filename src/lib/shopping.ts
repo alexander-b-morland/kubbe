@@ -103,6 +103,28 @@ export async function setClaim(householdId: string, userId: string, itemId: stri
 }
 
 /**
+ * "I'll buy everything left" for a dinner's dish: every thing on the list for it that is
+ * not bought and that nobody has said they will buy. What someone else took stays theirs.
+ */
+export async function claimAllForDish(householdId: string, userId: string, dishId: string): Promise<number> {
+  const open = await db
+    .select({ id: shoppingItem.id })
+    .from(shoppingItem)
+    .innerJoin(dishIngredient, eq(shoppingItem.ingredientId, dishIngredient.id))
+    .where(and(eq(shoppingItem.householdId, householdId), eq(dishIngredient.dishId, dishId), isNull(shoppingItem.boughtAt), isNull(shoppingItem.claimedBy)));
+  if (open.length === 0) return 0;
+  // Claimed only if still free at this moment, and the dinner remembers exactly those.
+  const taken = await db
+    .update(shoppingItem)
+    .set({ claimedBy: userId })
+    .where(and(inArray(shoppingItem.id, open.map((item) => item.id)), isNull(shoppingItem.claimedBy), isNull(shoppingItem.boughtAt)))
+    .returning({ ingredientId: shoppingItem.ingredientId });
+  const ingredientIds = taken.map((item) => item.ingredientId).filter((id) => id !== null);
+  if (ingredientIds.length > 0) await db.update(dishIngredient).set({ claimedBy: userId }).where(inArray(dishIngredient.id, ingredientIds));
+  return taken.length;
+}
+
+/**
  * Tick an item off as bought, or put it back on the list. Only what is not paid up for
  * can go back, and only by whoever ticked it off. Something already ticked off stays
  * with whoever got there first.

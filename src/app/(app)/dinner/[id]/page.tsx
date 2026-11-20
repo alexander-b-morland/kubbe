@@ -18,6 +18,7 @@ import {
   atHomeAction,
   cancelDinnerAction,
   chooseAction,
+  claimAllAction,
   claimIngredientAction,
   dutyAction,
   goingAction,
@@ -26,7 +27,7 @@ import {
   removeIngredientAction,
   voteAction,
 } from "../actions";
-import { DishForm, IdeasPanel, IngredientForm } from "../dinner-forms";
+import { DishForm, IngredientForm } from "../dinner-forms";
 import { m, type Translate } from "@/lib/i18n";
 import { getT } from "@/lib/i18n/server";
 
@@ -50,23 +51,24 @@ function Tick() {
   );
 }
 
-/** One line of "where this dinner stands": a drawn tick when it is sorted, an empty ring when not. */
-async function Step({ done, children }: { done: boolean; children: React.ReactNode }) {
+/** One line of "where this dinner stands": what it is about, how it stands, and a drawn tick once it is sorted. */
+async function Fact({ label, done, children }: { label: string; done: boolean; children: React.ReactNode }) {
   const t = await getT();
   return (
-    <li data-done={done ? "yes" : "no"} className="flex items-start gap-3 py-1.5">
-      <span className={`mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full border-2 border-ink ${done ? "bg-ink text-paper" : ""}`}>
+    <div data-done={done ? "yes" : "no"} className="grid grid-cols-[1.5rem_6.5rem_1fr] items-start gap-x-3 py-1.5 sm:grid-cols-[1.5rem_8rem_1fr]">
+      <span className={`mt-0.5 flex size-6 items-center justify-center rounded-full border-2 border-ink ${done ? "bg-ink text-paper" : ""}`} aria-hidden="true">
         {done ? (
-          <svg viewBox="0 0 24 24" className="size-4" aria-hidden="true">
+          <svg viewBox="0 0 24 24" className="size-4">
             <path d="M4 13C7 15 9 17 10 19C13 13 17 8 21 5" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         ) : null}
       </span>
-      <span className={done ? "font-semibold" : ""}>
+      <dt className="pt-0.5 text-sm font-semibold text-ink-soft">
         <span className="sr-only">{done ? t("Done: ") : t("Not yet: ")}</span>
-        {children}
-      </span>
-    </li>
+        {label}
+      </dt>
+      <dd className={`min-w-0 break-words ${done ? "font-semibold" : ""}`}>{children}</dd>
+    </div>
   );
 }
 
@@ -130,6 +132,11 @@ export default async function DinnerPage({ params }: PageProps<"/dinner/[id]">) 
             <IngredientRow key={ingredient.id} ingredient={ingredient} me={user.id} person={person} now={now} />
           ))}
         </ul>
+      ) : null}
+      {untaken > 1 ? (
+        <ActionButton look="filled" align="start" about={chosen.title} action={claimAllAction.bind(null, chosen.id)}>
+          {t`I'll buy everything left (${untaken})`}
+        </ActionButton>
       ) : null}
       <IngredientForm dishId={chosen.id} />
       <div className="flex flex-col gap-1 border-t-2 border-ink/15 pt-3">
@@ -216,7 +223,6 @@ export default async function DinnerPage({ params }: PageProps<"/dinner/[id]">) 
       {mine !== "in" && ideas.length > 0 ? <p className="text-sm text-ink-soft">{t("Say you're in to decide what is cooked.")}</p> : null}
       <div className="flex flex-col gap-4 rounded-3xl bg-salmon/25 p-5">
         <DishForm dinnerId={dinner.id} ruledOut={cannotHave} />
-        <IdeasPanel dinnerId={dinner.id} />
       </div>
     </section>
   );
@@ -227,17 +233,22 @@ export default async function DinnerPage({ params }: PageProps<"/dinner/[id]">) 
         <h2 id="stands-heading" className="type-display text-2xl">
           {t("Where this dinner stands")}
         </h2>
-        <ul className="flex flex-col">
-          <Step done={going.length > 1}>{going.length === 0 ? t("Nobody is in yet") : going.length === 1 ? t("1 is in") : t`${going.length} are in`}</Step>
-          <Step done={Boolean(chosen)}>
-            {chosen ? t`Decided: ${chosen.title}` : ideas.length === 0 ? t("Nothing suggested yet") : ideas.length === 1 ? t("1 idea, not decided") : t`${ideas.length} ideas, not decided`}
-          </Step>
-          <Step done={Boolean(dinner.cookId)}>{dinner.cookId ? `${who(dinner.cookId)} ${dinner.cookId === user.id ? "cook" : "cooks"}` : t("Nobody cooks yet")}</Step>
-          <Step done={Boolean(dinner.cleanerId)}>
-            {dinner.cleanerId ? t`${who(dinner.cleanerId)} ${dinner.cleanerId === user.id ? "clean" : "cleans"} up` : t("Nobody cleans up yet")}
-          </Step>
+        <dl className="flex flex-col">
+          <Fact label={t("Who's eating")} done={going.length > 1}>
+            {going.length === 0 ? t("Nobody has said yes yet") : listNames(going.map((member) => member.userId), user.id, nameOf, t)}
+            {waiting.length > 0 ? <span className="block text-sm font-normal text-ink-soft">{waiting.length === 1 ? t("1 hasn't answered") : t`${waiting.length} haven't answered`}</span> : null}
+          </Fact>
+          <Fact label={t("What")} done={Boolean(chosen)}>
+            {chosen ? chosen.title : ideas.length === 0 ? t("Nothing suggested yet") : ideas.length === 1 ? t("1 idea, not decided") : t`${ideas.length} ideas, not decided`}
+          </Fact>
+          <Fact label={t("Cooking")} done={Boolean(dinner.cookId)}>
+            {dinner.cookId ? who(dinner.cookId) : t("Nobody yet")}
+          </Fact>
+          <Fact label={t("Cleaning up")} done={Boolean(dinner.cleanerId)}>
+            {dinner.cleanerId ? who(dinner.cleanerId) : t("Nobody yet")}
+          </Fact>
           {chosen ? (
-            <Step done={chosen.ingredients.length > 0 && toBuy.length === 0}>
+            <Fact label={t("Shopping")} done={chosen.ingredients.length > 0 && toBuy.length === 0}>
               {chosen.ingredients.length === 0
                 ? t("Nothing listed to buy yet")
                 : toBuy.length === 0
@@ -247,9 +258,9 @@ export default async function DinnerPage({ params }: PageProps<"/dinner/[id]">) 
                     : toBuy.length === 1
                       ? t("1 thing left to buy")
                       : t`${toBuy.length} things left to buy`}
-            </Step>
+            </Fact>
           ) : null}
-        </ul>
+        </dl>
       </section>
 
       <section aria-labelledby="in-heading" className="flex flex-col gap-3" data-testid="whos-in" data-me={mine}>

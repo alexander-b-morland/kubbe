@@ -27,7 +27,7 @@ import {
 import { requireExtra } from "@/lib/extras-guard";
 import type { FormState } from "@/lib/form-state";
 import { allowAttempt } from "@/lib/rate-limit";
-import { setBought, setClaim } from "@/lib/shopping";
+import { claimAllForDish, setBought, setClaim } from "@/lib/shopping";
 import { addDays, dayInZone, daysBetween, isDay } from "@/lib/time";
 
 export type DinnerState = (FormState & { saved?: boolean }) | undefined;
@@ -120,7 +120,7 @@ export async function addDishAction(dinnerId: string, _previous: DinnerState, fo
   if (!isId(dinnerId)) return { error: "That dinner is gone." };
   if (values.ingredients.length > 2000) return { error: "That is a long list. Keep it to the main ingredients.", values };
   const ingredients = parseIngredients(values.ingredients);
-  const problem = dishProblem(values.title, ingredients) ?? (await putUp(dinnerId, values.title, ingredients, false));
+  const problem = dishProblem(values.title, ingredients) ?? (await putUp(dinnerId, values.title, ingredients, form.get("fromIdea") === "1"));
   return problem ? { error: problem, values } : { saved: true };
 }
 
@@ -247,6 +247,13 @@ export async function atHomeAction(ingredientId: string, atHome: boolean): Promi
 export async function claimIngredientAction(itemId: string, claim: boolean): Promise<DinnerState> {
   const { user, household } = await requireExtra("dinner");
   if (isId(itemId)) await setClaim(household.id, user.id, itemId, claim === true);
+  refresh();
+  return { saved: true };
+}
+
+export async function claimAllAction(dishId: string): Promise<DinnerState> {
+  const { user, household } = await requireExtra("dinner");
+  if (isId(dishId)) await claimAllForDish(household.id, user.id, dishId);
   refresh();
   return { saved: true };
 }
