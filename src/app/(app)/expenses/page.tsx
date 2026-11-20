@@ -54,7 +54,17 @@ export default async function ExpensesPage() {
             const sharers = entry.shares.map((share) => share.userId);
             const everyone = members.length > 1 && members.every((member) => sharers.includes(member.userId));
             const receiver = entry.shares[0]?.userId ?? "";
-            const title = entry.isSettlement ? `${who(entry.paidBy)} paid ${receiver === user.id ? "you" : nameOf(receiver)} back` : entry.description;
+            const title = !entry.isSettlement
+              ? entry.description
+              : entry.paidBy === user.id
+                ? t`You paid ${nameOf(receiver)} back`
+                : receiver === user.id
+                  ? t`${nameOf(entry.paidBy)} paid you back`
+                  : t`${nameOf(entry.paidBy)} paid ${nameOf(receiver)} back`;
+            // "Entered by you" in the middle of a sentence.
+            const byWhom = (userId: string) => (userId === user.id ? t("you") : nameOf(userId));
+            // Shared by nobody but the one who paid: say so, instead of "split between you".
+            const onlyPayer = sharers.length === 1 && sharers[0] === entry.paidBy;
             const enteredByOther = entry.createdBy && entry.createdBy !== entry.paidBy ? entry.createdBy : null;
             return (
               <li key={entry.id} data-testid="expense" className="flex flex-col gap-1 border-b-2 border-ink/15 py-3">
@@ -65,7 +75,7 @@ export default async function ExpensesPage() {
                 <p className="flex flex-wrap items-center gap-x-2 text-ink-soft">
                   {entry.isSettlement ? (
                     <>
-                      {enteredByOther ? t`Marked as paid by ${who(enteredByOther) === "You" ? "you" : who(enteredByOther)}, ` : ""}
+                      {enteredByOther ? t`Marked as paid by ${byWhom(enteredByOther)}, ` : ""}
                       {timeAgo(entry.createdAt, now, household.timeZone, t)}
                     </>
                   ) : (
@@ -77,12 +87,16 @@ export default async function ExpensesPage() {
                         <span className="sr-only">{who(entry.paidBy)} </span>
                         {t("paid,")}{" "}
                         {even
-                          ? everyone
-                            ? t("split between everyone")
-                            : t`split between ${listNames(sharers, user.id, nameOf, t).replace(/^You\b/, "you")}`
+                          ? onlyPayer
+                            ? entry.paidBy === user.id
+                              ? t("only for yourself")
+                              : t("only for themselves")
+                            : everyone
+                              ? t("split between everyone")
+                              : t`split between ${listNames(sharers, user.id, nameOf, t, true)}`
                           : entry.shares.map((share) => `${who(share.userId)} ${money(share.amount)}`).join(", ")}
                         , {timeAgo(entry.createdAt, now, household.timeZone, t)}
-                        {enteredByOther ? t`. Entered by ${who(enteredByOther) === "You" ? "you" : who(enteredByOther)}` : ""}
+                        {enteredByOther ? t`. Entered by ${byWhom(enteredByOther)}` : ""}
                       </span>
                     </>
                   )}
