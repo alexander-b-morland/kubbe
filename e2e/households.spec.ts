@@ -139,4 +139,11 @@ test("create a household, invite a roommate by link, sign back in", async ({ bro
   await expect(lost.getByRole("heading", { level: 1 })).toHaveText("That link doesn't work");
   // Someone new can still get started.
   await expect(lost.getByRole("link", { name: "Create account" })).toBeVisible();
+
+  // A roommate or a dinner that does not exist is a real 404, with the app's own page.
+  for (const path of ["/people/nobody-lives-here", "/dinner/00000000-0000-4000-8000-000000000000", "/dinner/not-a-dinner"]) {
+    const response = await knut.goto(path);
+    expect(response?.status(), path).toBe(404);
+    await expect(knut.getByRole("heading", { level: 1 })).toHaveText("Nothing lives at this address");
+  }
 });

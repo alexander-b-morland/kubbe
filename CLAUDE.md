@@ -76,7 +76,7 @@ Package manager is npm. Keep this list current as scripts are added.
 - `src/components/booking`: `BookingScreen` and `SlotList`, shared by shower and laundry. A new bookable thing should reuse them.
 - `src/components/ui`: `Field`, `SubmitButton`, `FormError`, `ActionButton`, `SavableForm` (a Save button only once something changed; `sticky` keeps it in view on a long form), `QuickAddForm` (one box and a button, for adding to a list again and again), `Locked` (fields that cannot be changed while their form is being sent), `Remaining` (characters left). Forms post to server actions and get errors back through `useActionState`.
 - `src/components/money/split-fields.tsx`: `SplitFields`, "Evenly" or "An amount each", shared by expenses and what was paid for the shopping.
-- `src/lib/extras.ts`, `src/lib/extras-guard.ts`: the parts under Flat. Their screens and actions start with `requireExtra(key)`, which is `requireHousehold()` plus a check that the household has that part switched on.
+- `src/lib/extras.ts`, `src/lib/extras-guard.ts`: the eight areas a household switches on or off, shower, laundry and cleaning included (since 2026-11-19). Each area's screens and actions start with `requireExtra(key)`, which is `requireHousehold()` plus a check that the household has that area switched on. Home, the calendar and the navigation leave out what is switched off.
 - `src/lib/dinner`: `plan.ts` (pure rules), `service.ts` (database), `ideas.ts` (Claude, falling back to `cookbook.ts`).
 - `src/lib/shopping.ts` (list and expenses), `src/lib/money.ts` (pure: split, balances, settle up), `src/lib/board.ts`, `src/lib/happenings.ts`, `src/lib/profile.ts`.
 - `src/lib/dashboard.ts`: `buildToDos`, the pure function behind "Yours to do" on Home. A new part of the app that gives people something to do adds its lines there.
@@ -84,7 +84,7 @@ Package manager is npm. Keep this list current as scripts are added.
 - `src/components/area/area-header.tsx`: `AreaPage` and `AreaHeader`, the coloured band at the top of every area's screen; `TabHeader`, the same band in ink for Calendar, Household, the rules and You; `areaStyle`, the area's colour as CSS variables; and `BackLink`, the way back that every screen below a tab starts with.
 - `src/components/app-nav.tsx`: the navigation, a bar at the bottom on a phone and a column on the left from `lg` up.
 - `src/lib/calendar.ts` (pure: what each day holds, month sheets), `src/lib/calendar-service.ts` (loads a stretch of days), `src/components/calendar/agenda.tsx` (`AgendaItem`, and `AnswerButtons` for "I'm in" and "Can't").
-- `src/components/avatar`: the drawn avatars, and `Person` and `Faces` for showing who something belongs to. `src/components/board/sticky.tsx`: a note on the whiteboard. `src/components/ui/strike.tsx`: `Struck`, the pen line through something done.
+- `src/components/avatar`: the drawn avatars, and `Person` and `Faces` for showing who something belongs to. `src/components/board/sticky.tsx`: a note on the whiteboard, with who and when, the red cross (`TakeDown`) and the thumbs-up (`ThumbsUp`) from `note-buttons.tsx`. `src/components/ui/strike.tsx`: `Struck`, the pen line through something done.
 - `src/lib/i18n`: the two languages. `index.ts` (the translator, `m`), `nb.ts` (the Norwegian table), `server.ts` (`getT`, the cookie, the saved choice), `client.tsx` (`useT`, `LocaleProvider`), `actions.ts` (the switch), `keys.ts` (finds every text in the source, for the test). `src/components/language-switch.tsx` is the switch.
 - `design/logo/generate.mjs`: source of the logo, the logo data file and the app icons.
 
@@ -101,6 +101,7 @@ Package manager is npm. Keep this list current as scripts are added.
 - **Cleaning turns under way do not move.** Before anything that shifts the rotation (someone joins or leaves, a room is removed), call `pinCurrentTurns(tx, householdId, today)` in the same transaction.
 - **A rota starts on the day the admin picks.** Until then its row has `startsOn` set: it says when it starts, has no buttons, and counts as nobody's turn on Home and in the headline. Changing the start day or the rhythm starts its turns over.
 - **An action applies to what was on screen.** Cleaning actions carry the period the person was looking at and do nothing if a new one has started. Booking actions carry the exact slot start.
+- **A missing roommate or dinner is a real 404.** Every screen streams, so a page that calls `notFound()` has already answered 200. `src/proxy.ts` checks `/people/:id` and `/dinner/:id` exist at all before the page renders. Whether it is in the reader's household is still the page's job. Never check a join code there: that would make codes guessable without the rate limit.
 - **Guessable things are rate limited.** Sign-in, sign-up, join attempts and invite-link lookups go through `allowAttempt` in `src/lib/rate-limit.ts`. The limits are active in production only.
 - **Redirects after signing in go through `safeNextPath`,** which accepts only an invite link. Never redirect to a path taken from the URL any other way.
 - **There is no public auth route.** All sign-in and sign-up goes through server actions, which validate and rate limit. Google sign-in will need `/api/auth` back: when adding it, also add name validation in the auth library's database hooks and database-backed rate limiting there.
@@ -150,6 +151,7 @@ The five extras' colours were deepened on 2026-11-19: the test roommates found t
 - Every screen starts with a band: an area's screens in its colour (`AreaPage`), the screens that belong to no area (Calendar, Household, the rules, You) in ink (`TabHeader`). Home is the exception: it greets by name.
 - Home is the one dashboard: what is yours to do (with the answer buttons for invitations right there), money both ways, a tile per area saying what matters now, the week ahead, and the notes on the board. On a phone they come in the order they need you: to-do, money, the week, the tiles, the board.
 - "Yours to do" is sorted by what falls due first. Dinner invitations are asked two at a time; the rest are one line with a count.
+- The calendar has three views, month, week and day (`?view=`), moved through with "Previous month" / "Next week" and so on. Every square on the month sheet is the same height: three things fit, with more it shows two and "and N more".
 - What an admin can change is reachable from where it is used: "Change the rules" on the shower and laundry screens.
 - From `lg` up the navigation is a column on the left. Home, Calendar and every area screen with something to put beside its list (`AreaPage`'s `aside`) use two columns; other screens widen to `max-w-3xl`.
 - People show as their drawn avatar on their colour wherever something is theirs: who is in, who cooks, who is buying, whose note.
@@ -209,6 +211,12 @@ Standing brief:
 - Bold, modern, simple. It must not look like a template.
 - Line-drawing animation (SVG strokes that draw themselves) is the signature. Use it in the logo, empty states, and confirmations only. Motion elsewhere stays minimal.
 - Respect `prefers-reduced-motion`: show the finished drawing with no animation.
+
+## Fourth round (the owner's feedback of 2026-11-19)
+
+Shipped the same day: the band at the top no longer runs edge to edge on a laptop; booking slots read down a column; the invite code is small, beside the greeting; a ninth tile, the calendar, makes Home's grid whole; the sidebar's area list opens and closes; the logo in the sidebar; a dryer drawing; every area can be switched off; notes show who and when, with a red cross and a thumbs-up; the calendar's week and day views; a dinner's overview as labelled lines; a dish's needs filled in on Enter, and ideas that fill the form instead of going straight to the vote; "I'll buy everything left"; a notice for someone an admin removed; real 404s.
+
+He said he would send more.
 
 ## Two languages
 
@@ -294,19 +302,15 @@ Can be built any time:
   - Paying back part of what you owe, and a list of what is between you and one other person.
   - A warning when a happening is suggested on top of a dinner or the other way round.
   - Changing a dinner's time once it is planned, and amounts on ingredients ("2 cans").
-  - Replies or a thumbs-up on a note on the board.
-  - A week view of the calendar, and moving between days with the arrow keys.
-  - A drawing of its own for the dryer, and drawings on the empty states of the extras.
+  - Moving between days in the calendar with the arrow keys.
+  - Drawings on the empty states of the extras.
   - Redrawing the small icons in the same hand as the logo.
-  - A real "not found" status for a roommate or dinner that does not exist (the screen is right, the status code is 200).
   - Moving the keyboard focus to what changed after an action, and tying a form's error to the field it is about.
 - A security and correctness review of the extras was done 2026-11-16 and its findings fixed, except one:
   - Deleting a user account would cascade away the expenses they paid and unbalance the books. No screen deletes accounts yet: change those foreign keys to `restrict` before adding one.
 - Dinners: a different time per fixed day (the table allows it, the form sets one time for all), removing a single ingredient, and a note on a dinner ("bring a friend").
 - The `dinner_absence` table is no longer used; drop it in a later migration.
-- "I'll buy everything left" on a dinner, for whoever does the whole shop.
 - An admin cancelling someone else's booking, for the roommate who booked and left town.
-- Telling a removed person why they landed on the start screen (leaving on your own already says so).
 - A squiggle under "You" on a booked slot, from the first design sketch.
 - Longer or expiring join codes, and a content security policy beyond `frame-ancestors`.
 - Refusing duplicate room names. Keeping the eight-week cleaning tally when a room's rhythm changes.

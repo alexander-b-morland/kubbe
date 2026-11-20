@@ -103,6 +103,13 @@ test("the noticeboard holds notes and to-dos", async ({ browser }) => {
   await expect(knut).toHaveURL(/\/board#[0-9a-f-]{36}$/);
   const curtain = notes(knut).filter({ hasText: "shower curtain" });
   await expect(curtain).toContainText("For you");
+  // Each note says who put it up and when.
+  await expect(curtain).toContainText(/Ida, (just now|1 min ago)/);
+  // A thumbs-up on the landlord note, and it can be taken back.
+  const thumbs = notes(knut).filter({ hasText: "Landlord" }).getByTestId("thumbs-up");
+  await thumbs.click();
+  await expect(thumbs).toHaveAttribute("aria-pressed", "true");
+  await expect(thumbs).toHaveText("1");
   // He did not write the other note and is not an admin, so he cannot take it down.
   await expect(notes(knut).filter({ hasText: "Landlord" }).getByRole("button", { name: /^Take down/ })).toHaveCount(0);
   await curtain.getByRole("button", { name: "Done: Buy a new shower curtain" }).click();
@@ -116,9 +123,12 @@ test("the noticeboard holds notes and to-dos", async ({ browser }) => {
   // Ida takes her note down. It asks first.
   await ida.reload();
   const landlord = notes(ida).filter({ hasText: "Landlord" });
+  await expect(landlord.getByTestId("thumbs-up")).toHaveText("1");
+  // The red cross asks first, on the note itself.
   await landlord.getByRole("button", { name: "Take down: Landlord is coming Tuesday at 10." }).click();
   await expect(landlord).toBeVisible();
-  await landlord.getByRole("button", { name: "Take it down?" }).click();
+  await expect(landlord).toContainText("Take it down?");
+  await landlord.getByRole("button", { name: "Take down", exact: true }).click();
   await expect(notes(ida).filter({ hasText: "Landlord" })).toHaveCount(0);
 });
 
@@ -279,7 +289,7 @@ test("a happening collects who is in, from Home and the calendar too", async ({ 
   await expect(seen(knut, "sheet")).toBeVisible();
   const day = knut.locator(`[data-day="${inAWeek}"]`).filter({ visible: true });
   // A week from now can fall in next month.
-  if ((await day.count()) === 0) await knut.getByRole("link", { name: "Later" }).click();
+  if ((await day.count()) === 0) await knut.getByRole("link", { name: "Next month" }).click();
   await day.click();
   await expect(day).toHaveAttribute("aria-current", "date");
   const film = seen(knut, "agenda-item").filter({ hasText: "Film night" });
@@ -292,6 +302,12 @@ test("a happening collects who is in, from Home and the calendar too", async ({ 
   // One person's month: Ida is in it too, and nobody else's things are.
   await seen(knut, "who").getByRole("link", { name: "Ida" }).click();
   await expect(seen(knut, "agenda-item").filter({ hasText: "Film night" })).toBeVisible();
+  // The same week, as a week.
+  await seen(knut, "views").getByRole("link", { name: "Week" }).click();
+  await expect(seen(knut, "week-view")).toContainText("Film night");
+  await knut.screenshot(shot("h3-week"));
+  await seen(knut, "views").getByRole("link", { name: "Month" }).click();
+  await expect(seen(knut, "sheet")).toBeVisible();
   await film.getByRole("link").click();
   await expect(knut).toHaveURL(/\/happenings#[0-9a-f-]{36}$/);
 
@@ -342,11 +358,11 @@ test("a dinner goes from ideas to a shopping list", async ({ browser }) => {
   await form.getByRole("button", { name: "Put it to the vote", exact: true }).click();
   await expect(seen(ida, "form-error")).toContainText("Name the dish");
   // Typing the name brings up what such a dish needs, to take with one press.
+  // Naming the dish and pressing Enter fills in what it needs.
   await form.getByLabel("Suggest a dish").fill("Tacos");
-  await expect(seen(ida, "needs-offer")).toContainText("Tortillas");
-  await form.getByRole("button", { name: "Use these" }).click();
+  await form.getByLabel("Suggest a dish").press("Enter");
   await expect(form.getByLabel("What it needs")).toHaveValue(/Tortillas/);
-  await expect(seen(ida, "needs-offer")).toHaveCount(0);
+  await expect(seen(ida, "needs-note")).toContainText("Filled in from Kubbe's cookbook");
   // She keeps it short instead.
   await form.getByLabel("What it needs").fill("Tortillas, Minced beef\nSalsa");
   await form.getByRole("button", { name: "Put it to the vote", exact: true }).click();
@@ -355,11 +371,16 @@ test("a dinner goes from ideas to a shopping list", async ({ browser }) => {
   await expect(dishes(ida).first()).toContainText("Minced beef, Salsa, Tortillas");
   await expect(dishes(ida).first()).toHaveAttribute("data-voted", "yes");
 
-  // --- Out of ideas: a few are offered, and one goes to the vote ---
-  await ida.getByRole("button", { name: "Out of ideas? Get a few" }).click();
+  // --- Out of ideas: a few are offered. Using one fills the form; it goes to the vote only on the button ---
+  await seen(ida, "get-ideas").click();
   await expect(seen(ida, "idea")).toHaveCount(3);
   await ida.screenshot(shot("d1-dinner-ideas"));
-  await seen(ida, "idea").first().getByRole("button").click();
+  const picked = (await seen(ida, "idea").first().getByRole("heading").innerText()).trim();
+  await seen(ida, "idea").first().getByRole("button", { name: /^Use this idea/ }).click();
+  await expect(form.getByLabel("Suggest a dish")).toHaveValue(picked);
+  await expect(form.getByLabel("What it needs")).not.toHaveValue("");
+  await expect(dishes(ida)).toHaveCount(1);
+  await form.getByRole("button", { name: "Put it to the vote", exact: true }).click();
   await expect(dishes(ida)).toHaveCount(2);
   await expect(seen(ida, "idea")).toHaveCount(2);
   await expect(dishes(ida).filter({ hasText: "picked this from the ideas" })).toHaveCount(1);
@@ -394,9 +415,9 @@ test("a dinner goes from ideas to a shopping list", async ({ browser }) => {
   await ida.getByRole("button", { name: "Decide on Tacos" }).click();
   await expect(headline(ida)).toHaveText("Tacos");
   // The top of the screen says where the dinner stands.
-  await expect(seen(ida, "stands")).toContainText("2 are in");
-  await expect(seen(ida, "stands")).toContainText("Decided: Tacos");
-  await expect(seen(ida, "stands")).toContainText("Knut cooks");
+  await expect(seen(ida, "stands")).toContainText("Who's eatingYou and Knut");
+  await expect(seen(ida, "stands")).toContainText("WhatTacos");
+  await expect(seen(ida, "stands")).toContainText("CookingKnut");
   await expect(seen(ida, "stands")).toContainText("3 things left to buy, 3 not taken");
   await expect(seen(ida, "ingredient")).toHaveCount(3);
   await expect(seen(ida, "needs")).toContainText("3 things to buy, 3 that nobody has taken.");
@@ -427,7 +448,7 @@ test("a dinner goes from ideas to a shopping list", async ({ browser }) => {
   await nav(ida, "Calendar").click();
   await expect(seen(ida, "sheet")).toBeVisible();
   const day = ida.locator(`[data-day="${inThreeDays}"]`).filter({ visible: true });
-  if ((await day.count()) === 0) await ida.getByRole("link", { name: "Later" }).click();
+  if ((await day.count()) === 0) await ida.getByRole("link", { name: "Next month" }).click();
   await day.click();
   await expect(day).toHaveAttribute("aria-current", "date");
   const onDay = seen(ida, "agenda-item").filter({ hasText: "Dinner: Tacos" });
@@ -466,8 +487,9 @@ test("a dinner goes from ideas to a shopping list", async ({ browser }) => {
   await days.getByLabel("Thursday").check();
   await days.getByLabel("At", { exact: true }).fill("19:00");
   await days.getByRole("button", { name: "Save" }).click();
-  // Two fixed days over two weeks: four dinners, less one if it lands on the planned day.
-  await expect.poll(async () => seen(ida, "dinner").count()).toBeGreaterThanOrEqual(4);
+  // Two fixed days over two weeks: four dinners, or three when one of them was earlier today
+  // and its time has passed. Either way more than the one planned dinner.
+  await expect.poll(async () => seen(ida, "dinner").count()).toBeGreaterThanOrEqual(3);
   await expect(seen(ida, "dinner").filter({ hasText: "Nobody is in yet" }).first()).toContainText("Are you in?");
   await ida.screenshot(shot("d3-dinners"));
   const withBoth = await seen(ida, "dinner").count();
@@ -481,6 +503,13 @@ test("a dinner goes from ideas to a shopping list", async ({ browser }) => {
   // --- Calling the dinner off takes what is not bought off the shopping list ---
   await seen(ida, "dinner").filter({ hasText: "Tacos" }).getByRole("link").click();
   await expect(headline(ida)).toHaveText("Tacos");
+  // Two more things nobody is buying: one press takes them both.
+  await seen(ida, "needs").getByLabel("Something else it needs").fill("Limes, Coriander");
+  await seen(ida, "needs").getByRole("button", { name: "Add", exact: true }).click();
+  await expect(ingredient(ida, "Coriander")).toBeVisible();
+  await ida.getByRole("button", { name: /^I'll buy everything left \(2\)/ }).click();
+  await expect(ingredient(ida, "Limes")).toContainText("You'll buy it.");
+  await expect(ingredient(ida, "Coriander")).toContainText("You'll buy it.");
   await ida.getByRole("button", { name: "Call off this dinner" }).click();
   await ida.getByRole("button", { name: "Call off this dinner?" }).click();
   await expect(headline(ida)).toHaveText("Called off");

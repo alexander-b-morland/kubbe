@@ -42,13 +42,14 @@ test("Claude suggests dishes and what a dish needs", async ({ page }) => {
 
   // A dish the built-in cookbook does not know, so only Claude can say what it needs.
   await page.getByLabel("Suggest a dish").fill("Bibimbap");
-  const offer = seen(page, "needs-offer");
-  await expect(offer).toContainText("Claude thinks it needs", { timeout: 40_000 });
-  console.log("What it needs:", (await offer.innerText()).replace(/\s+/g, " "));
-  await expect(offer).toContainText(/rice/i);
+  await page.getByLabel("Suggest a dish").press("Enter");
+  await expect(seen(page, "needs-note")).toContainText("Filled in by Claude", { timeout: 40_000 });
+  const needs = page.getByLabel("What it needs");
+  console.log("What it needs:", await needs.inputValue());
+  await expect(needs).toHaveValue(/rice/i);
 
   await page.getByLabel("Suggest a dish").fill("");
-  await page.getByRole("button", { name: "Out of ideas? Get a few" }).click();
+  await seen(page, "get-ideas").click();
   await expect(seen(page, "idea")).toHaveCount(3, { timeout: 60_000 });
   await expect(seen(page, "ideas-source")).toHaveAttribute("data-source", "claude");
   for (const idea of await seen(page, "idea").allInnerTexts()) console.log("Idea:", idea.replace(/\s+/g, " "));
@@ -60,10 +61,11 @@ test("Claude suggests dishes and what a dish needs", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "Kontoen din" })).toBeVisible();
   await page.goto(dinner);
   await page.getByLabel("Foreslå en rett").fill("Lapskaus");
-  const tilbud = seen(page, "needs-offer");
-  await expect(tilbud).toContainText("Claude tror den trenger", { timeout: 40_000 });
-  console.log("Hva som trengs:", (await tilbud.innerText()).replace(/\s+/g, " "));
+  await page.getByLabel("Foreslå en rett").press("Enter");
+  await expect(seen(page, "needs-note")).toContainText("Fylt inn av Claude", { timeout: 40_000 });
+  const trengs = page.getByLabel("Hva som trengs");
+  console.log("Hva som trengs:", await trengs.inputValue());
   // Norwegian words for what a stew needs, not English ones.
-  await expect(tilbud).toContainText(/potet|gulrot|løk|kålrot/i);
-  await expect(tilbud).not.toContainText(/potato|carrot|onion/i);
+  await expect(trengs).toHaveValue(/potet|gulrot|løk|kålrot/i);
+  await expect(trengs).not.toHaveValue(/potato|carrot|onion/i);
 });

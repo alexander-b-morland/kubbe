@@ -82,6 +82,8 @@ test.afterAll(async () => {
 });
 
 test("an admin sets the rules, then washes and dries", async ({ browser }) => {
+  // Three people, the rules, laundry and the household: longer than the default allows.
+  test.slow();
   const ida = await (await browser.newContext()).newPage();
   await ida.goto("/sign-up");
   await signUp(ida, "Ida", "ida");
@@ -237,6 +239,19 @@ test("an admin sets the rules, then washes and dries", async ({ browser }) => {
   await openHousehold(knut);
   await expect(knut.getByTestId("member-Knut B")).toContainText("(you)");
 
+  // Any area can be switched off, the shower too. Its tile goes, and so does its screen.
+  const used = knut.getByRole("region", { name: "What you use" });
+  await used.getByRole("checkbox", { name: /^Shower/ }).uncheck();
+  await expect(used.getByRole("status")).toHaveText("Saved");
+  await knut.goto("/home");
+  await expect(knut.getByTestId("band-shower")).toHaveCount(0);
+  await expect(knut.getByTestId("band-laundry").filter({ visible: true })).toBeVisible();
+  await knut.goto("/shower");
+  await expect(knut).toHaveURL(/\/home$/);
+  await openHousehold(knut);
+  await knut.getByRole("region", { name: "What you use" }).getByRole("checkbox", { name: /^Shower/ }).check();
+  await expect(knut.getByRole("region", { name: "What you use" }).getByRole("status")).toHaveText("Saved");
+
   // Picking a time zone saves it, with no button.
   const details = knut.getByRole("region", { name: "Name and time zone" });
   await details.getByLabel("Time zone").selectOption("Europe/Oslo");
@@ -267,6 +282,10 @@ test("an admin sets the rules, then washes and dries", async ({ browser }) => {
   await perRow.getByRole("button", { name: "Remove Per from Kollektivet and cancel their bookings?" }).click();
   await expect(knut.getByTestId("member-Per")).toHaveCount(0);
   await expect(knut.getByTestId("join-code").filter({ visible: true })).not.toHaveText(`${newCode.slice(0, 3)} ${newCode.slice(3)}`);
+  // Per lands on the start screen, and is told why.
+  await per.goto("/home");
+  await expect(per).toHaveURL(/\/onboarding$/);
+  await expect(per.getByTestId("removed")).toContainText("An admin removed you from Kollektivet");
   await per.goto(`/join/${newCode}`);
   await expect(per.getByRole("heading", { level: 1 })).toHaveText("That link doesn't work");
 

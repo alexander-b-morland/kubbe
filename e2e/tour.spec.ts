@@ -98,14 +98,16 @@ test("a tour of a lived-in flat", async ({ browser }) => {
   await expect(ida).toHaveURL(/\/dinner\/[0-9a-f-]{36}$/);
   const dinnerUrl = ida.url();
   await ida.getByLabel("Suggest a dish").fill("Tacos");
-  await expect(seen(ida, "needs-offer")).toBeVisible();
+  await ida.getByLabel("Suggest a dish").press("Enter");
+  await expect(ida.getByLabel("What it needs")).toHaveValue(/Tortillas/);
   await ida.screenshot(shot("06-dinner-suggesting"));
-  await ida.getByRole("button", { name: "Use these" }).click();
   await ida.getByRole("button", { name: "Put it to the vote", exact: true }).click();
   await expect(seen(ida, "dish")).toHaveCount(1);
-  await ida.getByRole("button", { name: "Out of ideas? Get a few" }).click();
+  await seen(ida, "get-ideas").click();
   await expect(seen(ida, "idea")).toHaveCount(3);
-  await seen(ida, "idea").first().getByRole("button").click();
+  await ida.screenshot(shot("06b-dinner-ideas"));
+  await seen(ida, "idea").first().getByRole("button", { name: /^Use this idea/ }).click();
+  await ida.getByRole("button", { name: "Put it to the vote", exact: true }).click();
   await expect(seen(ida, "dish")).toHaveCount(2);
 
   await knut.goto("/home");
@@ -211,7 +213,7 @@ test("a tour of a lived-in flat", async ({ browser }) => {
 
   // --- The smallest phones: nothing may stick out sideways ---
   await knut.setViewportSize({ width: 320, height: 640 });
-  for (const [name, path] of [["home", "/home"], ["calendar", "/calendar"], ["cleaning", "/cleaning"], ["dinner", dinnerUrl]] as const) {
+  for (const [name, path] of [["home", "/home"], ["calendar", "/calendar"], ["week", "/calendar?view=week"], ["cleaning", "/cleaning"], ["dinner", dinnerUrl]] as const) {
     await knut.goto(path);
     await expect(knut.getByRole("heading", { level: 1 }).filter({ visible: true })).toBeVisible();
     await knut.waitForTimeout(400);
@@ -224,6 +226,8 @@ test("a tour of a lived-in flat", async ({ browser }) => {
   const wide = [
     ["home", "/home"],
     ["calendar", `/calendar?day=${inThreeDays}`],
+    ["week", `/calendar?view=week&day=${inThreeDays}`],
+    ["laundry", "/laundry"],
     ["dinner", dinnerUrl],
     ["board", "/board"],
     ["shower", "/shower"],
